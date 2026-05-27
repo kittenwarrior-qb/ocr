@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile app/models/base.py app/models/sys_config.py app/models/partner.py app/models/product.py app/models/template.py app/models/mapping.py app/models/document.py app/models/__init__.py)",
+      "Bash(npm --version)"
+    ]
+  }
+}

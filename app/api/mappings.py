@@ -1,0 +1,130 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.document import BillLine, OrderLine
+from app.models.mapping import TempCodeMapping
+from app.schemas.document import MapTempCodeRequest, TempCodeMappingOut
+from app.services import mapping_service
+from app.models.product import Product
+
+router = APIRouter(prefix="/mappings", tags=["Mappings"])
+
+
+def _enrich_mappings(db: Session, mappings: list[TempCodeMapping]) -> list[dict]:
+    if not mappings:
+        return []
+    temp_codes = [m.temp_code for m in mappings]
+
+    order_names = (
+        db.query(OrderLine.temp_code, OrderLine.product_name_original,
+                 func.count(OrderLine.id).label("cnt"))
+        .filter(OrderLine.temp_code.in_(temp_codes))
+        .group_by(OrderLine.temp_code, OrderLine.product_name_original)
+        .all()
+    )
+    bill_names = (
+        db.query(BillLine.temp_code, BillLine.product_name_original,
+                 func.count(BillLine.id).label("cnt"))
+        .filter(BillLine.temp_code.in_(temp_codes))
+        .group_by(BillLine.temp_code, BillLine.product_name_original)
+        .all()
+    )
+
+    name_map: dict[str, tuple[str, int]] = {}
+    for tc, name, cnt in list(order_names) + list(bill_names):
+        existing_name, existing_cnt = name_map.get(tc, ("", 0))
+        if cnt > existing_cnt:
+            name_map[tc] = (name, existing_cnt + cnt)
+        else:
+            name_map[tc] = (existing_name, existing_cnt + cnt)
+
+    result = []
+    for m in mappings:
+        sample_name, occ = name_map.get(m.temp_code, ("", 0))
+        result.append({
+            "id": m.id,
+            "temp_code": m.temp_code,
+            "product_id": m.product_id,
+            "status": m.status,
+            "first_seen_at": m.first_seen_at,
+            "last_used_at": m.last_used_at,
+            "sample_name": sample_name,
+            "occurrence_count": occ,
+        })
+    return result
+
+
+@router.get("/pending")
+def list_pending_mappings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    mappings = (
+        db.query(TempCodeMapping)
+        .filter(TempCodeMapping.status == "pending")
+        .order_by(TempCodeMapping.last_used_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return _enrich_mappings(db, mappings)
+
+
+@router.get("/all")
+def list_all_mappings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    mappings = (
+        db.query(TempCodeMapping)
+        .order_by(TempCodeMapping.last_used_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return _enrich_mappings(db, mappings)
+
+
+@router.post("/{temp_code}/map")
+def map_temp_code(
+    temp_code: str,
+    body: MapTempCodeRequest,
+    db: Session = Depends(get_db),
+):
+    if body.product_id:
+        product = db.query(Product).filter(Product.id == body.product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        product_id = product.id
+
+    elif body.new_product_name and body.new_product_uom:
+        product = mapping_service.create_product_and_map(
+            db, temp_code, body.new_product_name, body.new_product_uom
+        )
+        return {
+            "message": "New product created and mapped",
+            "product_id": str(product.id),
+            "product_code": product.code,
+            "lines_updated": 0,
+        }
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either product_id or new_product_name + new_product_uom",
+        )
+
+    updated = mapping_service.map_temp_code_to_product(db, temp_code, product_id)
+    db.commit()
+    return {
+        "message": "Mapping saved. Retroactive update applied.",
+        "product_id": str(product_id),
+        "lines_updated": updated,
+    }
+
+
+@router.get("/{temp_code}/suggestions")
+def get_suggestions(temp_code: str, db: Session = Depends(get_db)):
+    suggestions = mapping_service.suggest_product_matches(db, temp_code)
+    return [
+        {"id": str(p.id), "code": p.code, "display_name": p.display_name, "uom": p.uom}
+        for p in suggestions
+    ]
