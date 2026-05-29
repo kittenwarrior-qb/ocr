@@ -100,59 +100,52 @@ IMPORTANT:
 - For each item: quantity, unit, line_total are REQUIRED
 - Items must never be empty if products are listed
 - Skip rows with no quantity AND no price (e.g. free-goods placeholder rows)
-- If a field is missing use null, but try your best to find REQUIRED fields"""
+- If a field is missing use null, but try your best to find REQUIRED fields
+- MULTI-PAGE: The document may span multiple pages. Extract ALL items from ALL pages, not just the first page.
+- If total_amount is NOT explicitly printed on the document, calculate it as the SUM of all items[].line_total (plus tax if applicable)
+- NEVER use only items from the first page to calculate total — always include ALL pages"""
 
 # NVIDIA NIM giới hạn ảnh ~180k tokens → giữ ảnh nhỏ hơn 2.5MB sau encode
 _MAX_IMAGE_BYTES = 2_500_000  # bytes trước khi base64
 
 
-def _file_to_base64_image(file_path: str) -> tuple[str, str]:
-    """Returns (base64_string, media_type). Converts all PDF pages to a single stitched JPEG."""
+def _file_to_base64_images(file_path: str) -> list[tuple[str, str]]:
+    """Returns list of (base64_string, media_type) for each page. PDF → one image per page."""
     path = Path(file_path)
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
         from pdf2image import convert_from_path
-        images = convert_from_path(file_path, dpi=150)
+        images = convert_from_path(file_path, dpi=200)
         if not images:
             raise ValueError("Could not convert PDF to image")
-        if len(images) == 1:
-            img = images[0]
-        else:
-            # Stitch all pages vertically into one tall image
-            widths = [im.width for im in images]
-            max_width = max(widths)
-            total_height = sum(im.height for im in images)
-            img = Image.new("RGB", (max_width, total_height), (255, 255, 255))
-            y_offset = 0
-            for im in images:
-                img.paste(im, (0, y_offset))
-                y_offset += im.height
     elif suffix in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"):
-        img = Image.open(file_path)
+        images = [Image.open(file_path)]
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
-    img = img.convert("RGB")
+    results = []
+    for img in images:
+        img = img.convert("RGB")
 
-    # Resize nếu quá lớn
-    max_width = 1536
-    max_height = 4096
-    w, h = img.size
-    if w > max_width or h > max_height:
-        ratio = min(max_width / w, max_height / h)
-        new_size = (int(w * ratio), int(h * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
+        # Resize nếu quá lớn
+        max_side = 2048
+        if max(img.size) > max_side:
+            ratio = max_side / max(img.size)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
 
-    # Nén JPEG, giảm dần quality cho đến khi đủ nhỏ
-    for quality in (90, 80, 70, 60):
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=quality)
-        raw_bytes = buf.getvalue()
-        if len(raw_bytes) <= _MAX_IMAGE_BYTES:
-            break
+        # Nén JPEG
+        for quality in (90, 80, 70, 60):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            raw_bytes = buf.getvalue()
+            if len(raw_bytes) <= _MAX_IMAGE_BYTES:
+                break
 
-    return base64.b64encode(raw_bytes).decode(), "image/jpeg"
+        results.append((base64.b64encode(raw_bytes).decode(), "image/jpeg"))
+
+    return results
 
 
 def _resolve_provider() -> str:
@@ -167,8 +160,8 @@ def _resolve_provider() -> str:
 
 
 def _call_ocr(prompt: str, file_path: str) -> str:
-    """Gọi OCR provider được chọn (OpenRouter hoặc NVIDIA NIM)."""
-    b64, media_type = _file_to_base64_image(file_path)
+    """Gọi OCR provider được chọn (OpenRouter hoặc NVIDIA NIM). Hỗ trợ multi-page."""
+    page_images = _file_to_base64_images(file_path)
     provider = _resolve_provider()
 
     if provider == "openrouter":
@@ -185,21 +178,23 @@ def _call_ocr(prompt: str, file_path: str) -> str:
         model = settings.NVIDIA_MODEL
         extra_headers = {}
 
+    # Build content with text prompt + all page images
+    content = [{"type": "text", "text": prompt}]
+    for b64, media_type in page_images:
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{media_type};base64,{b64}",
+                "detail": "high",
+            },
+        })
+
     payload = {
         "model": model,
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{media_type};base64,{b64}",
-                            "detail": "high",
-                        },
-                    },
-                ],
+                "content": content,
             }
         ],
         "max_tokens": 4096,
