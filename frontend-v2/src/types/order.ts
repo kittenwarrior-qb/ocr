@@ -62,6 +62,7 @@ export interface OrderUpdatePayload {
   payment_method?: string | null
   recipient_name?: string | null
   description?: string | null
+  extra_data?: Record<string, string | number | null>
 }
 
 export interface UploadResult {

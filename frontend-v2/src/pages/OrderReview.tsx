@@ -6,6 +6,7 @@ import { ArrowLeftOutlined, CheckOutlined, SearchOutlined, UnorderedListOutlined
 import { getOrder, getRawDocument, updateOrder, completeOrder, uploadBatch } from '@/api/orders'
 import SelectPopup from '@/components/SelectPopup'
 import type { OrderLine } from '@/types/order'
+import customersData from '@/data/customers.json'
 import dayjs from 'dayjs'
 
 const { Dragger } = AntUpload
@@ -25,10 +26,21 @@ const POPUP_CONFIGS = {
   customer: {
     title: 'Chọn khách hàng',
     columns: [
-      { title: 'Mã KH', dataIndex: 'code', width: 100 },
-      { title: 'Loại KH', dataIndex: 'type', width: 80 },
-      { title: 'Tên khách hàng', dataIndex: 'name' },
-      { title: 'MST', dataIndex: 'tax_code', width: 120 },
+      { title: 'Thẻ', dataIndex: 'tag', width: 50 },
+      { title: 'Mã khách hàng', dataIndex: 'code', width: 140 },
+      { title: 'Loại khách hàng', dataIndex: 'type', width: 160 },
+      { title: 'Tên khách hàng', dataIndex: 'name', width: 280 },
+      { title: 'Mã số thuế', dataIndex: 'tax_code', width: 120 },
+      { title: 'Điện thoại', dataIndex: 'phone', width: 120 },
+      { title: 'Email', dataIndex: 'email', width: 200 },
+      { title: 'Lĩnh vực', dataIndex: 'field', width: 100 },
+      { title: 'Địa chỉ (Hóa đơn)', dataIndex: 'invoice_address', width: 250 },
+      { title: 'Tỉnh/TP (Hóa đơn)', dataIndex: 'invoice_city', width: 130 },
+      { title: 'Quận/Huyện (Hóa đơn)', dataIndex: 'invoice_district', width: 150 },
+      { title: 'Phường/Xã (Hóa đơn)', dataIndex: 'invoice_ward', width: 150 },
+      { title: 'Mô tả', dataIndex: 'description', width: 150 },
+      { title: 'Chủ sở hữu', dataIndex: 'owner', width: 180 },
+      { title: 'Địa chỉ (Giao hàng)', dataIndex: 'delivery_address', width: 250 },
     ],
   },
   contact: {
@@ -112,6 +124,7 @@ export default function OrderReviewPage() {
   const [orderId, setOrderId] = useState<string | null>(isNewOrder ? null : id!)
 
   const [selectedCustomer, setSelectedCustomer] = useState<string>('')
+  const [selectedCustomerData, setSelectedCustomerData] = useState<Record<string, string> | null>(null)
   const [selectedContact, setSelectedContact] = useState<string>('')
   const [selectedQuotation, setSelectedQuotation] = useState<string>('')
   const [selectedParentOrder, setSelectedParentOrder] = useState<string>('')
@@ -140,10 +153,35 @@ export default function OrderReviewPage() {
 
   const confirmMutation = useMutation({
     mutationFn: async (values: Record<string, unknown>) => {
+      // Build metadata from customer data for MISA export
+      const meta: Record<string, string | number | null> = {}
+      if (selectedCustomerData) {
+        meta.invoice_customer = selectedCustomerData.name || ''
+        meta.invoice_buyer = selectedCustomerData.owner || ''
+        meta.invoice_city = selectedCustomerData.invoice_city || ''
+        meta.invoice_district = selectedCustomerData.invoice_district || ''
+        meta.invoice_ward = selectedCustomerData.invoice_ward || ''
+        meta.invoice_street = selectedCustomerData.invoice_address || ''
+        meta.invoice_address = selectedCustomerData.invoice_address || ''
+        meta.delivery_receiver = selectedCustomerData.owner || ''
+        meta.delivery_phone = selectedCustomerData.phone || ''
+        meta.delivery_city = selectedCustomerData.invoice_city || ''
+        meta.delivery_district = selectedCustomerData.invoice_district || ''
+        meta.delivery_ward = selectedCustomerData.invoice_ward || ''
+        meta.delivery_street = selectedCustomerData.delivery_address || ''
+        meta.delivery_address = selectedCustomerData.delivery_address || ''
+        meta.executor = selectedCustomerData.owner || ''
+      }
+      meta.invoice_country = 'Việt Nam'
+      meta.delivery_country = 'Việt Nam'
+      meta.status = 'Chưa thực hiện'
+      meta.payment_status = 'Chưa thanh toán'
+
       await updateOrder(effectiveId!, {
         ...values,
         order_date: values.order_date ? (values.order_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
         delivery_date: values.delivery_date ? (values.delivery_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
+        extra_data: meta,
       })
       await completeOrder(effectiveId!)
     },
@@ -200,7 +238,8 @@ export default function OrderReviewPage() {
     switch (activePopup) {
       case 'customer':
         setSelectedCustomer(displayName)
-        form.setFieldValue('partner_id', record.id)
+        setSelectedCustomerData(record as unknown as Record<string, string>)
+        form.setFieldValue('partner_id', record.code)
         break
       case 'contact':
         setSelectedContact(displayName)
@@ -300,7 +339,7 @@ export default function OrderReviewPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
         {/* Form Panel */}
-        <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-4 overflow-hidden">
+        <div className="lg:col-span-3 bg-white rounded-lg border border-gray-200 p-4 overflow-y-auto" style={{ height: '580px' }}>
           <h2 className="text-sm font-semibold text-gray-700 mb-4">Thông tin chung</h2>
           <Form form={form} layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
             <div className="grid grid-cols-2 gap-x-6">
@@ -346,13 +385,157 @@ export default function OrderReviewPage() {
               <Form.Item label=""><Input className="invisible" /></Form.Item>
             </div>
           </Form>
+
+          {/* Tình trạng thực hiện đơn hàng */}
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-6">Tình trạng thực hiện đơn hàng</h2>
+          <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
+            <div className="grid grid-cols-2 gap-x-6">
+              <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}>
+                <Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} />
+              </Form.Item>
+              <Form.Item label="Tình trạng ghi doanh số">
+                <Select defaultValue="draft" options={[{ value: 'draft', label: 'Bản nháp' }, { value: 'confirmed', label: 'Đã xác nhận' }]} />
+              </Form.Item>
+              <Form.Item label="Ngày ghi số">
+                <DatePicker className="w-full" format="DD/MM/YYYY" defaultValue={dayjs()} />
+              </Form.Item>
+              <Form.Item label="Thực thu">
+                <InputNumber className="w-full" defaultValue={0} />
+              </Form.Item>
+              <Form.Item label={<>Tình trạng giao hàng <span className="ml-1 text-gray-400 cursor-help" title="Thông tin">ⓘ</span></>}>
+                <Select placeholder="- Không chọn -" />
+              </Form.Item>
+              <Form.Item label="Dự kiến chi">
+                <InputNumber className="w-full" defaultValue={0} />
+              </Form.Item>
+              <Form.Item label="Tình trạng thanh toán">
+                <Select defaultValue="unpaid" options={[{ value: 'unpaid', label: 'Chưa thanh toán' }, { value: 'partial', label: 'Thanh toán một phần' }, { value: 'paid', label: 'Đã thanh toán' }]} />
+              </Form.Item>
+              <Form.Item label="Hạn sản xuất">
+                <DatePicker className="w-full" format="DD/MM/YYYY" placeholder="DD/MM/YYYY" />
+              </Form.Item>
+              <Form.Item label="Đã xuất hóa đơn">
+                <Checkbox />
+              </Form.Item>
+            </div>
+          </Form>
+
+          {/* Thông tin hóa đơn */}
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">Thông tin hóa đơn</h2>
+          <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
+            <div className="grid grid-cols-2 gap-x-6">
+              <Form.Item label="Khách hàng (Hóa đơn)">
+                <Input value={selectedCustomerData?.name || ''} placeholder="- Không chọn -" readOnly allowClear onClear={() => { setSelectedCustomerData(null); setSelectedCustomer('') }} />
+              </Form.Item>
+              <Form.Item label="Người mua hàng">
+                <Input value={selectedCustomerData?.owner || ''} placeholder="- Không chọn -" readOnly allowClear />
+              </Form.Item>
+              <Form.Item label="Quốc gia (Hóa đơn)">
+                <Select defaultValue="vietnam" options={[{ value: 'vietnam', label: 'Việt Nam' }]} />
+              </Form.Item>
+              <Form.Item label="Tỉnh/Thành phố (Hóa đơn)">
+                <Input value={selectedCustomerData?.invoice_city || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Quận/Huyện (Hóa đơn)">
+                <Input value={selectedCustomerData?.invoice_district || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Phường/Xã (Hóa đơn)">
+                <Input value={selectedCustomerData?.invoice_ward || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Số nhà, Đường phố (Hóa đơn)">
+                <Input value={selectedCustomerData?.invoice_address || ''} allowClear />
+              </Form.Item>
+              <Form.Item label="Mã vùng (Hóa đơn)">
+                <Input />
+              </Form.Item>
+              <Form.Item label="Địa chỉ (Hóa đơn)">
+                <Input.TextArea rows={2} value={selectedCustomerData?.invoice_address || ''} />
+              </Form.Item>
+              <Form.Item label="Phân cụm hóa đơn">
+                <Select placeholder="- Không chọn -" />
+              </Form.Item>
+            </div>
+          </Form>
+
+          {/* Thông tin giao hàng */}
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">
+            <span>Thông tin giao hàng</span>
+            <span className="float-right flex gap-4">
+              <a className="text-xs text-blue-500 font-normal cursor-pointer">📋 Sao chép địa chỉ hóa đơn</a>
+              <a className="text-xs text-blue-500 font-normal cursor-pointer">✏️ Thay đổi thông tin giao hàng</a>
+            </span>
+          </h2>
+          <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
+            <div className="grid grid-cols-2 gap-x-6">
+              <Form.Item label="Người nhận hàng">
+                <Input value={selectedCustomerData?.owner || ''} allowClear />
+              </Form.Item>
+              <Form.Item label="Điện thoại">
+                <Input value={selectedCustomerData?.phone || ''} />
+              </Form.Item>
+              <Form.Item label="Quốc gia (Giao hàng)">
+                <Select defaultValue="vietnam" options={[{ value: 'vietnam', label: 'Việt Nam' }]} />
+              </Form.Item>
+              <Form.Item label="Tỉnh/Thành phố (Giao hàng)">
+                <Input value={selectedCustomerData?.invoice_city || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Quận/Huyện (Giao hàng)">
+                <Input value={selectedCustomerData?.invoice_district || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Phường/Xã (Giao hàng)">
+                <Input value={selectedCustomerData?.invoice_ward || ''} placeholder="- Không chọn -" readOnly />
+              </Form.Item>
+              <Form.Item label="Số nhà, Đường phố (Giao hàng)">
+                <Input value={selectedCustomerData?.delivery_address || ''} allowClear />
+              </Form.Item>
+              <Form.Item label="Mã vùng (Giao hàng)">
+                <Input />
+              </Form.Item>
+              <Form.Item label="Địa chỉ (Giao hàng)">
+                <Input.TextArea rows={2} value={selectedCustomerData?.delivery_address || ''} />
+              </Form.Item>
+            </div>
+          </Form>
+
+          {/* Thông tin mô tả */}
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">Thông tin mô tả</h2>
+          <Form layout="horizontal" size="middle" labelCol={{ span: 4 }} wrapperCol={{ span: 20 }} labelAlign="left" requiredMark={false}>
+            <Form.Item label="Mô tả">
+              <Input.TextArea rows={2} />
+            </Form.Item>
+            <Form.Item label="Ghi chú Hóa đơn">
+              <Input.TextArea rows={2} />
+            </Form.Item>
+          </Form>
+
+          {/* Thông tin hệ thống */}
+          <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">Thông tin hệ thống</h2>
+          <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
+            <div className="grid grid-cols-2 gap-x-6">
+              <Form.Item label="Người thực hiện">
+                <Input value={selectedCustomerData?.owner || 'Hà Mộng Thùy (KM0139)'} readOnly />
+              </Form.Item>
+              <Form.Item label="Đơn vị">
+                <Input defaultValue="CÔNG TY TNHH DỊCH VỤ THƯƠNG MẠI SATORI" readOnly suffix={<SearchOutlined />} />
+              </Form.Item>
+              <Form.Item label="Dùng chung">
+                <Checkbox />
+              </Form.Item>
+              <Form.Item label={<>Đồng bộ đơn giá sau CK <span className="ml-1 text-gray-400 cursor-help" title="Thông tin">ⓘ</span></>}>
+                <Checkbox />
+              </Form.Item>
+              <Form.Item label="Đối tác/CTV giới thiệu">
+                <InputWithPopup placeholder="- Không chọn -" onPopupClick={() => {}} />
+              </Form.Item>
+            </div>
+          </Form>
         </div>
 
         {/* PDF / Upload Panel */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-3 overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-3 overflow-hidden" style={{ height: '580px' }}>
           {isNewOrder && !orderId ? (
-            <>
-              <div className="rounded overflow-hidden" style={{ minHeight: '520px' }}>
+            <div className="flex flex-col items-center justify-center h-full">
+              <div className="rounded overflow-hidden w-full" style={{ minHeight: '480px' }}>
                 <Dragger
                   multiple={false}
                   accept=".pdf"
@@ -360,19 +543,19 @@ export default function OrderReviewPage() {
                   fileList={[]}
                   showUploadList={false}
                   disabled={uploading}
-                  style={{ minHeight: '480px' }}
+                  style={{ minHeight: '480px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <p className="ant-upload-drag-icon"><InboxOutlined /></p>
                   <p className="text-sm text-gray-600">{uploading ? 'Đang xử lý...' : 'Kéo thả file PDF hoặc click để chọn'}</p>
                   <p className="text-xs text-gray-400">Chỉ hỗ trợ file PDF</p>
                 </Dragger>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 self-start">
                 <Checkbox checked={useAI} onChange={e => setUseAI(e.target.checked)}>
                   Sử dụng AI
                 </Checkbox>
               </div>
-            </>
+            </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-2">
@@ -518,9 +701,10 @@ export default function OrderReviewPage() {
           open={true}
           title={POPUP_CONFIGS[activePopup].title}
           columns={[...POPUP_CONFIGS[activePopup].columns]}
-          dataSource={[]}
+          dataSource={activePopup === 'customer' ? (customersData as Record<string, unknown>[]) : []}
           onSelect={handlePopupSelect}
           onCancel={() => setActivePopup(null)}
+          rowKey="code"
         />
       )}
     </div>

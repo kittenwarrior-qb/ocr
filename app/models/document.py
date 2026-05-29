@@ -55,6 +55,7 @@ class ProcessedOrder(Base):
     discount_amount = Column(Numeric(18, 2), nullable=True)
     tax_amount = Column(Numeric(18, 2), nullable=True)
     missing_fields = Column(JSONB, nullable=True, default=list)
+    extra_data = Column(JSONB, nullable=True, default=dict)
     status = Column(
         SAEnum(*DOC_STATUS, name="order_status_enum"),
         default="draft",

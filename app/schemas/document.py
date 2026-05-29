@@ -135,3 +135,4 @@ class OrderUpdateRequest(BaseModel):
     payment_method: Optional[str] = None
     recipient_name: Optional[str] = None
     description: Optional[str] = None
+    extra_data: Optional[dict] = None

@@ -293,6 +293,8 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
         order.recipient_name = body.recipient_name
     if body.description is not None:
         order.description = body.description
+    if body.extra_data is not None:
+        order.extra_data = body.extra_data
     
     db.commit()
     db.refresh(order)

@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
-import { FileTextOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
+import { FileTextOutlined, MenuFoldOutlined, MenuUnfoldOutlined, TeamOutlined } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
 
 import OrdersPage from './pages/Orders'
 import OrderReviewPage from './pages/OrderReview'
+import CustomersPage from './pages/Customers'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -18,6 +19,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
   const items = [
     { key: '/orders', label: 'Đơn hàng', icon: <FileTextOutlined /> },
+    { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
   ]
 
   return (
@@ -63,6 +65,7 @@ function AppLayout() {
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/orders/new" element={<OrderReviewPage />} />
           <Route path="/orders/:id" element={<OrderReviewPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
           <Route path="*" element={<Navigate to="/orders" replace />} />
         </Routes>
       </main>
