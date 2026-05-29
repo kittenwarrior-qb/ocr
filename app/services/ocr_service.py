@@ -102,21 +102,32 @@ IMPORTANT:
 - Skip rows with no quantity AND no price (e.g. free-goods placeholder rows)
 - If a field is missing use null, but try your best to find REQUIRED fields"""
 
-# NVIDIA NIM giới hạn ảnh ~180k tokens → giữ ảnh nhỏ hơn 1.5MB sau encode
-_MAX_IMAGE_BYTES = 1_400_000  # bytes trước khi base64
+# NVIDIA NIM giới hạn ảnh ~180k tokens → giữ ảnh nhỏ hơn 2.5MB sau encode
+_MAX_IMAGE_BYTES = 2_500_000  # bytes trước khi base64
 
 
 def _file_to_base64_image(file_path: str) -> tuple[str, str]:
-    """Returns (base64_string, media_type). Converts PDF first page to JPEG."""
+    """Returns (base64_string, media_type). Converts all PDF pages to a single stitched JPEG."""
     path = Path(file_path)
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
         from pdf2image import convert_from_path
-        images = convert_from_path(file_path, first_page=1, last_page=1, dpi=150)
+        images = convert_from_path(file_path, dpi=150)
         if not images:
             raise ValueError("Could not convert PDF to image")
-        img = images[0]
+        if len(images) == 1:
+            img = images[0]
+        else:
+            # Stitch all pages vertically into one tall image
+            widths = [im.width for im in images]
+            max_width = max(widths)
+            total_height = sum(im.height for im in images)
+            img = Image.new("RGB", (max_width, total_height), (255, 255, 255))
+            y_offset = 0
+            for im in images:
+                img.paste(im, (0, y_offset))
+                y_offset += im.height
     elif suffix in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"):
         img = Image.open(file_path)
     else:
@@ -124,11 +135,13 @@ def _file_to_base64_image(file_path: str) -> tuple[str, str]:
 
     img = img.convert("RGB")
 
-    # Resize nếu quá lớn (NVIDIA NIM giới hạn kích thước)
-    max_side = 1536
-    if max(img.size) > max_side:
-        ratio = max_side / max(img.size)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
+    # Resize nếu quá lớn
+    max_width = 1536
+    max_height = 4096
+    w, h = img.size
+    if w > max_width or h > max_height:
+        ratio = min(max_width / w, max_height / h)
+        new_size = (int(w * ratio), int(h * ratio))
         img = img.resize(new_size, Image.LANCZOS)
 
     # Nén JPEG, giảm dần quality cho đến khi đủ nhỏ
@@ -189,7 +202,7 @@ def _call_ocr(prompt: str, file_path: str) -> str:
                 ],
             }
         ],
-        "max_tokens": 2048,
+        "max_tokens": 4096,
         "temperature": 0.1,
     }
 
