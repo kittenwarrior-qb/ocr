@@ -33,6 +33,10 @@ def generate_template_code(db: Session) -> str:
     return _next_code(db, "template_prefix")
 
 
+def generate_order_number(db: Session) -> str:
+    return _next_code(db, "order_prefix")
+
+
 def init_default_configs(db: Session) -> None:
     for key, value in DEFAULT_CONFIGS:
         exists = db.query(SysConfig).filter(SysConfig.config_key == key).first()

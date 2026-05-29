@@ -39,7 +39,9 @@ class ProcessedOrderOut(BaseModel):
     partner_id: Optional[UUID]
     delivery_address_id: Optional[UUID]
     order_number: Optional[str]
+    po_number: Optional[str]
     order_date: Optional[date]
+    delivery_date: Optional[date]
     currency: Optional[str]
     payment_method: Optional[str]
     recipient_name: Optional[str]
@@ -49,6 +51,7 @@ class ProcessedOrderOut(BaseModel):
     tax_amount: Optional[Decimal]
     status: str
     processed_at: datetime
+    file_name: Optional[str] = None
     lines: list[LineOut] = []
     pending_count: int = 0
     mapped_count: int = 0
@@ -64,6 +67,7 @@ class ProcessedBillOut(BaseModel):
     delivery_address_id: Optional[UUID]
     invoice_number: Optional[str]
     invoice_date: Optional[date]
+    delivery_date: Optional[date]
     currency: Optional[str]
     payment_method: Optional[str]
     recipient_name: Optional[str]
@@ -117,3 +121,17 @@ class CorrectionCreate(BaseModel):
 
 class DocumentTypeOverride(BaseModel):
     document_type: str
+
+
+class OrderUpdateRequest(BaseModel):
+    order_date: Optional[date] = None
+    delivery_date: Optional[date] = None
+    total_amount: Optional[Decimal] = None
+    order_number: Optional[str] = None
+    po_number: Optional[str] = None
+    partner_id: Optional[UUID] = None
+    delivery_address_id: Optional[UUID] = None
+    currency: Optional[str] = None
+    payment_method: Optional[str] = None
+    recipient_name: Optional[str] = None
+    description: Optional[str] = None

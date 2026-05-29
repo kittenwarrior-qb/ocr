@@ -12,3 +12,4 @@ thefuzz==0.22.1
 python-levenshtein==0.25.1
 Pillow==10.4.0
 pdf2image==1.17.0
+pdfplumber==0.11.4

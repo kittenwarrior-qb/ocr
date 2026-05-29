@@ -18,9 +18,9 @@ build/
 .ruff_cache/
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+frontend-v2/node_modules/
+frontend-v2/dist/
+frontend-v2/.vite/
 
 # ── Uploads & user data ───────────────────────────────────────────────────────
 uploads/
@@ -43,3 +43,6 @@ pgdata/
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Else ────────────────────────────────────────────────────────────────────────
+/RawTest

@@ -1,7 +1,9 @@
 from typing import Optional, List
 from uuid import UUID
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +11,7 @@ from app.models.document import ProcessedBill, ProcessedOrder, RawDocument
 from app.schemas.document import (
     CorrectionCreate,
     DocumentTypeOverride,
+    OrderUpdateRequest,
     ProcessedBillOut,
     ProcessedOrderOut,
     RawDocumentOut,
@@ -35,12 +38,13 @@ def _parse_session_id(session_id: Optional[str]):
 def upload_document(
     file: UploadFile = File(...),
     session_id: Optional[str] = Form(None),
+    use_ai: Optional[str] = Form("true"),
     db: Session = Depends(get_db),
 ):
     content = file.file.read()
     file_path = document_service.save_uploaded_file(file.filename, content)
     raw = document_service.create_raw_document(db, file.filename, file_path, session_id=_parse_session_id(session_id))
-    enqueue(raw.id)
+    enqueue(raw.id, use_ai=use_ai != "false")
     return UploadResponse(
         raw_document_id=raw.id,
         file_name=raw.file_name,
@@ -53,9 +57,11 @@ def upload_document(
 def upload_batch(
     files: List[UploadFile] = File(...),
     session_id: Optional[str] = Form(None),
+    use_ai: Optional[str] = Form("true"),
     db: Session = Depends(get_db),
 ):
     parsed_sid = _parse_session_id(session_id)
+    ai_enabled = use_ai != "false"
 
     # Kiểm tra trùng tên file trong phiên
     duplicates = []
@@ -72,7 +78,7 @@ def upload_batch(
         content = file.file.read()
         file_path = document_service.save_uploaded_file(file.filename, content)
         raw = document_service.create_raw_document(db, file.filename, file_path, session_id=parsed_sid)
-        enqueue(raw.id)
+        enqueue(raw.id, use_ai=ai_enabled)
         results.append({
             "raw_document_id": str(raw.id),
             "file_name": raw.file_name,
@@ -105,6 +111,94 @@ def get_raw_document(raw_doc_id: UUID, db: Session = Depends(get_db)):
     return doc
 
 
+@router.get("/raw/{raw_doc_id}/file")
+def get_raw_file(raw_doc_id: UUID, db: Session = Depends(get_db)):
+    """Trả về file gốc (PDF/JPG) để embed trong iframe"""
+    doc = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    suffix = file_path.suffix.lower()
+    media_types = {
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+    }
+    media_type = media_types.get(suffix, 'application/octet-stream')
+    return FileResponse(file_path, media_type=media_type)
+
+
+@router.get("/raw/{raw_doc_id}/image")
+def get_raw_image(raw_doc_id: UUID, db: Session = Depends(get_db)):
+    """Trả về ảnh gốc của document (PDF convert sang JPG nếu cần)"""
+    doc = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    # Nếu là PDF, convert page đầu sang JPG
+    if file_path.suffix.lower() == '.pdf':
+        try:
+            from pdf2image import convert_from_path
+            import io
+            images = convert_from_path(str(file_path), first_page=1, last_page=1, dpi=150)
+            if not images:
+                raise HTTPException(status_code=500, detail="Cannot convert PDF to image")
+            
+            img = images[0]
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=85)
+            buf.seek(0)
+            return StreamingResponse(buf, media_type="image/jpeg")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PDF conversion error: {str(e)}")
+    
+    # Nếu là ảnh, trả về trực tiếp
+    return FileResponse(file_path, media_type=f"image/{file_path.suffix[1:]}")
+
+
+@router.get("/raw/{raw_doc_id}/annotated-image")
+def get_annotated_image(raw_doc_id: UUID, db: Session = Depends(get_db)):
+    """Trả về ảnh đã khoanh tròn các field đã extract"""
+    doc = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = Path(doc.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    # Nếu chưa có bbox data, trả về ảnh gốc
+    if not doc.extraction_bboxes:
+        return get_raw_image(raw_doc_id, db)
+    
+    try:
+        from app.services.visual_ocr_service import generate_annotated_image
+        import io
+        
+        image_bytes = generate_annotated_image(
+            str(file_path),
+            doc.extracted_data or {},
+            doc.extraction_bboxes
+        )
+        
+        return StreamingResponse(
+            io.BytesIO(image_bytes),
+            media_type="image/jpeg"
+        )
+    except Exception as e:
+        # Fallback to original image if annotation fails
+        return get_raw_image(raw_doc_id, db)
+
+
 @router.post("/raw/{raw_doc_id}/reprocess")
 def reprocess_document(raw_doc_id: UUID, db: Session = Depends(get_db)):
     doc = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
@@ -112,7 +206,7 @@ def reprocess_document(raw_doc_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found")
     doc.ocr_status = "pending"
     db.commit()
-    enqueue(raw_doc_id)
+    enqueue(raw_doc_id, use_ai=True)
     return {"message": "Reprocessing started"}
 
 
@@ -150,7 +244,7 @@ def list_orders(status: str | None = None, skip: int = 0, limit: int = 50, db: S
     if status:
         q = q.filter(ProcessedOrder.status == status)
     orders = q.order_by(ProcessedOrder.processed_at.desc()).offset(skip).limit(limit).all()
-    return [_enrich_order(o) for o in orders]
+    return [_enrich_order(o, db) for o in orders]
 
 
 @router.get("/orders/{order_id}", response_model=ProcessedOrderOut)
@@ -158,7 +252,7 @@ def get_order(order_id: UUID, db: Session = Depends(get_db)):
     order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    return _enrich_order(order)
+    return _enrich_order(order, db)
 
 
 @router.post("/orders/{order_id}/complete")
@@ -169,10 +263,53 @@ def complete_order(order_id: UUID, db: Session = Depends(get_db)):
     return {"status": order.status}
 
 
-def _enrich_order(order: ProcessedOrder) -> dict:
+@router.patch("/orders/{order_id}")
+def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends(get_db)):
+    """Update order fields - dùng cho OrderReview"""
+    order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Update các field được gửi lên
+    if body.order_date is not None:
+        order.order_date = body.order_date
+    if body.delivery_date is not None:
+        order.delivery_date = body.delivery_date
+    if body.total_amount is not None:
+        order.total_amount = body.total_amount
+    if body.order_number is not None:
+        order.order_number = body.order_number
+    if body.po_number is not None:
+        order.po_number = body.po_number
+    if body.partner_id is not None:
+        order.partner_id = body.partner_id
+    if body.delivery_address_id is not None:
+        order.delivery_address_id = body.delivery_address_id
+    if body.currency is not None:
+        order.currency = body.currency
+    if body.payment_method is not None:
+        order.payment_method = body.payment_method
+    if body.recipient_name is not None:
+        order.recipient_name = body.recipient_name
+    if body.description is not None:
+        order.description = body.description
+    
+    db.commit()
+    db.refresh(order)
+    return _enrich_order(order, db)
+
+
+def _enrich_order(order: ProcessedOrder, db: Session | None = None) -> dict:
     lines = order.lines
+    # Lấy file_name từ RawDocument
+    file_name = None
+    if db and order.raw_document_id:
+        raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
+        if raw_doc:
+            file_name = raw_doc.file_name
     return {
         **{c.name: getattr(order, c.name) for c in order.__table__.columns},
+        "file_name": file_name,
         "lines": lines,
         "pending_count": sum(1 for l in lines if l.mapping_status == "pending"),
         "mapped_count": sum(1 for l in lines if l.mapping_status != "pending"),

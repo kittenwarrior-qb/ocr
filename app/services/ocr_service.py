@@ -28,9 +28,26 @@ format_hint rules:
 
 GENERIC_FULL_PROMPT = """You are an expert at extracting structured data from Vietnamese business documents (purchase orders / đơn đặt hàng and VAT invoices / hóa đơn GTGT).
 
+CRITICAL REQUIRED FIELDS (MUST extract):
+- order_date: Ngày đặt hàng (YYYY-MM-DD format, REQUIRED)
+- delivery_date: Ngày giao hàng / Ngày nhận hàng dự kiến (YYYY-MM-DD format, REQUIRED)
+- total_amount: Tổng giá trị đơn hàng (number, REQUIRED)
+- items[].quantity: Số lượng (number, REQUIRED for each item)
+- items[].unit: Đơn vị tính (string, REQUIRED for each item)
+- items[].line_total: Thành tiền (number, REQUIRED for each item)
+
+DOUBLECHECK RULES:
+- order_date MUST be DIFFERENT from delivery_date (delivery is always AFTER order date)
+- total_amount should approximately equal SUM of all items[].line_total (with possible tax/discount)
+- If you see multiple dates, order_date is the EARLIER one, delivery_date is the LATER one
+- If a field labeled "Ngày Đặt Hàng" exists, that is order_date. "Ngày Giao Hàng" is delivery_date.
+- DO NOT confuse them. Read the label carefully.
+- If total_amount has both "before VAT" and "after VAT" versions, use the FINAL total (after VAT)
+
 FIELD ALIASES — the same field may appear under many different labels:
 - order_number: "Số PO", "SỐ PO", "PO No.", "PO No", "P/O Number", "Order No.", "Order No", "Số chứng từ", "Số đơn hàng", "SỐ ĐƠN ĐẶT HÀNG", "Đơn đặt hàng số", "Số thứ tự đơn đặt hàng", "Số hiệu đơn hàng", "OUR REF NO", "Ord slip no", "Supplier Delivery ID"
-- order_date: "Ngày đặt hàng", "Ngày chứng từ", "Ngày đặt đơn", "NGÀY ĐẶT HÀNG", "Order Date", "Ord dt", "DATE", "Date", "Entry Date", "Ngày đặt hàng/Date"
+- order_date: "Ngày đặt hàng", "Ngày chứng từ", "Ngày đặt đơn", "NGÀY ĐẶT HÀNG", "Order Date", "Ord dt", "DATE", "Date", "Entry Date", "Ngày đặt hàng/Date", "PO Date"
+- delivery_date: "Ngày giao hàng", "Ngày nhận hàng", "Delivery Date", "Ngày giao", "NGÀY GIAO HÀNG", "Expected Delivery", "Ngày dự kiến giao", "Ngày xác nhận", "Confirmation Date"
 - delivery_address: "Ship to", "Ship To", "GIAO TỚI", "Địa chỉ giao hàng", "ĐỊA CHỈ GIAO HÀNG", "Nơi giao hàng", "Giao hàng tại kho", "ĐỊA ĐIỂM GIAO HÀNG", "SHIP ADDRESS", "Delivered To", "Delivery to", "Delivery Address", "Delivery to / Giao hàng tới"
 - payment_method: "Phương thức thanh toán", "HÌNH THỨC THANH TOÁN", "Thanh toán", "Terms", "TERMS", "Payment Terms"
 - recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT"
@@ -50,7 +67,8 @@ Extract all information and return valid JSON only (no markdown, no explanation)
 {
   "document_type": "purchase_order or vendor_bill",
   "order_number": "string or null",
-  "order_date": "YYYY-MM-DD or null",
+  "order_date": "YYYY-MM-DD (REQUIRED)",
+  "delivery_date": "YYYY-MM-DD (REQUIRED)",
   "currency": "VND or USD or EUR or null (default VND if not stated)",
   "payment_method": "string or null",
   "recipient_name": "string or null",
@@ -60,24 +78,29 @@ Extract all information and return valid JSON only (no markdown, no explanation)
   "vendor_name": "string or null",
   "vendor_tax_code": "string or null",
   "delivery_address": "string or null",
-  "total_amount": number_or_null,
+  "total_amount": "number (REQUIRED)",
   "discount_amount": number_or_null,
   "tax_amount": number_or_null,
   "items": [
     {
       "product_code": "string or null",
       "product_name": "string",
-      "quantity": number_or_null,
-      "unit": "string or null",
+      "quantity": "number (REQUIRED)",
+      "unit": "string (REQUIRED)",
       "unit_price": number_or_null,
       "discount_rate": number_or_null,
       "discount_amount": number_or_null,
       "tax_rate": number_or_null,
-      "line_total": number_or_null
+      "line_total": "number (REQUIRED)"
     }
   ]
 }
-IMPORTANT: Items must never be empty if products are listed. Skip rows with no quantity AND no price (e.g. free-goods placeholder rows). If a field is missing use null."""
+IMPORTANT: 
+- order_date, delivery_date, total_amount are REQUIRED — extract them carefully
+- For each item: quantity, unit, line_total are REQUIRED
+- Items must never be empty if products are listed
+- Skip rows with no quantity AND no price (e.g. free-goods placeholder rows)
+- If a field is missing use null, but try your best to find REQUIRED fields"""
 
 # NVIDIA NIM giới hạn ảnh ~180k tokens → giữ ảnh nhỏ hơn 1.5MB sau encode
 _MAX_IMAGE_BYTES = 1_400_000  # bytes trước khi base64

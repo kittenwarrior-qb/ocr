@@ -95,6 +95,10 @@ def export_order_to_excel(db: Session, order_id: UUID, fmt: str = "misa") -> byt
     partner = _get_partner(db, order.partner_id)
     address = _get_address(db, order.delivery_address_id)
 
+    # Use MISA template format (2 sheets)
+    if fmt == "misa_template":
+        return _export_order_misa_template(db, order, partner, address)
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Đơn đặt hàng" if fmt == "misa" else "PurchaseOrder"
@@ -127,6 +131,90 @@ def export_order_to_excel(db: Session, order_id: UUID, fmt: str = "misa") -> byt
 
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = 18
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    order.status = "exported"
+    db.commit()
+    return buf.getvalue()
+
+
+def _export_order_misa_template(db: Session, order, partner, address) -> bytes:
+    """Export order using MISA import template format (2 sheets)."""
+    wb = Workbook()
+
+    # Sheet 1: Nhập khẩu Đơn hàng
+    ws_order = wb.active
+    ws_order.title = "Nhập khẩu Đơn hàng"
+
+    order_headers = [
+        "Sử dụng ngoại tệ", "Loại tiền", "Tỷ giá", "Số đơn hàng (*)",
+        "Ngày đặt hàng (*)", "Số PO", "Nhân viên bán hàng (*)", "Khách hàng",
+        "Liên hệ", "Đơn hàng cha", "Báo giá", "Cơ hội", "Chiến dịch",
+        "Giá trị đơn hàng (*)", "Giá trị thanh lý", "Diễn giải",
+        "Loại đơn hàng (*)", "Số ngày được nợ", "Hạn giao hàng",
+        "Hạn thanh toán (*)", "Tình trạng (*)",
+    ]
+    for col, h in enumerate(order_headers, 1):
+        ws_order.cell(row=1, column=col, value=h)
+
+    # Data row
+    order_date_str = order.order_date.strftime("%d/%m/%Y") if order.order_date else ""
+    delivery_date_str = order.delivery_date.strftime("%d/%m/%Y") if order.delivery_date else ""
+    partner_code = partner.code if partner else ""
+
+    ws_order.cell(row=2, column=1, value="KHÔNG")  # Sử dụng ngoại tệ
+    ws_order.cell(row=2, column=2, value=order.currency or "VND")  # Loại tiền
+    ws_order.cell(row=2, column=4, value="")  # Số đơn hàng — để trống, MISA tự sinh
+    ws_order.cell(row=2, column=5, value=order_date_str)  # Ngày đặt hàng
+    ws_order.cell(row=2, column=6, value=order.po_number or "")  # Số PO
+    ws_order.cell(row=2, column=8, value=partner_code)  # Khách hàng
+    ws_order.cell(row=2, column=14, value=_dec(order.total_amount))  # Giá trị đơn hàng
+    ws_order.cell(row=2, column=16, value=order.description or "")  # Diễn giải
+    ws_order.cell(row=2, column=19, value=delivery_date_str)  # Hạn giao hàng
+    ws_order.cell(row=2, column=21, value="Chưa thực hiện")  # Tình trạng
+
+    # Sheet 2: nhập khẩu hàng hóa
+    ws_items = wb.create_sheet("nhập khẩu hàng hóa")
+
+    item_headers = [
+        "Mã hàng hóa", "Số lượng", "Diễn giải", "Đơn vị tính",
+        "Đơn giá", "Thành tiền", "Tỷ lệ chiết khấu", "Tiền chiết khấu",
+        "Thuế suất", "Tiền thuế", "Tổng tiền", "Ghi chú", "Hàng KM",
+        "Đơn hàng (*)",
+    ]
+    for col, h in enumerate(item_headers, 1):
+        ws_items.cell(row=1, column=col, value=h)
+
+    order_number_ref = ""  # Để trống — MISA tự liên kết khi import
+
+    for idx, line in enumerate(order.lines, 2):
+        product_code = _get_product_code(db, line.product_id) or line.ocr_product_code or line.temp_code
+        product_name = _get_product_name(db, line.product_id) or line.product_name_original
+        uom = _get_product_uom(db, line.product_id, line.uom_original)
+        qty = _dec(line.quantity)
+        price = _dec(line.unit_price)
+        amount = _dec(line.line_total)
+        dk_rate = _dec(line.discount_rate)
+        dk_amt = _dec(line.discount_amount) or (round(amount * dk_rate / 100, 2) if amount and dk_rate else None)
+        tax_rate = _dec(line.tax_rate)
+        tax_amt = round((amount - (dk_amt or 0)) * tax_rate / 100, 2) if amount and tax_rate else None
+        total = (amount or 0) - (dk_amt or 0) + (tax_amt or 0) if amount else None
+
+        ws_items.cell(row=idx, column=1, value=product_code)
+        ws_items.cell(row=idx, column=2, value=qty)
+        ws_items.cell(row=idx, column=3, value=product_name)
+        ws_items.cell(row=idx, column=4, value=uom)
+        ws_items.cell(row=idx, column=5, value=price)
+        ws_items.cell(row=idx, column=6, value=amount)
+        ws_items.cell(row=idx, column=7, value=dk_rate)
+        ws_items.cell(row=idx, column=8, value=dk_amt)
+        ws_items.cell(row=idx, column=9, value=f"{int(tax_rate)}%" if tax_rate else None)
+        ws_items.cell(row=idx, column=10, value=tax_amt)
+        ws_items.cell(row=idx, column=11, value=total)
+        ws_items.cell(row=idx, column=14, value=order_number_ref)
 
     buf = io.BytesIO()
     wb.save(buf)

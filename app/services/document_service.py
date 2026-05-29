@@ -1,9 +1,12 @@
 import shutil
+import logging
 from datetime import datetime, date
 from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.models.document import (
@@ -15,6 +18,7 @@ from app.models.document import (
 )
 from app.models.mapping import DocumentCorrection
 from app.services import mapping_service, ocr_service, template_service
+from app.services.pattern_extraction import extract_by_pattern_rules
 
 
 # ── File upload ───────────────────────────────────────────────────────────────
@@ -38,7 +42,7 @@ def create_raw_document(db: Session, file_name: str, file_path: str, session_id=
 
 # ── Main OCR + processing pipeline ───────────────────────────────────────────
 
-def process_raw_document(db: Session, raw_doc_id: UUID) -> dict:
+def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> dict:
     raw = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
     if not raw:
         raise ValueError(f"RawDocument {raw_doc_id} not found")
@@ -47,30 +51,37 @@ def process_raw_document(db: Session, raw_doc_id: UUID) -> dict:
     db.commit()
 
     try:
-        # Pass 1: extract MST + document type
-        first_pass = ocr_service.extract_mst_and_type(raw.file_path)
-        tax_code = first_pass.get("tax_code")
-        doc_type_hint = first_pass.get("document_type")
+        if use_ai:
+            # Pass 1: extract MST + document type
+            first_pass = ocr_service.extract_mst_and_type(raw.file_path)
+            tax_code = first_pass.get("tax_code")
+            doc_type_hint = first_pass.get("document_type")
 
-        format_hint = first_pass.get("format_hint") or "standard"
-        order_number = first_pass.get("order_number")
+            format_hint = first_pass.get("format_hint") or "standard"
+            order_number = first_pass.get("order_number")
 
-        # Find template
-        template = template_service.find_template(db, tax_code, doc_type_hint, format_hint, order_number)
+            # Find template
+            template = template_service.find_template(db, tax_code, doc_type_hint, format_hint, order_number)
 
-        # Pass 2: full extraction — dùng alias-aware prompt nếu template có field_aliases
-        if template and template.field_aliases:
-            system_prompt = template_service.build_prompt_with_aliases(template.field_aliases)
-        elif template:
-            system_prompt = template.system_prompt
+            # Pass 2: full extraction — dùng alias-aware prompt nếu template có field_aliases
+            if template and template.field_aliases:
+                system_prompt = template_service.build_prompt_with_aliases(template.field_aliases)
+            elif template:
+                system_prompt = template.system_prompt
+            else:
+                system_prompt = None
+            extracted = ocr_service.extract_full_document(raw.file_path, system_prompt)
+
+            raw.ocr_raw_text = str(extracted.get("_raw", ""))
+            raw.extracted_data = extracted
+            raw.document_type = extracted.get("document_type") or doc_type_hint
+            raw.template_id = template.id if template else None
         else:
-            system_prompt = None
-        extracted = ocr_service.extract_full_document(raw.file_path, system_prompt)
+            # No AI — dùng pdfplumber + regex pattern rules
+            extracted = extract_by_pattern_rules(raw.file_path)
+            raw.extracted_data = extracted
+            raw.document_type = extracted.get("document_type") or "purchase_order"
 
-        raw.ocr_raw_text = str(extracted.get("_raw", ""))
-        raw.extracted_data = extracted
-        raw.document_type = extracted.get("document_type") or doc_type_hint
-        raw.template_id = template.id if template else None
         raw.ocr_status = "done"
         db.commit()
 
@@ -121,8 +132,10 @@ def _create_order(db: Session, raw, partner, address, data: dict, items: list) -
         raw_document_id=raw.id,
         partner_id=partner.id,
         delivery_address_id=address.id if address else None,
-        order_number=data.get("order_number"),
+        order_number=None,
+        po_number=data.get("order_number"),
         order_date=_parse_date(data.get("order_date")),
+        delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
         recipient_name=data.get("recipient_name"),
@@ -153,6 +166,7 @@ def _create_bill(db: Session, raw, partner, address, data: dict, items: list) ->
         delivery_address_id=address.id if address else None,
         invoice_number=data.get("order_number") or data.get("invoice_number"),
         invoice_date=_parse_date(data.get("order_date") or data.get("invoice_date")),
+        delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
         recipient_name=data.get("recipient_name"),
@@ -235,10 +249,17 @@ def _build_bill_lines(db: Session, bill_id: UUID, items: list) -> list[BillLine]
 
 def _check_missing_order_fields(data: dict, partner, address, items: list) -> list[str]:
     missing = []
-    if not data.get("order_number"):
-        missing.append("Số chứng từ (order_number)")
+    # REQUIRED fields
     if not data.get("order_date"):
-        missing.append("Ngày chứng từ (order_date)")
+        missing.append("Ngày đặt hàng (order_date) — BẮT BUỘC")
+    if not data.get("delivery_date"):
+        missing.append("Ngày giao hàng (delivery_date) — BẮT BUỘC")
+    if not data.get("total_amount"):
+        missing.append("Giá trị đơn hàng (total_amount) — BẮT BUỘC")
+    
+    # Optional fields
+    if not data.get("order_number"):
+        missing.append("Số PO (po_number)")
     if not partner or partner.legal_name in (None, "Unknown"):
         missing.append("Khách hàng (customer_name)")
     if not data.get("currency"):
@@ -249,16 +270,21 @@ def _check_missing_order_fields(data: dict, partner, address, items: list) -> li
         missing.append("Địa điểm giao hàng (delivery_address)")
     if not data.get("recipient_name"):
         missing.append("Người nhận hàng (recipient_name)")
+    
     if not items:
         missing.append("Chi tiết mặt hàng — không có dòng sản phẩm nào")
     else:
         for i, item in enumerate(items, 1):
+            # REQUIRED item fields
+            if item.get("quantity") is None:
+                missing.append(f"Dòng {i}: Số lượng — BẮT BUỘC")
+            if not item.get("unit"):
+                missing.append(f"Dòng {i}: Đơn vị tính — BẮT BUỘC")
+            if item.get("line_total") is None:
+                missing.append(f"Dòng {i}: Thành tiền — BẮT BUỘC")
+            # Optional item fields
             if not item.get("product_name"):
                 missing.append(f"Dòng {i}: Tên hàng hóa")
-            if item.get("quantity") is None:
-                missing.append(f"Dòng {i}: Số lượng")
-            if item.get("unit_price") is None:
-                missing.append(f"Dòng {i}: Đơn giá")
     return missing
 
 

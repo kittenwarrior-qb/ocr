@@ -13,6 +13,9 @@ from app.services.ocr_queue import start as start_ocr_queue
 from app.database import SessionLocal
 
 _MIGRATIONS = [
+    "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS delivery_date DATE",
+    "ALTER TABLE processed_bills ADD COLUMN IF NOT EXISTS delivery_date DATE",
+    "ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS extraction_bboxes JSONB",
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS currency VARCHAR(10)",
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(200)",
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(200)",

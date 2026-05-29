@@ -16,13 +16,15 @@ def _worker(worker_id: int):
     from app.services import document_service
 
     while True:
-        raw_doc_id = _q.get()
-        if raw_doc_id is None:
+        item = _q.get()
+        if item is None:
             _q.task_done()
             break
+        # item is (raw_doc_id, use_ai)
+        raw_doc_id, use_ai = item
         db = SessionLocal()
         try:
-            document_service.process_raw_document(db, raw_doc_id)
+            document_service.process_raw_document(db, raw_doc_id, use_ai=use_ai)
         except Exception as e:
             logger.error("OCR worker-%d error for %s: %s", worker_id, raw_doc_id, e)
         finally:
@@ -44,8 +46,8 @@ def start(concurrency: int = 3):
         logger.info("OCR queue started with %d worker(s)", concurrency)
 
 
-def enqueue(raw_doc_id: UUID):
-    _q.put(raw_doc_id)
+def enqueue(raw_doc_id: UUID, use_ai: bool = True):
+    _q.put((raw_doc_id, use_ai))
 
 
 def pending() -> int:

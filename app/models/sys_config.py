@@ -7,6 +7,7 @@ DEFAULT_CONFIGS = [
     ("product_prefix", "PROD_"),
     ("address_prefix", "ADDR_"),
     ("template_prefix", "TPL_"),
+    ("order_prefix", "DH_"),
 ]
 
 

@@ -9,7 +9,7 @@ from app.services.export_service import export_bill_to_excel, export_order_to_ex
 
 router = APIRouter(prefix="/exports", tags=["Exports"])
 
-VALID_FORMATS = ("misa", "bravo")
+VALID_FORMATS = ("misa", "bravo", "misa_template")
 
 
 @router.get("/orders/{order_id}")
