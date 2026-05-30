@@ -62,7 +62,8 @@ export async function uploadExcel(file: File): Promise<ExcelImportResult> {
 
 export function getImageUrl(rawDocId: string, annotated = false): string {
   const suffix = annotated ? '/annotated-image' : '/image'
-  return `/api/v1/documents/raw/${rawDocId}${suffix}`
+  const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
+  return `${base}/documents/raw/${rawDocId}${suffix}`
 }
 
 // Sessions (batches)

@@ -124,7 +124,10 @@ export default function OrdersPage() {
       message.success(`KH: ${customer.name}`); setCustomerModalOpen(false); setSelectedOrderId(null)
     } catch { message.error('Cập nhật thất bại') }
   }
-  const handleExport = (sid: string) => window.open(`/api/v1/sessions/${sid}/export`, '_blank')
+  const handleExport = (sid: string) => {
+    const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
+    window.open(`${base}/sessions/${sid}/export`, '_blank')
+  }
 
   const doneCount = uploadFiles.filter(f => f.status === 'done').length
   const progressPercent = uploadFiles.length > 0 ? Math.round((doneCount / uploadFiles.length) * 100) : 0
