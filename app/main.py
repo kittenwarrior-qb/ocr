@@ -46,6 +46,8 @@ _MIGRATIONS = [
     "ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES ocr_sessions(id)",
     "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
     "ALTER TABLE bill_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
+    "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS extra_data JSONB DEFAULT '{}'::jsonb",
+    "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(100)",
 ]
 
 
