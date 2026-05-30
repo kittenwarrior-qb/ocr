@@ -34,7 +34,18 @@ def generate_template_code(db: Session) -> str:
 
 
 def generate_order_number(db: Session) -> str:
-    return _next_code(db, "order_prefix")
+    """Generate order number with format OCR0000001"""
+    config = (
+        db.query(SysConfig)
+        .filter(SysConfig.config_key == "order_prefix")
+        .with_for_update()
+        .first()
+    )
+    if config is None:
+        raise ValueError("Config key 'order_prefix' not found. Run init_default_configs() first.")
+    config.last_number += 1
+    db.flush()
+    return f"OCR{config.last_number:07d}"
 
 
 def init_default_configs(db: Session) -> None:

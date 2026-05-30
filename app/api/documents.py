@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import get_db
 from app.models.document import ProcessedBill, ProcessedOrder, RawDocument
@@ -20,6 +21,7 @@ from app.schemas.document import (
     BillLineOut,
 )
 from app.services import document_service
+from app.services.excel_import_service import import_excel_to_orders
 from app.services.ocr_queue import enqueue, pending as queue_pending, worker_count
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -60,18 +62,28 @@ def upload_batch(
     use_ai: Optional[str] = Form("true"),
     db: Session = Depends(get_db),
 ):
+    from app.models.session import OcrSession
+
     parsed_sid = _parse_session_id(session_id)
     ai_enabled = use_ai != "false"
 
+    # Auto-create session if not provided
+    if not parsed_sid:
+        file_names = [f.filename for f in files]
+        session_name = file_names[0] if len(file_names) == 1 else f"{len(file_names)} đơn hàng"
+        new_session = OcrSession(name=session_name)
+        db.add(new_session)
+        db.flush()
+        parsed_sid = new_session.id
+
     # Kiểm tra trùng tên file trong phiên
     duplicates = []
-    if parsed_sid:
-        incoming_names = [f.filename for f in files]
-        existing = db.query(RawDocument.file_name).filter(
-            RawDocument.session_id == parsed_sid,
-            RawDocument.file_name.in_(incoming_names),
-        ).all()
-        duplicates = [row.file_name for row in existing]
+    incoming_names = [f.filename for f in files]
+    existing = db.query(RawDocument.file_name).filter(
+        RawDocument.session_id == parsed_sid,
+        RawDocument.file_name.in_(incoming_names),
+    ).all()
+    duplicates = [row.file_name for row in existing]
 
     results = []
     for file in files:
@@ -85,7 +97,10 @@ def upload_batch(
             "ocr_status": raw.ocr_status,
             "is_duplicate": raw.file_name in duplicates,
         })
+
+    db.commit()
     return {
+        "session_id": str(parsed_sid),
         "uploaded": len(results),
         "queue_pending": queue_pending(),
         "duplicates": duplicates,
@@ -236,6 +251,28 @@ def override_document_type(
     return {"message": "Document type updated", "document_type": body.document_type}
 
 
+# ── Excel Import ──────────────────────────────────────────────────────────────
+
+@router.post("/upload-excel")
+def upload_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload an Excel file containing purchase orders. Parses and creates orders."""
+    if not file.filename or not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        raise HTTPException(status_code=400, detail="Only .xlsx/.xls files are supported")
+
+    content = file.file.read()
+    file_path = document_service.save_uploaded_file(file.filename, content)
+
+    try:
+        result = import_excel_to_orders(db, file_path, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Failed to parse Excel: {str(e)}")
+
+    return result
+
+
 # ── Orders ────────────────────────────────────────────────────────────────────
 
 @router.get("/orders", response_model=list[ProcessedOrderOut])
@@ -295,6 +332,7 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
         order.description = body.description
     if body.extra_data is not None:
         order.extra_data = body.extra_data
+        flag_modified(order, "extra_data")
     
     db.commit()
     db.refresh(order)

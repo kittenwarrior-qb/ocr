@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Modal, Input, Button, Pagination } from 'antd'
 import { SearchOutlined, PlusOutlined } from '@ant-design/icons'
 
@@ -16,13 +16,27 @@ interface SelectPopupProps {
   onSelect: (record: Record<string, unknown>) => void
   onCancel: () => void
   rowKey?: string
+  initialSearch?: string
 }
 
-export default function SelectPopup({ open, title, columns, dataSource, onSelect, onCancel, rowKey = 'id' }: SelectPopupProps) {
+export default function SelectPopup({ open, title, columns, dataSource, onSelect, onCancel, rowKey = 'id', initialSearch = '' }: SelectPopupProps) {
   const [search, setSearch] = useState('')
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
   const [page, setPage] = useState(1)
   const pageSize = 10
+
+  // When modal opens, pre-fill search with the suggested product code/name
+  useEffect(() => {
+    if (open && initialSearch) {
+      setSearch(initialSearch)
+      setPage(1)
+    }
+    if (!open) {
+      setSearch('')
+      setSelectedRow(null)
+      setPage(1)
+    }
+  }, [open, initialSearch])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return dataSource
@@ -40,16 +54,10 @@ export default function SelectPopup({ open, title, columns, dataSource, onSelect
   const handleOk = () => {
     if (selectedRow) {
       onSelect(selectedRow)
-      setSelectedRow(null)
-      setSearch('')
-      setPage(1)
     }
   }
 
   const handleCancel = () => {
-    setSelectedRow(null)
-    setSearch('')
-    setPage(1)
     onCancel()
   }
 
@@ -63,7 +71,7 @@ export default function SelectPopup({ open, title, columns, dataSource, onSelect
       open={open}
       onCancel={handleCancel}
       width={960}
-      styles={{ body: { padding: '16px 24px' } }}
+      styles={{ body: { padding: '16px 24px', maxHeight: 'calc(100vh - 120px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
       footer={null}
       centered
     >
@@ -77,15 +85,15 @@ export default function SelectPopup({ open, title, columns, dataSource, onSelect
           allowClear
           className="w-56"
         />
-        <Button icon={<PlusOutlined />} className="text-blue-600 border-blue-300">
+        <Button icon={<PlusOutlined />} className="text-blue-600 hidden border-blue-300">
           Thêm Khách hàng
         </Button>
       </div>
 
       {/* Table with horizontal scroll */}
-      <div className="border border-gray-200 rounded overflow-x-auto" style={{ maxHeight: '460px' }}>
+      <div className="border border-gray-200 rounded overflow-x-auto overflow-y-auto flex-1 min-h-0">
         <table className="w-full min-w-[1200px] border-collapse text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-2.5 w-10 text-left"></th>
               {columns.map(col => (

@@ -95,10 +95,27 @@ def map_temp_code(
             raise HTTPException(status_code=404, detail="Product not found")
         product_id = product.id
 
+    elif body.product_code:
+        product = db.query(Product).filter(Product.code == body.product_code).first()
+        if not product:
+            # Product not in DB yet — create it from the provided code
+            if body.new_product_name and body.new_product_uom:
+                product = Product(
+                    code=body.product_code,
+                    display_name=body.new_product_name,
+                    uom=body.new_product_uom,
+                )
+                db.add(product)
+                db.flush()
+            else:
+                raise HTTPException(status_code=404, detail=f"Product with code '{body.product_code}' not found")
+        product_id = product.id
+
     elif body.new_product_name and body.new_product_uom:
         product = mapping_service.create_product_and_map(
             db, temp_code, body.new_product_name, body.new_product_uom
         )
+        db.commit()
         return {
             "message": "New product created and mapped",
             "product_id": str(product.id),
@@ -109,7 +126,7 @@ def map_temp_code(
     else:
         raise HTTPException(
             status_code=400,
-            detail="Provide either product_id or new_product_name + new_product_uom",
+            detail="Provide product_id, product_code, or new_product_name + new_product_uom",
         )
 
     updated = mapping_service.map_temp_code_to_product(db, temp_code, product_id)

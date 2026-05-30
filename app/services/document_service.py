@@ -18,6 +18,7 @@ from app.models.document import (
 )
 from app.models.mapping import DocumentCorrection
 from app.services import mapping_service, ocr_service, template_service
+from app.services.code_generator import generate_order_number
 from app.services.pattern_extraction import extract_by_pattern_rules
 
 
@@ -132,7 +133,7 @@ def _create_order(db: Session, raw, partner, address, data: dict, items: list) -
         raw_document_id=raw.id,
         partner_id=partner.id,
         delivery_address_id=address.id if address else None,
-        order_number=None,
+        order_number=generate_order_number(db),
         po_number=data.get("order_number"),
         order_date=_parse_date(data.get("order_date")),
         delivery_date=_parse_date(data.get("delivery_date")),
@@ -152,7 +153,9 @@ def _create_order(db: Session, raw, partner, address, data: dict, items: list) -
     lines = _build_order_lines(db, order.id, items)
 
     pending = sum(1 for l in lines if l.mapping_status == "pending")
-    order.status = "processing" if pending else "completed"
+    # "completed" = OCR done (có thể chưa map sản phẩm — đó là việc của user)
+    # "processing" chỉ dùng khi OCR đang chạy, không phải khi chờ map
+    order.status = "completed"
     db.commit()
     db.refresh(order)
     return {"type": "purchase_order", "id": str(order.id), "status": order.status, "missing_fields": missing}
@@ -183,7 +186,7 @@ def _create_bill(db: Session, raw, partner, address, data: dict, items: list) ->
     lines = _build_bill_lines(db, bill.id, items)
 
     pending = sum(1 for l in lines if l.mapping_status == "pending")
-    bill.status = "processing" if pending else "completed"
+    bill.status = "completed"
     db.commit()
     db.refresh(bill)
     return {"type": "vendor_bill", "id": str(bill.id), "status": bill.status, "missing_fields": missing}

@@ -1,13 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
-import { FileTextOutlined, MenuFoldOutlined, MenuUnfoldOutlined, TeamOutlined } from '@ant-design/icons'
+import { FileTextOutlined, MenuFoldOutlined, MenuUnfoldOutlined, TeamOutlined, ShoppingOutlined } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
 
 import OrdersPage from './pages/Orders'
-import OrderReviewPage from './pages/OrderReview'
 import CustomersPage from './pages/Customers'
+import ProductsPage from './pages/Products'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -19,6 +19,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
   const items = [
     { key: '/orders', label: 'Đơn hàng', icon: <FileTextOutlined /> },
+    { key: '/products', label: 'Hàng hóa', icon: <ShoppingOutlined /> },
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
   ]
 
@@ -63,8 +64,7 @@ function AppLayout() {
       <main className={`transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/orders/new" element={<OrderReviewPage />} />
-          <Route path="/orders/:id" element={<OrderReviewPage />} />
+          <Route path="/products" element={<ProductsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="*" element={<Navigate to="/orders" replace />} />
         </Routes>

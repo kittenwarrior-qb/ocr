@@ -145,18 +145,19 @@ def _export_order_misa_template(db, order, partner, address):
     """Export using MISA template: bold Times New Roman headers, exact col widths, all 61 cols."""
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
+    from app.utils.customer_matcher import find_best_customer
 
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Nhập khẩu Đơn hàng"
 
     hdrs1 = [
-        "Sử dụng ngoại tệ", "Loại tiền", "Tỷ giá", "Số đơn hàng (*)", "Ngày đặt hàng (*)",
+        "Số đơn hàng (*)", "Ngày đặt hàng (*)",
         "Số PO", "Nhân viên bán hàng (*)", "Khách hàng", "Liên hệ", "Đơn hàng cha",
         "Báo giá", "Cơ hội", "Chiến dịch", "Giá trị đơn hàng (*)", "Giá trị thanh lý",
-        "Diễn giải", "Loại đơn hàng (*)", "Số ngày được nợ", "Hạn giao hàng", "Hạn thanh toán (*)",
+        "Loại đơn hàng (*)", "Số ngày được nợ", "Hạn giao hàng", "Hạn thanh toán (*)",
         "Tình trạng (*)", "Ngày ghi sổ", "Thực thu", "Tình trạng giao hàng", "Dự kiến chi",
-        "Tình trạng thanh toán", "Hạn sản xuất", "Đã xuất hóa đơn", "Khách hàng (Hóa đơn)", "Người mua hàng",
+        "Hạn sản xuất", "Đã xuất hóa đơn", "Khách hàng (Hóa đơn)", "Người mua hàng",
         "Quốc gia (Hóa đơn)", "Tỉnh/Thành phố (Hóa đơn)", "Quận/Huyện (Hóa đơn)", "Phường/Xã (Hóa đơn)", "Số nhà, Đường phố (Hóa đơn)",
         "Mã vùng (Hóa đơn)", "Địa chỉ (Hóa đơn)", "Phân cụm hóa đơn", "Người nhận hàng", "Điện thoại",
         "Quốc gia (Giao hàng)", "Tỉnh/Thành phố (Giao hàng)", "Quận/Huyện (Giao hàng)", "Phường/Xã (Giao hàng)", "Số nhà, Đường phố (Giao hàng)",
@@ -166,12 +167,12 @@ def _export_order_misa_template(db, order, partner, address):
     ]
 
     widths1 = [
-        16.82, 9.54, 7.0, 15.73, 17.54, 7.18, 22.73, 12.27, 8.45, 13.82,
-        8.27, 7.45, 18.54, 19.27, 15.0, 29.73, 17.54, 16.45, 14.54, 18.54,
-        14.18, 12.18, 9.73, 20.45, 12.18, 21.27, 13.45, 16.27, 22.18, 16.45,
-        19.45, 25.82, 22.82, 21.27, 28.73, 19.45, 65.45, 18.18, 17.0, 10.82,
-        20.82, 27.27, 24.27, 22.73, 30.18, 20.82, 65.45, 36.27, 16.82, 23.18,
-        12.45, 15.73, 22.18, 24.0, 15.73, 11.27, 14.82, 20.18, 18.18, 18.18, 9.45,
+        15.73, 17.54, 7.18, 22.73, 12.27, 8.45, 13.82, 8.27, 7.45, 18.54,
+        19.27, 15.0, 17.54, 16.45, 14.54, 18.54, 14.18, 12.18, 9.73, 20.45,
+        12.18, 13.45, 16.27, 22.18, 16.45, 19.45, 25.82, 22.82, 21.27, 28.73,
+        19.45, 65.45, 18.18, 17.0, 10.82, 20.82, 27.27, 24.27, 22.73, 30.18,
+        20.82, 65.45, 36.27, 16.82, 23.18, 12.45, 15.73, 22.18, 24.0, 15.73,
+        11.27, 14.82, 20.18, 18.18, 18.18, 9.45,
     ]
 
     hfont = Font(name="Times New Roman", size=11, bold=True)
@@ -187,68 +188,96 @@ def _export_order_misa_template(db, order, partner, address):
     order_date_str = order.order_date.strftime("%d/%m/%Y") if order.order_date else ""
     delivery_date_str = order.delivery_date.strftime("%d/%m/%Y") if order.delivery_date else ""
 
+    # Auto-map customer from catalog if not already set in meta
+    if not meta.get("invoice_customer") and not partner_name:
+        # Try to find customer from order description or recipient_name
+        search_name = order.description or order.recipient_name or ""
+        if search_name:
+            matched = find_best_customer(search_name, addr_text)
+            if matched:
+                meta = dict(meta)  # copy to avoid mutating
+                meta.setdefault("invoice_customer", matched.get("name", ""))
+                meta.setdefault("invoice_buyer", matched.get("owner", ""))
+                meta.setdefault("invoice_city", matched.get("invoice_city", ""))
+                meta.setdefault("invoice_district", matched.get("invoice_district", ""))
+                meta.setdefault("invoice_ward", matched.get("invoice_ward", ""))
+                meta.setdefault("invoice_address", matched.get("invoice_address", ""))
+                meta.setdefault("invoice_street", matched.get("invoice_address", ""))
+                meta.setdefault("delivery_receiver", matched.get("owner", ""))
+                meta.setdefault("delivery_phone", matched.get("phone", ""))
+                meta.setdefault("delivery_city", matched.get("invoice_city", ""))
+                meta.setdefault("delivery_district", matched.get("invoice_district", ""))
+                meta.setdefault("delivery_ward", matched.get("invoice_ward", ""))
+                meta.setdefault("delivery_street", matched.get("delivery_address", "") or matched.get("invoice_address", ""))
+                meta.setdefault("delivery_address", matched.get("delivery_address", "") or matched.get("invoice_address", ""))
+                meta.setdefault("executor", matched.get("owner", ""))
+                if not partner_code:
+                    partner_code = matched.get("code", "")
+                if not partner_name:
+                    partner_name = matched.get("name", "")
+                # Store the real customer code from customers.json
+                meta.setdefault("customer_code", matched.get("code", ""))
+
+    # Use customer code from customers.json (via meta) if available, else partner.code from DB
+    customer_code = meta.get("customer_code") or partner_code
+
     vals1 = [
-        "KHONG",                                                    # 1  Su dung ngoai te
-        order.currency or "VND",                                    # 2  Loai tien
-        1,                                                          # 3  Ty gia
-        order.order_number or "",                                   # 4  So don hang
-        order_date_str,                                             # 5  Ngay dat hang
-        order.po_number or "",                                      # 6  So PO
-        meta.get("salesperson", ""),                                # 7  Nhan vien ban hang
-        partner_code,                                               # 8  Khach hang
-        meta.get("contact", ""),                                    # 9  Lien he
-        meta.get("parent_order", ""),                               # 10 Don hang cha
-        meta.get("quotation", ""),                                  # 11 Bao gia
-        meta.get("opportunity", ""),                                # 12 Co hoi
-        meta.get("campaign", ""),                                   # 13 Chien dich
-        _dec(order.total_amount),                                   # 14 Gia tri don hang
-        meta.get("liquidation_value", ""),                          # 15 Gia tri thanh ly
-        order.description or meta.get("description", ""),          # 16 Dien giai
-        meta.get("order_type", ""),                                 # 17 Loai don hang
-        meta.get("credit_days", ""),                                # 18 So ngay duoc no
-        delivery_date_str,                                          # 19 Han giao hang
-        meta.get("payment_due", ""),                                # 20 Han thanh toan
-        meta.get("status", "Chua thuc hien"),                       # 21 Tinh trang
-        meta.get("record_date", ""),                                # 22 Ngay ghi so
-        meta.get("actual_revenue", ""),                             # 23 Thuc thu
-        meta.get("delivery_status", ""),                            # 24 Tinh trang giao hang
-        meta.get("expected_expense", ""),                           # 25 Du kien chi
-        meta.get("payment_status", "Chua thanh toan"),              # 26 Tinh trang thanh toan
-        meta.get("production_deadline", ""),                        # 27 Han san xuat
-        meta.get("invoice_issued", ""),                             # 28 Da xuat hoa don
-        meta.get("invoice_customer", partner_name),                 # 29 Khach hang (Hoa don)
-        meta.get("invoice_buyer", ""),                              # 30 Nguoi mua hang
-        meta.get("invoice_country", "Viet Nam"),                    # 31 Quoc gia (Hoa don)
-        meta.get("invoice_city", ""),                               # 32 Tinh/Thanh pho (Hoa don)
-        meta.get("invoice_district", ""),                           # 33 Quan/Huyen (Hoa don)
-        meta.get("invoice_ward", ""),                               # 34 Phuong/Xa (Hoa don)
-        meta.get("invoice_street", ""),                             # 35 So nha Duong pho (Hoa don)
-        meta.get("invoice_area_code", ""),                          # 36 Ma vung (Hoa don)
-        meta.get("invoice_address", ""),                            # 37 Dia chi (Hoa don)
-        meta.get("invoice_cluster", ""),                            # 38 Phan cum hoa don
-        meta.get("delivery_receiver", ""),                          # 39 Nguoi nhan hang
-        meta.get("delivery_phone", ""),                             # 40 Dien thoai
-        meta.get("delivery_country", "Viet Nam"),                   # 41 Quoc gia (Giao hang)
-        meta.get("delivery_city", ""),                              # 42 Tinh/Thanh pho (Giao hang)
-        meta.get("delivery_district", ""),                          # 43 Quan/Huyen (Giao hang)
-        meta.get("delivery_ward", ""),                              # 44 Phuong/Xa (Giao hang)
-        meta.get("delivery_street", addr_text),                     # 45 So nha Duong pho (Giao hang)
-        meta.get("delivery_area_code", ""),                         # 46 Ma vung (Giao hang)
-        meta.get("delivery_address", addr_text),                    # 47 Dia chi (Giao hang)
-        meta.get("note_description", ""),                           # 48 Mo ta
-        meta.get("invoice_note", ""),                               # 49 Ghi chu Hoa don
-        meta.get("executor", ""),                                   # 50 Nguoi thuc hien
-        meta.get("shared", ""),                                     # 51 Dung chung
-        "",                                                         # 52 Ngung theo doi
-        meta.get("referral_partner", ""),                           # 53 Doi tac/CTV gioi thieu
-        meta.get("sync_price_after_discount", ""),                  # 54 Dong bo don gia sau CK
-        meta.get("sales_project", ""),                              # 55 Du an ban hang
-        meta.get("origin", ""),                                     # 56 Nguon goc
-        meta.get("warehouse_staff", ""),                            # 57 Nhan vien kho
-        meta.get("delivery_staff", ""),                             # 58 Nhan vien giao hang
-        meta.get("expected_delivery_date", ""),                     # 59 Ngay giao du kien
-        meta.get("shipping_route", ""),                             # 60 Tuyen van chuyen
-        meta.get("actual_expense", ""),                             # 61 Thuc chi
+        order.order_number or "",                                   # 1  So don hang
+        order_date_str,                                             # 2  Ngay dat hang
+        order.po_number or "",                                      # 3  So PO
+        meta.get("salesperson", ""),                                # 4  Nhan vien ban hang
+        customer_code,                                              # 5  Khach hang (ma tu customers.json)
+        meta.get("contact", ""),                                    # 6  Lien he
+        meta.get("parent_order", ""),                               # 7  Don hang cha
+        meta.get("quotation", ""),                                  # 8  Bao gia
+        meta.get("opportunity", ""),                                # 9  Co hoi
+        meta.get("campaign", ""),                                   # 10 Chien dich
+        _dec(order.total_amount),                                   # 11 Gia tri don hang
+        meta.get("liquidation_value", ""),                          # 12 Gia tri thanh ly
+        meta.get("order_type", ""),                                 # 13 Loai don hang (Dien giai da bo)
+        meta.get("credit_days", ""),                                # 14 So ngay duoc no
+        delivery_date_str,                                          # 15 Han giao hang
+        meta.get("payment_due", ""),                                # 16 Han thanh toan
+        meta.get("status", "Chua thuc hien"),                       # 17 Tinh trang
+        meta.get("record_date", ""),                                # 18 Ngay ghi so
+        meta.get("actual_revenue", ""),                             # 19 Thuc thu
+        meta.get("delivery_status", ""),                            # 20 Tinh trang giao hang
+        meta.get("expected_expense", ""),                           # 21 Du kien chi
+        meta.get("production_deadline", ""),                        # 22 Han san xuat (Tinh trang thanh toan da bo)
+        meta.get("invoice_issued", ""),                             # 23 Da xuat hoa don
+        meta.get("invoice_customer", partner_name),                 # 24 Khach hang (Hoa don) - tên KH cho template cũ
+        meta.get("invoice_buyer", ""),                              # 25 Nguoi mua hang
+        meta.get("invoice_country", "Viet Nam"),                    # 26 Quoc gia (Hoa don)
+        meta.get("invoice_city", ""),                               # 27 Tinh/Thanh pho (Hoa don)
+        meta.get("invoice_district", ""),                           # 28 Quan/Huyen (Hoa don)
+        meta.get("invoice_ward", ""),                               # 29 Phuong/Xa (Hoa don)
+        meta.get("invoice_street", ""),                             # 30 So nha Duong pho (Hoa don)
+        meta.get("invoice_area_code", ""),                          # 31 Ma vung (Hoa don)
+        meta.get("invoice_address", ""),                            # 32 Dia chi (Hoa don)
+        meta.get("invoice_cluster", ""),                            # 33 Phan cum hoa don
+        meta.get("delivery_receiver", ""),                          # 34 Nguoi nhan hang
+        meta.get("delivery_phone", ""),                             # 35 Dien thoai
+        meta.get("delivery_country", "Viet Nam"),                   # 36 Quoc gia (Giao hang)
+        meta.get("delivery_city", ""),                              # 37 Tinh/Thanh pho (Giao hang)
+        meta.get("delivery_district", ""),                          # 38 Quan/Huyen (Giao hang)
+        meta.get("delivery_ward", ""),                              # 39 Phuong/Xa (Giao hang)
+        meta.get("delivery_street", addr_text),                     # 40 So nha Duong pho (Giao hang)
+        meta.get("delivery_area_code", ""),                         # 41 Ma vung (Giao hang)
+        meta.get("delivery_address", addr_text),                    # 42 Dia chi (Giao hang)
+        meta.get("note_description", ""),                           # 43 Mo ta
+        meta.get("invoice_note", ""),                               # 44 Ghi chu Hoa don
+        meta.get("executor", ""),                                   # 45 Nguoi thuc hien
+        meta.get("shared", ""),                                     # 46 Dung chung
+        "",                                                         # 47 Ngung theo doi
+        meta.get("referral_partner", ""),                           # 48 Doi tac/CTV gioi thieu
+        meta.get("sync_price_after_discount", ""),                  # 49 Dong bo don gia sau CK
+        meta.get("sales_project", ""),                              # 50 Du an ban hang
+        meta.get("origin", ""),                                     # 51 Nguon goc
+        meta.get("warehouse_staff", ""),                            # 52 Nhan vien kho
+        meta.get("delivery_staff", ""),                             # 53 Nhan vien giao hang
+        meta.get("expected_delivery_date", ""),                     # 54 Ngay giao du kien
+        meta.get("shipping_route", ""),                             # 55 Tuyen van chuyen
+        meta.get("actual_expense", ""),                             # 56 Thuc chi
     ]
     for col, v in enumerate(vals1, 1):
         ws1.cell(row=2, column=col, value=v)
@@ -299,6 +328,140 @@ def _export_order_misa_template(db, order, partner, address):
     db.commit()
     return buf.getvalue()
 
+
+def export_orders_bulk(db: Session, order_ids: list[UUID], fmt: str = "misa_template") -> bytes:
+    """Export multiple orders into a single Excel file (all orders in sheet1, all lines in sheet2)."""
+    from openpyxl.utils import get_column_letter
+
+    orders = db.query(ProcessedOrder).filter(ProcessedOrder.id.in_(order_ids)).all()
+    if not orders:
+        raise ValueError("No orders found")
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "Nhập khẩu Đơn hàng"
+    ws2 = wb.create_sheet("nhập khẩu hàng hóa")
+
+    hdrs1 = [
+        "Số đơn hàng (*)", "Ngày đặt hàng (*)",
+        "Số PO", "Nhân viên bán hàng (*)", "Khách hàng", "Liên hệ", "Đơn hàng cha",
+        "Báo giá", "Cơ hội", "Chiến dịch", "Giá trị đơn hàng (*)", "Giá trị thanh lý",
+        "Loại đơn hàng (*)", "Số ngày được nợ", "Hạn giao hàng", "Hạn thanh toán (*)",
+        "Tình trạng (*)", "Ngày ghi sổ", "Thực thu", "Tình trạng giao hàng", "Dự kiến chi",
+        "Hạn sản xuất", "Đã xuất hóa đơn", "Khách hàng (Hóa đơn)", "Người mua hàng",
+        "Quốc gia (Hóa đơn)", "Tỉnh/Thành phố (Hóa đơn)", "Quận/Huyện (Hóa đơn)", "Phường/Xã (Hóa đơn)", "Số nhà, Đường phố (Hóa đơn)",
+        "Mã vùng (Hóa đơn)", "Địa chỉ (Hóa đơn)", "Phân cụm hóa đơn", "Người nhận hàng", "Điện thoại",
+        "Quốc gia (Giao hàng)", "Tỉnh/Thành phố (Giao hàng)", "Quận/Huyện (Giao hàng)", "Phường/Xã (Giao hàng)", "Số nhà, Đường phố (Giao hàng)",
+        "Mã vùng (Giao hàng)", "Địa chỉ (Giao hàng)", "Mô tả", "Ghi chú Hóa đơn", "Người thực hiện",
+        "Dùng chung", "Ngừng theo dõi", "Đối tác/CTV giới thiệu", "Đồng bộ đơn giá sau CK", "Dự án bán hàng",
+        "Nguồn gốc", "Nhân viên kho", "Nhân viên giao hàng", "Ngày giao dự kiến", "Tuyến vận chuyển", "Thực chi",
+    ]
+    widths1 = [
+        15.73, 17.54, 7.18, 22.73, 12.27, 8.45, 13.82, 8.27, 7.45, 18.54,
+        19.27, 15.0, 17.54, 16.45, 14.54, 18.54, 14.18, 12.18, 9.73, 20.45,
+        12.18, 13.45, 16.27, 22.18, 16.45, 19.45, 25.82, 22.82, 21.27, 28.73,
+        19.45, 65.45, 18.18, 17.0, 10.82, 20.82, 27.27, 24.27, 22.73, 30.18,
+        20.82, 65.45, 36.27, 16.82, 23.18, 12.45, 15.73, 22.18, 24.0, 15.73,
+        11.27, 14.82, 20.18, 18.18, 18.18, 9.45,
+    ]
+    hdrs2 = [
+        "Mã hàng hóa", "Số lượng", "Diễn giải", "Đơn vị tính",
+        "Đơn giá", "Thành tiền", "Tỷ lệ chiết khấu", "Tiền chiết khấu",
+        "Thuế suất", "Tiền thuế", "Tổng tiền", "Ghi chú", "Hàng KM", "Đơn hàng (*)",
+    ]
+    widths2 = [13.27, 9.45, 23.54, 11.54, 8.45, 11.27, 16.27, 15.82, 10.54, 10.27, 13.0, 8.45, 10.73, 13.27]
+
+    hfont = Font(name="Times New Roman", size=11, bold=True)
+    for col, h in enumerate(hdrs1, 1):
+        cell = ws1.cell(row=1, column=col, value=h)
+        cell.font = hfont
+        ws1.column_dimensions[get_column_letter(col)].width = widths1[col - 1]
+    for col, h in enumerate(hdrs2, 1):
+        cell = ws2.cell(row=1, column=col, value=h)
+        cell.font = hfont
+        ws2.column_dimensions[get_column_letter(col)].width = widths2[col - 1]
+
+    order_row = 2
+    item_row = 2
+
+    for order in orders:
+        partner = _get_partner(db, order.partner_id)
+        address = _get_address(db, order.delivery_address_id)
+        meta = order.extra_data or {} if order.extra_data else {}
+        partner_code = partner.code if partner else ""
+        partner_name = partner.legal_name if partner else ""
+        addr_text = address.full_address if address else ""
+        order_date_str = order.order_date.strftime("%d/%m/%Y") if order.order_date else ""
+        delivery_date_str = order.delivery_date.strftime("%d/%m/%Y") if order.delivery_date else ""
+
+        customer_code = meta.get("customer_code") or partner_code
+
+        vals = [
+            order.order_number or "", order_date_str, order.po_number or "",
+            meta.get("salesperson", ""), customer_code, meta.get("contact", ""),
+            meta.get("parent_order", ""), meta.get("quotation", ""), meta.get("opportunity", ""),
+            meta.get("campaign", ""), _dec(order.total_amount), meta.get("liquidation_value", ""),
+            meta.get("order_type", ""),
+            meta.get("credit_days", ""), delivery_date_str, meta.get("payment_due", ""),
+            meta.get("status", "Chưa thực hiện"), meta.get("record_date", ""),
+            meta.get("actual_revenue", ""), meta.get("delivery_status", ""),
+            meta.get("expected_expense", ""),
+            meta.get("production_deadline", ""), meta.get("invoice_issued", ""),
+            meta.get("customer_code") or partner_code, meta.get("invoice_buyer", ""),
+            meta.get("invoice_country", "Việt Nam"), meta.get("invoice_city", ""),
+            meta.get("invoice_district", ""), meta.get("invoice_ward", ""),
+            meta.get("invoice_street", ""), meta.get("invoice_area_code", ""),
+            meta.get("invoice_address", ""), meta.get("invoice_cluster", ""),
+            meta.get("delivery_receiver", ""), meta.get("delivery_phone", ""),
+            meta.get("delivery_country", "Việt Nam"), meta.get("delivery_city", ""),
+            meta.get("delivery_district", ""), meta.get("delivery_ward", ""),
+            meta.get("delivery_street", addr_text), meta.get("delivery_area_code", ""),
+            meta.get("delivery_address", addr_text), meta.get("note_description", ""),
+            meta.get("invoice_note", ""), meta.get("executor", ""),
+            meta.get("shared", ""), "", meta.get("referral_partner", ""),
+            meta.get("sync_price_after_discount", ""), meta.get("sales_project", ""),
+            meta.get("origin", ""), meta.get("warehouse_staff", ""),
+            meta.get("delivery_staff", ""), meta.get("expected_delivery_date", ""),
+            meta.get("shipping_route", ""), meta.get("actual_expense", ""),
+        ]
+        for col, v in enumerate(vals, 1):
+            ws1.cell(row=order_row, column=col, value=v)
+        order_row += 1
+
+        # Lines
+        for line in order.lines:
+            product_code = _get_product_code(db, line.product_id) or line.ocr_product_code or line.temp_code
+            product_name = _get_product_name(db, line.product_id) or line.product_name_original
+            uom = _get_product_uom(db, line.product_id, line.uom_original)
+            qty = _dec(line.quantity)
+            price = _dec(line.unit_price)
+            amount = _dec(line.line_total)
+            dk_rate = _dec(line.discount_rate)
+            dk_amt = _dec(line.discount_amount) or (round(amount * dk_rate / 100, 2) if amount and dk_rate else None)
+            tax_rate = _dec(line.tax_rate)
+            tax_amt = round((amount - (dk_amt or 0)) * tax_rate / 100, 2) if amount and tax_rate else None
+            total = (amount or 0) - (dk_amt or 0) + (tax_amt or 0) if amount else None
+            ws2.cell(row=item_row, column=1, value=product_code)
+            ws2.cell(row=item_row, column=2, value=qty)
+            ws2.cell(row=item_row, column=3, value=product_name)
+            ws2.cell(row=item_row, column=4, value=uom)
+            ws2.cell(row=item_row, column=5, value=price)
+            ws2.cell(row=item_row, column=6, value=amount)
+            ws2.cell(row=item_row, column=7, value=dk_rate)
+            ws2.cell(row=item_row, column=8, value=dk_amt)
+            ws2.cell(row=item_row, column=9, value=f"{int(tax_rate)}%" if tax_rate else None)
+            ws2.cell(row=item_row, column=10, value=tax_amt)
+            ws2.cell(row=item_row, column=11, value=total)
+            ws2.cell(row=item_row, column=14, value=order.order_number or "")
+            item_row += 1
+
+        order.status = "exported"
+
+    db.commit()
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def export_bill_to_excel(db: Session, bill_id: UUID, fmt: str = "misa") -> bytes:

@@ -48,35 +48,87 @@ export default function CustomersPage() {
     {
       title: 'Mã khách hàng',
       dataIndex: 'code',
-      width: 140,
-      render: (val: string) => <a className="text-blue-600 font-medium">{val}</a>,
+      width: 120,
+      fixed: 'left',
+      render: (val: string) => <span className="text-blue-600 font-medium">{val}</span>,
     },
     {
       title: 'Loại khách hàng',
       dataIndex: 'type',
-      width: 160,
+      width: 150,
     },
     {
       title: 'Tên khách hàng',
       dataIndex: 'name',
+      width: 280,
       ellipsis: true,
-      render: (val: string) => <a className="text-blue-600">{val}</a>,
+      render: (val: string) => <span className="text-blue-600">{val}</span>,
     },
     {
       title: 'Mã số thuế',
       dataIndex: 'tax_code',
-      width: 130,
+      width: 120,
     },
     {
       title: 'Điện thoại',
       dataIndex: 'phone',
-      width: 130,
+      width: 120,
       render: (val: string) => val ? (
         <span className="flex items-center gap-1">
           <PhoneOutlined className="text-green-500" />
           {val}
         </span>
       ) : '-',
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      width: 200,
+      ellipsis: true,
+    },
+    {
+      title: 'Lĩnh vực',
+      dataIndex: 'field',
+      width: 100,
+    },
+    {
+      title: 'Địa chỉ (Hóa đơn)',
+      dataIndex: 'invoice_address',
+      width: 250,
+      ellipsis: true,
+    },
+    {
+      title: 'Tỉnh/TP (HĐ)',
+      dataIndex: 'invoice_city',
+      width: 120,
+    },
+    {
+      title: 'Quận/Huyện (HĐ)',
+      dataIndex: 'invoice_district',
+      width: 140,
+    },
+    {
+      title: 'Phường/Xã (HĐ)',
+      dataIndex: 'invoice_ward',
+      width: 140,
+    },
+    {
+      title: 'Mô tả',
+      dataIndex: 'description',
+      width: 150,
+      ellipsis: true,
+    },
+    {
+      title: 'Chủ sở hữu',
+      dataIndex: 'owner',
+      width: 180,
+      ellipsis: true,
+    },
+    {
+      title: 'Địa chỉ (Giao hàng)',
+      dataIndex: 'delivery_address',
+      width: 250,
+      ellipsis: true,
     },
   ]
 
@@ -114,7 +166,7 @@ export default function CustomersPage() {
           showTotal: (total) => `Tổng số ${total.toLocaleString('vi-VN')}`,
           size: 'small',
         }}
-        scroll={{ y: 'calc(100vh - 200px)' }}
+        scroll={{ x: 2200, y: 'calc(100vh - 200px)' }}
         className="border border-gray-200 rounded-lg"
       />
     </div>

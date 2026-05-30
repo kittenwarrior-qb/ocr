@@ -18,6 +18,7 @@ class SessionOut(BaseModel):
     closed_at: Optional[datetime] = None
     doc_count: int = 0
     done_count: int = 0
+    order_count: int = 0
 
     class Config:
         from_attributes = True

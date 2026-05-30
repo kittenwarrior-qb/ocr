@@ -24,14 +24,18 @@ def find_or_create_partner(
     tax_code: str | None,
     partner_type: str,
 ) -> Partner:
+    # 1. Exact match by tax code (most reliable)
     if tax_code:
         mst = db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first()
         if mst:
-            return db.query(Partner).filter(Partner.id == mst.partner_id).first()
+            p = db.query(Partner).filter(Partner.id == mst.partner_id).first()
+            if p:
+                return p
 
+    # 2. Fuzzy name match — lower threshold to 70 to handle abbreviations
     all_partners = db.query(Partner).filter(Partner.partner_type == partner_type).all()
     candidates = [{"id": str(p.id), "name": p.legal_name or "", "obj": p} for p in all_partners]
-    match = fuzzy_match(legal_name, candidates, key="name", threshold=85)
+    match = fuzzy_match(legal_name, candidates, key="name", threshold=70)
     if match:
         partner = match["obj"]
         if tax_code and not db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first():
@@ -39,6 +43,7 @@ def find_or_create_partner(
             db.flush()
         return partner
 
+    # 3. No match — create new partner
     code = generate_partner_code(db, partner_type)
     partner = Partner(
         code=code,
@@ -105,9 +110,24 @@ def resolve_temp_code(db: Session, product_code: str | None, product_name: str) 
         db.flush()
         return temp_code, mapping.product_id
 
-    db.add(TempCodeMapping(temp_code=temp_code, status="pending", first_seen_at=now, last_used_at=now))
+    # Try to auto-match product by name from catalog
+    product_id = None
+    if product_name and product_name.strip():
+        all_products = db.query(Product).filter(Product.is_active == True).all()
+        candidates = [{"id": str(p.id), "name": p.display_name or "", "obj": p} for p in all_products]
+        match = fuzzy_match(product_name, candidates, key="name", threshold=82)
+        if match:
+            product_id = match["obj"].id
+
+    db.add(TempCodeMapping(
+        temp_code=temp_code,
+        status="mapped" if product_id else "pending",
+        product_id=product_id,
+        first_seen_at=now,
+        last_used_at=now,
+    ))
     db.flush()
-    return temp_code, None
+    return temp_code, product_id
 
 
 def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> int:
@@ -118,19 +138,27 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
     """
     mapping = db.query(TempCodeMapping).filter(TempCodeMapping.temp_code == temp_code).first()
     if mapping is None:
-        raise ValueError(f"temp_code '{temp_code}' not found")
-
-    mapping.product_id = product_id
-    mapping.status = "mapped"
-    mapping.last_used_at = datetime.utcnow()
-    db.flush()
+        # Create the mapping if it doesn't exist
+        mapping = TempCodeMapping(
+            temp_code=temp_code,
+            status="mapped",
+            product_id=product_id,
+            first_seen_at=datetime.utcnow(),
+            last_used_at=datetime.utcnow(),
+        )
+        db.add(mapping)
+        db.flush()
+    else:
+        mapping.product_id = product_id
+        mapping.status = "mapped"
+        mapping.last_used_at = datetime.utcnow()
+        db.flush()
 
     order_lines = (
         db.query(OrderLine)
         .join(ProcessedOrder, OrderLine.processed_order_id == ProcessedOrder.id)
         .filter(
             OrderLine.temp_code == temp_code,
-            OrderLine.product_id == None,
             ProcessedOrder.status.notin_(["exported"]),
         )
         .all()
@@ -145,7 +173,6 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
         .join(ProcessedBill, BillLine.processed_bill_id == ProcessedBill.id)
         .filter(
             BillLine.temp_code == temp_code,
-            BillLine.product_id == None,
             ProcessedBill.status.notin_(["exported"]),
         )
         .all()

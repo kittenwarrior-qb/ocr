@@ -110,6 +110,7 @@ class TempCodeMappingOut(BaseModel):
 
 class MapTempCodeRequest(BaseModel):
     product_id: Optional[UUID] = None
+    product_code: Optional[str] = None
     new_product_name: Optional[str] = None
     new_product_uom: Optional[str] = None
 
