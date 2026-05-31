@@ -219,61 +219,62 @@ export default function OrdersPage() {
             {/* Orders */}
             <div className="p-3 space-y-4">
               {sessionDetail.orders.map(order => (
-                <div key={order.id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
-                  {/* Header */}
-                  <div className="px-4 py-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-200">
+                <div key={order.id} className="border border-slate-200 rounded-lg overflow-hidden shadow-sm bg-white">
+                  {/* Header — navy accent */}
+                  <div className="px-4 py-2.5 bg-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <FilePdfOutlined className="text-red-500 text-base" />
-                      <span className="text-sm font-bold text-gray-900">{order.file_name}</span>
-                      {(() => { const ok = order.pending_count === 0 && (!!order.partner_name || !!order.recipient_name); if (ok) return <Tag color="success" className="text-xs"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs">{order.pending_count} chưa map</Tag>; return null })()}
+                      <FilePdfOutlined className="text-red-300 text-base" />
+                      <span className="text-sm font-bold text-white">{order.file_name}</span>
+                      <span className="text-xs text-slate-300 ml-2">{order.order_number || ''}</span>
+                      {(() => { const ok = order.pending_count === 0 && (!!order.partner_name || !!order.recipient_name); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; return null })()}
                     </div>
-                    <button className="text-xs text-gray-600 hover:text-blue-600 border border-gray-300 rounded-md px-2.5 py-1 font-medium hover:bg-gray-100 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
+                    <button className="text-xs text-slate-200 hover:text-white border border-slate-500 rounded-md px-2.5 py-1 font-medium hover:bg-slate-600 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
                   </div>
 
-                  {/* PDF Data */}
-                  <div className="px-4 py-2.5 border-b border-gray-100 bg-white">
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Tên công ty:</span><span className="text-gray-700 font-medium">{order.partner_name || <span className="text-red-400 italic">Chưa nhận diện</span>}</span></div>
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Ngày đặt:</span><span className="text-gray-700">{order.order_date || <span className="text-red-400 italic">Chưa có</span>}</span></div>
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Địa chỉ:</span><span className="text-gray-700 truncate">{order.delivery_address || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Ngày giao:</span><span className="text-gray-700">{order.delivery_date || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Người nhận:</span><span className="text-gray-700">{order.recipient_name || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-gray-400 w-24 flex-shrink-0">Tổng tiền:</span><span className="text-gray-700 font-medium">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '\u2014'}</span></div>
+                  {/* PDF Data — light blue tint */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-sky-50/60">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.partner_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700 truncate">{order.delivery_address || '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tổng tiền:</span><span className="text-emerald-700 font-bold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '\u2014'}</span></div>
                     </div>
                   </div>
 
-                  {/* Customer mapping */}
-                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-                    <div className="text-xs text-gray-400 mb-1.5">Thông tin Khách hàng</div>
+                  {/* Customer mapping — warm tint */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-amber-50/50">
+                    <div className="text-xs text-slate-500 font-medium mb-1.5 uppercase tracking-wide">Khách hàng</div>
                     {(() => {
                       const alreadySelected = !!order.extra_data?.customer_code
-                      if (alreadySelected) return <div className="flex items-center gap-3"><span className="text-sm font-medium text-green-700">{order.recipient_name} ✓</span><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Đổi KH</Button></div>
+                      if (alreadySelected) return <div className="flex items-center gap-3"><span className="text-sm font-semibold text-emerald-700">{order.recipient_name} ✓</span><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Đổi KH</Button></div>
                       const name = order.partner_name || order.recipient_name || ''
                       const sugg = name ? matchCustomer(name, order.delivery_address || '', 3) : []
                       const has = sugg.length > 0 && sugg[0].score >= 0.7
-                      if (has) return <div className="flex items-center gap-3"><div className="flex-1"><div className="text-sm font-medium text-gray-800">{sugg[0].customer.name}</div><div className="text-xs text-gray-500">{sugg[0].customer.code} • {sugg[0].customer.invoice_address}</div></div><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
-                      return <div className="flex items-center gap-3"><span className="text-sm text-red-500">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button></div>
+                      if (has) return <div className="flex items-center gap-3"><div className="flex-1"><div className="text-sm font-semibold text-slate-800">{sugg[0].customer.name}</div><div className="text-xs text-slate-500">{sugg[0].customer.code} • {sugg[0].customer.invoice_address}</div></div><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
+                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button></div>
                     })()}
                   </div>
 
-                  {/* Product lines */}
-                  <div className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 py-1 px-2 text-xs text-gray-400 font-medium border-b border-gray-200 mb-1">
-                      <span className="w-2.5" /><span className="flex-1">Tên sản phẩm (OCR)</span><span className="w-28">Mã hàng hóa</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">Thuế</span><span className="w-20" />
+                  {/* Product lines — clean table */}
+                  <div className="px-3 py-2">
+                    <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
+                      <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-20" />
                     </div>
-                    {order.lines.map(line => { const conf = getConfidence(line); const bg = conf.level === 'low' || conf.level === 'none' ? 'bg-red-50' : conf.level === 'medium' ? 'bg-yellow-50' : ''; return (
-                      <div key={line.id} className={`flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0 rounded px-2 ${bg}`}>
+                    {order.lines.map(line => { const conf = getConfidence(line); const bg = conf.level === 'low' || conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'medium' ? 'bg-amber-50/70' : 'hover:bg-slate-50'; return (
+                      <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
                         <Tooltip title={DOT_TIPS[conf.level]}><span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLORS[conf.level]}`} /></Tooltip>
-                        <span className="text-xs text-gray-700 flex-1 truncate">{line.product_name_original}</span>
-                        <span className="text-xs w-28 truncate">{line.mapping_status === 'mapped' ? <span className="text-green-600 font-mono">{line.product_code_mapped || '✓'}</span> : conf.suggestion ? <span className="text-blue-600">→ {conf.suggestion.code}</span> : <span className="text-red-400">?</span>}</span>
-                        <span className="text-xs text-gray-600 w-14 text-right font-medium">{line.quantity ?? '\u2014'}</span>
-                        <span className="text-xs text-gray-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
-                        <span className="text-xs text-gray-700 w-20 text-right font-medium">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
-                        <span className="text-xs text-gray-400 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
-                        <span className="text-xs text-gray-400 w-10 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
+                        <span className="text-xs text-slate-800 flex-1 truncate font-medium">{line.product_name_original}</span>
+                        <span className="text-xs w-28 truncate">{line.mapping_status === 'mapped' ? <span className="text-emerald-600 font-mono font-bold">{line.product_code_mapped || '✓'}</span> : conf.suggestion ? <span className="text-blue-600 font-medium">→ {conf.suggestion.code}</span> : <span className="text-red-400 font-medium">?</span>}</span>
+                        <span className="text-xs text-slate-700 w-14 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
+                        <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
+                        <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
+                        <span className="text-xs text-slate-500 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
+                        <span className="text-xs text-slate-500 w-10 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
                         <div className="w-20 flex-shrink-0 flex justify-end gap-1">
-                          {line.mapping_status !== 'mapped' && conf.level === 'high' && conf.suggestion && <button className="text-xs text-green-600 border border-green-200 rounded px-1.5 py-0.5 hover:bg-green-50" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
-                          <button className="text-xs text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-50" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>
+                          {line.mapping_status !== 'mapped' && conf.level === 'high' && conf.suggestion && <button className="text-xs text-emerald-600 border border-emerald-300 rounded px-1.5 py-0.5 hover:bg-emerald-50 font-medium" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
+                          <button className="text-xs text-blue-600 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50 font-medium" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>
                         </div>
                       </div>
                     ) })}
