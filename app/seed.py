@@ -165,5 +165,4 @@ def main():
     print(f"\n✓ Done! {prod_count} products + {partner_count} customers seeded.")
 
 
-if __name__ == "__main__":
-    main()
+main()
