@@ -64,17 +64,13 @@ def main():
     # ── Reset ─────────────────────────────────────────────────────────────────
     print("\n--- Resetting database ---")
     with engine.connect() as conn:
-        conn.execute(text("DELETE FROM order_lines"))
-        conn.execute(text("DELETE FROM bill_lines"))
-        conn.execute(text("DELETE FROM processed_orders"))
-        conn.execute(text("DELETE FROM processed_bills"))
-        conn.execute(text("DELETE FROM raw_documents"))
-        conn.execute(text("DELETE FROM ocr_sessions"))
-        conn.execute(text("DELETE FROM temp_code_mappings"))
-        conn.execute(text("DELETE FROM mst_mappings"))
-        conn.execute(text("DELETE FROM partner_addresses"))
-        conn.execute(text("DELETE FROM partners"))
-        conn.execute(text("DELETE FROM products"))
+        # Get all user tables and truncate them (except sys_config)
+        tables = conn.execute(text(
+            "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename != 'sys_config'"
+        )).fetchall()
+        table_names = [t[0] for t in tables]
+        if table_names:
+            conn.execute(text(f"TRUNCATE {', '.join(table_names)} CASCADE"))
         conn.execute(text("UPDATE sys_config SET last_number = 0"))
         conn.commit()
     print("All tables cleared.")
