@@ -6,21 +6,27 @@ import { fetchCustomers, type Customer } from '@/utils/catalogStore'
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [data, setData] = useState<Customer[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
   const load = async () => {
     setLoading(true)
-    const r = await fetchCustomers(search, (page - 1) * pageSize, pageSize)
+    const r = await fetchCustomers(debouncedSearch, (page - 1) * pageSize, pageSize)
     setData(r.items)
     setTotal(r.total)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [search, page, pageSize])
+  useEffect(() => { load() }, [debouncedSearch, page, pageSize])
 
   const columns: ColumnsType<Customer> = [
     { title: 'Mã KH', dataIndex: 'code', width: 120, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },

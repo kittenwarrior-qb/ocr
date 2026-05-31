@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Modal, Input, Button, Pagination, Spin } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 
@@ -54,7 +54,7 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
 
   useEffect(() => {
     if (!open) return
-    const timer = setTimeout(() => load(search, page), 300)
+    const timer = setTimeout(() => load(search, page), 400)
     return () => clearTimeout(timer)
   }, [search, page, open, load])
 

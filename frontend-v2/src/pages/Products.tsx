@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input, Table, Tag } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -6,21 +6,28 @@ import { fetchProducts, type Product } from '@/utils/catalogStore'
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [data, setData] = useState<Product[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [loading, setLoading] = useState(false)
 
+  // Debounce search 400ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
   const load = async () => {
     setLoading(true)
-    const r = await fetchProducts(search, (page - 1) * pageSize, pageSize)
+    const r = await fetchProducts(debouncedSearch, (page - 1) * pageSize, pageSize)
     setData(r.items)
     setTotal(r.total)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [search, page, pageSize])
+  useEffect(() => { load() }, [debouncedSearch, page, pageSize])
 
   const columns: ColumnsType<Product> = [
     { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
