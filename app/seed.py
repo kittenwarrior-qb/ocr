@@ -45,10 +45,26 @@ def main():
     # Ensure ALL tables exist
     Base.metadata.create_all(bind=engine)
 
-    # Run migrations (same as main.py lifespan)
-    from app.main import _MIGRATIONS
+    # Run essential migrations
+    migrations = [
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS extra_data JSONB DEFAULT '{}'::jsonb",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(100)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS delivery_date DATE",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS currency VARCHAR(10)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(200)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(200)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(18,2)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(18,2)",
+        "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS missing_fields JSONB DEFAULT '[]'",
+        "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS discount_rate NUMERIC(5,2)",
+        "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(18,2)",
+        "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5,2)",
+        "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
+        "ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS session_id UUID",
+    ]
     with engine.connect() as conn:
-        for sql in _MIGRATIONS:
+        for sql in migrations:
             try:
                 conn.execute(text(sql))
             except Exception:
@@ -58,7 +74,10 @@ def main():
     # Ensure sys_config defaults exist
     from app.services.code_generator import init_default_configs
     db = SessionLocal()
-    init_default_configs(db)
+    try:
+        init_default_configs(db)
+    except Exception:
+        db.rollback()
     db.close()
 
     # ── Reset ─────────────────────────────────────────────────────────────────
