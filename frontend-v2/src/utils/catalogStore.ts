@@ -37,7 +37,7 @@ let _customersPromise: Promise<Customer[]> | null = null
 export async function loadProducts(): Promise<Product[]> {
   if (_productsLoaded) return _products
   if (_productsPromise) return _productsPromise
-  _productsPromise = client.get('/products/all').then(r => {
+  _productsPromise = client.get('/products/catalog').then(r => {
     _products = r.data
     _productsLoaded = true
     _productsPromise = null
@@ -49,7 +49,7 @@ export async function loadProducts(): Promise<Product[]> {
 export async function loadCustomers(): Promise<Customer[]> {
   if (_customersLoaded) return _customers
   if (_customersPromise) return _customersPromise
-  _customersPromise = client.get('/partners/customers/all').then(r => {
+  _customersPromise = client.get('/partners/catalog').then(r => {
     _customers = r.data
     _customersLoaded = true
     _customersPromise = null

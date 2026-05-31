@@ -30,7 +30,7 @@ def list_partners(
     return q.order_by(Partner.legal_name).offset(skip).limit(limit).all()
 
 
-@router.get("/customers/all")
+@router.get("/catalog")
 def list_all_customers(db: Session = Depends(get_db)):
     """Return all customers with addresses (for frontend catalog matching)."""
     customers = (
