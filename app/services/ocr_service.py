@@ -51,7 +51,9 @@ FIELD ALIASES — the same field may appear under many different labels:
 - delivery_address: "Ship to", "Ship To", "GIAO TỚI", "Địa chỉ giao hàng", "ĐỊA CHỈ GIAO HÀNG", "Nơi giao hàng", "Giao hàng tại kho", "ĐỊA ĐIỂM GIAO HÀNG", "SHIP ADDRESS", "Delivered To", "Delivery to", "Delivery Address", "Delivery to / Giao hàng tới"
 - payment_method: "Phương thức thanh toán", "HÌNH THỨC THANH TOÁN", "Thanh toán", "Terms", "TERMS", "Payment Terms"
 - recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT"
-- customer_name / vendor_name: look for "Kính gửi", "NHÀ CUNG CẤP", "VENDOR", "Supplier", "Ordered To", "Bill To", "By Supplier", "Đơn vị bán hàng", "Đơn vị mua hàng"
+- customer_name: The BUYER who placed the order (Đơn vị mua hàng, Ordered By, Bill To, Kính gửi, Store Name, Tên cửa hàng, CUSTOMER). This is the company that ORDERS goods. Look for store/branch name, "Giao tới", "Ship to" company name.
+- vendor_name: The SELLER/SUPPLIER who fulfills the order (NHÀ CUNG CẤP, VENDOR, Supplier, Đơn vị bán hàng, By Supplier). On purchase orders sent TO Satori, vendor_name = "Satori" — DO NOT use this as customer_name.
+- customer_tax_code: MST of the BUYER (not the vendor/supplier)
 - items.product_code: "Item No.", "Item Code", "Mã hàng", "PLU CODE", "SKU Number", "Article", "Prod cd", "Mã sản phẩm", "Mã SP của NCC", "MÃ GỢI NHỚ", "CK Item Code"
 - items.product_name: "Description", "Tên hàng", "TÊN HÀNG HÓA", "Tên mặt hàng", "Article Desc", "Article Description", "Prod nm", "Tên sản phẩm", "Unit Barcode Description"
 - items.quantity: "Qty", "Quantity", "Số lượng", "Ord qty", "Order Qty", "SL Đặt", "SL ĐẶT HÀNG", "OU Qty", "Sply qty", "PO Qty."
@@ -159,6 +161,21 @@ def _resolve_provider() -> str:
     return "openrouter" if settings.OPENROUTER_API_KEY else "nvidia"
 
 
+def _get_ocr_credentials():
+    """Get API key and model from DB first, fallback to env."""
+    from app.database import SessionLocal
+    from app.models.sys_config import SysConfig
+    db = SessionLocal()
+    try:
+        key_row = db.query(SysConfig).filter(SysConfig.config_key == "openrouter_api_key").first()
+        model_row = db.query(SysConfig).filter(SysConfig.config_key == "openrouter_model").first()
+        api_key = (key_row.config_value if key_row and key_row.config_value else None) or settings.OPENROUTER_API_KEY
+        model = (model_row.config_value if model_row and model_row.config_value else None) or settings.OPENROUTER_MODEL
+        return api_key, model
+    finally:
+        db.close()
+
+
 def _call_ocr(prompt: str, file_path: str) -> str:
     """Gọi OCR provider được chọn (OpenRouter hoặc NVIDIA NIM). Hỗ trợ multi-page."""
     page_images = _file_to_base64_images(file_path)
@@ -166,8 +183,7 @@ def _call_ocr(prompt: str, file_path: str) -> str:
 
     if provider == "openrouter":
         base_url = OPENROUTER_BASE_URL
-        api_key = settings.OPENROUTER_API_KEY
-        model = settings.OPENROUTER_MODEL
+        api_key, model = _get_ocr_credentials()
         extra_headers = {
             "HTTP-Referer": "https://ocr-risk.local",
             "X-Title": "OCR Risk",
@@ -177,6 +193,9 @@ def _call_ocr(prompt: str, file_path: str) -> str:
         api_key = settings.NVIDIA_API_KEY
         model = settings.NVIDIA_MODEL
         extra_headers = {}
+
+    if not api_key:
+        raise ValueError("OCR API key chưa được cấu hình. Vào Settings để nhập API key.")
 
     # Build content with text prompt + all page images
     content = [{"type": "text", "text": prompt}]

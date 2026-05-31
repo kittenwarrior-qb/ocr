@@ -62,6 +62,31 @@ def reopen_session(session_id: UUID, db: Session = Depends(get_db)):
     return _to_out(s, db)
 
 
+@router.post("/{session_id}/retry")
+def retry_failed(session_id: UUID, db: Session = Depends(get_db)):
+    """Retry all failed documents in a session."""
+    from app.models.document import RawDocument
+    from app.services.ocr_queue import enqueue
+
+    s = session_service.get_session(db, session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    raw_docs = db.query(RawDocument).filter(
+        RawDocument.session_id == session_id,
+        RawDocument.ocr_status == "failed",
+    ).all()
+
+    count = 0
+    for doc in raw_docs:
+        doc.ocr_status = "pending"
+        doc.ocr_error = None
+        enqueue(doc.id, use_ai=True)
+        count += 1
+    db.commit()
+    return {"retried": count}
+
+
 @router.get("/{session_id}/export")
 def export_session(session_id: UUID, db: Session = Depends(get_db)):
     s = session_service.get_session(db, session_id)
@@ -156,6 +181,10 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
     processing_count = sum(1 for d in raw_docs if d.ocr_status in ("pending", "processing"))
     done_count = sum(1 for d in raw_docs if d.ocr_status == "done")
     failed_count = sum(1 for d in raw_docs if d.ocr_status == "failed")
+    failed_docs = [
+        {"file_name": d.file_name, "error": d.ocr_error or "Unknown error"}
+        for d in raw_docs if d.ocr_status == "failed"
+    ]
 
     return {
         "id": str(s.id),
@@ -166,6 +195,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         "processing_count": processing_count,
         "done_count": done_count,
         "failed_count": failed_count,
+        "failed_docs": failed_docs,
         "total_products": total_products,
         "total_unmapped": total_unmapped,
         "orders": orders_out,

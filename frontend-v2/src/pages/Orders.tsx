@@ -184,13 +184,14 @@ export default function OrdersPage() {
       {/* Current Tab */}
       {activeTab === 'current' && (<>
         {activeSessionId && sessionDetail ? (
-          <div className="bg-white rounded-lg border border-blue-200 shadow-sm overflow-hidden">
+          <div className="rounded-lg overflow-hidden border-2 border-slate-300 bg-slate-100 shadow">
             {/* Batch header */}
-            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+            <div className="px-4 py-3 bg-slate-200 border-b border-slate-300 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-gray-800">{sessionDetail.name}</span>
-                <span className="text-xs text-gray-500">{sessionDetail.doc_count} file • {sessionDetail.total_products} SP</span>
+                <span className="text-sm font-semibold text-slate-800">{sessionDetail.name}</span>
+                <span className="text-xs text-slate-500">{sessionDetail.doc_count} file • {sessionDetail.total_products} SP</span>
                 {sessionDetail.processing_count > 0 && <Tag color="processing"><LoadingOutlined spin className="mr-1" />OCR ({sessionDetail.done_count}/{sessionDetail.doc_count})</Tag>}
+                {(sessionDetail as any).failed_count > 0 && <Tag color="error"><CloseCircleOutlined className="mr-1" />{(sessionDetail as any).failed_count} lỗi</Tag>}
                 {sessionDetail.total_unmapped > 0 && sessionDetail.processing_count === 0 && <Tag color="warning"><WarningOutlined className="mr-1" />{sessionDetail.total_unmapped} cần xử lý</Tag>}
                 {sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0 && sessionDetail.processing_count === 0 && <Tag color="success"><CheckCircleOutlined className="mr-1" />Sẵn sàng</Tag>}
               </div>
@@ -206,12 +207,29 @@ export default function OrdersPage() {
               const mc = sessionDetail.orders.filter(o => !o.partner_name && !o.recipient_name)
               const um = sessionDetail.total_unmapped > 0
               if (!mc.length && !um) return null
-              return <div className="px-4 py-2 bg-orange-50 border-b border-orange-200 text-xs"><WarningOutlined className="text-orange-500 mr-2" />{mc.length > 0 && <span>Chưa chọn KH: {mc.map(o => o.file_name).join(', ')}. </span>}{um && <span>{sessionDetail.total_unmapped} SP chưa map.</span>}</div>
+              return <div className="px-4 py-2 bg-orange-50 border-b border-slate-300 text-xs"><WarningOutlined className="text-orange-500 mr-2" />{mc.length > 0 && <span>Chưa chọn KH: {mc.map(o => o.file_name).join(', ')}. </span>}{um && <span>{sessionDetail.total_unmapped} SP chưa map.</span>}</div>
             })()}
 
+            {/* OCR Errors */}
+            {(sessionDetail as any).failed_docs?.length > 0 && (
+              <div className="px-4 py-2.5 bg-red-50 border-b border-slate-300">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-2">
+                    <CloseCircleOutlined className="text-red-500 mt-0.5" />
+                    <div className="text-xs">
+                      <span className="font-semibold text-red-700">OCR thất bại: </span>
+                      <span className="text-red-600">{(sessionDetail as any).failed_docs[0]?.error}</span>
+                      <div className="text-red-500 mt-0.5">File: {(sessionDetail as any).failed_docs.map((d: any) => d.file_name).join(', ')}</div>
+                    </div>
+                  </div>
+                  <Button size="small" danger onClick={async () => { await client.post(`/sessions/${activeSessionId}/retry`); message.success('Đang thử lại...'); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }}>Thử lại</Button>
+                </div>
+              </div>
+            )}
+
             {/* Legend */}
-            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Chính xác</span>
+            <div className="px-4 py-1.5 bg-slate-100 border-b border-slate-300 flex items-center gap-4 text-xs text-slate-600">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Đã map</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> Cần xác nhận</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Chọn thủ công</span>
             </div>
@@ -248,11 +266,29 @@ export default function OrdersPage() {
                     <div className="text-xs text-slate-500 font-medium mb-1.5 uppercase tracking-wide">Khách hàng</div>
                     {(() => {
                       const alreadySelected = !!order.extra_data?.customer_code
-                      if (alreadySelected) return <div className="flex items-center gap-3"><span className="text-sm font-semibold text-emerald-700">{order.recipient_name} ✓</span><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Đổi KH</Button></div>
+                      if (alreadySelected) return (
+                        <div className="flex items-center justify-between">
+                          <table className="text-xs"><tbody>
+                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-emerald-700 font-semibold">{order.recipient_name} ✓</td></tr>
+                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{order.extra_data?.customer_code}{order.extra_data?.customer_tax_code ? ` / ${order.extra_data.customer_tax_code}` : ''}</td></tr>
+                            {order.description && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{order.description}</td></tr>}
+                          </tbody></table>
+                          <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Đổi KH</Button>
+                        </div>
+                      )
                       const name = order.partner_name || order.recipient_name || ''
                       const sugg = name ? matchCustomer(name, order.delivery_address || '', 3) : []
                       const has = sugg.length > 0 && sugg[0].score >= 0.7
-                      if (has) return <div className="flex items-center gap-3"><div className="flex-1"><div className="text-sm font-semibold text-slate-800">{sugg[0].customer.name}</div><div className="text-xs text-slate-500">{sugg[0].customer.code} • {sugg[0].customer.invoice_address}</div></div><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
+                      if (has) return (
+                        <div className="flex items-center justify-between">
+                          <table className="text-xs"><tbody>
+                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-slate-800 font-semibold">{sugg[0].customer.name}</td></tr>
+                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{sugg[0].customer.code}{sugg[0].customer.tax_code ? ` / ${sugg[0].customer.tax_code}` : ''}</td></tr>
+                            {sugg[0].customer.invoice_address && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{sugg[0].customer.invoice_address}</td></tr>}
+                          </tbody></table>
+                          <div className="flex gap-2 shrink-0"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
+                        </div>
+                      )
                       return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button></div>
                     })()}
                   </div>
@@ -289,16 +325,16 @@ export default function OrdersPage() {
 
       {/* History Tab */}
       {activeTab === 'history' && (<div className="space-y-2">
-        {sessions.map(s => (<div key={s.id} className={`bg-white rounded-lg border px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 ${s.id === activeSessionId ? 'border-blue-300' : 'border-gray-200'}`} onClick={() => { setActiveSessionId(s.id); setActiveTab('current') }}>
-          <div className="flex items-center gap-3"><FilePdfOutlined className="text-red-400" /><span className="text-sm font-medium text-gray-800">{s.name}</span><span className="text-xs text-gray-400">{s.doc_count} file</span>{s.done_count < s.doc_count ? <Tag color="processing" className="text-xs">OCR</Tag> : <Tag color="success" className="text-xs">Xong</Tag>}</div>
-          <div className="flex items-center gap-3"><span className="text-xs text-gray-400">{new Date(s.created_at).toLocaleDateString('vi-VN')}</span>{s.done_count === s.doc_count && <Button size="small" icon={<ExportOutlined />} onClick={e => { e.stopPropagation(); handleExport(s.id) }}>Excel</Button>}</div>
+        {sessions.map(s => (<div key={s.id} className={`bg-white rounded-lg border px-4 py-3 flex items-center justify-between cursor-pointer transition-colors ${s.id === activeSessionId ? 'border-slate-400 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'}`} onClick={() => { setActiveSessionId(s.id); setActiveTab('current') }}>
+          <div className="flex items-center gap-3"><FilePdfOutlined className="text-red-400" /><span className="text-sm font-semibold text-slate-800">{s.name}</span><span className="text-xs text-slate-400">{s.doc_count} file</span>{s.done_count < s.doc_count ? <Tag color="processing" className="text-xs">OCR</Tag> : <Tag color="success" className="text-xs">Xong</Tag>}</div>
+          <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{new Date(s.created_at).toLocaleDateString('vi-VN')}</span>{s.done_count === s.doc_count && <Button size="small" icon={<ExportOutlined />} onClick={e => { e.stopPropagation(); handleExport(s.id) }}>Excel</Button>}</div>
         </div>))}
-        {sessions.length === 0 && <div className="text-center py-10 text-gray-400 text-sm">Chưa có lịch sử</div>}
+        {sessions.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">Chưa có lịch sử</div>}
       </div>)}
 
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={`Chọn hàng hóa — "${selectedLine?.product_name_original || ''}"`}
-        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110 }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 }, { title: 'ĐVT', dataIndex: 'uom', width: 70 }]}
+        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name' }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }]}
         fetchData={async (s, skip, limit) => { const r = await fetchProducts(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => { if (selectedLine) handleMapProduct(selectedLine, r as unknown as Product) }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null) }} rowKey="code"
@@ -306,7 +342,7 @@ export default function OrdersPage() {
 
       {/* Customer SelectPopup */}
       <SelectPopup open={customerModalOpen} title="Chọn khách hàng"
-        columns={[{ title: 'Mã KH', dataIndex: 'code', width: 100 }, { title: 'Tên khách hàng', dataIndex: 'name', width: 250 }, { title: 'MST', dataIndex: 'tax_code', width: 110 }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 250 }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100 }, { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 250 }]}
+        columns={[{ title: 'Mã KH', dataIndex: 'code', width: 90, nowrap: true }, { title: 'Tên khách hàng', dataIndex: 'name', width: 280 }, { title: 'MST', dataIndex: 'tax_code', width: 110, nowrap: true }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address' }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100, nowrap: true }]}
         fetchData={async (s, skip, limit) => { const r = await fetchCustomers(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => { if (selectedOrderId) handleSelectCustomer(selectedOrderId, r as unknown as Customer) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }} rowKey="code" />

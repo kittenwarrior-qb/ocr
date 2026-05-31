@@ -92,20 +92,43 @@ def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> 
 
     except Exception as exc:
         raw.ocr_status = "failed"
-        raw.ocr_error = str(exc)
+        # Simplify error message for display
+        err_str = str(exc)
+        if "402" in err_str or "Payment Required" in err_str:
+            raw.ocr_error = "API key hết credit. Vào Settings nạp thêm hoặc đổi key."
+        elif "401" in err_str or "Unauthorized" in err_str:
+            raw.ocr_error = "API key không hợp lệ. Vào Settings kiểm tra lại key."
+        elif "429" in err_str or "Too Many Requests" in err_str:
+            raw.ocr_error = "Quá nhiều request. Thử lại sau vài giây."
+        elif "API key chưa" in err_str:
+            raw.ocr_error = err_str
+        else:
+            raw.ocr_error = f"Lỗi OCR: {err_str[:150]}"
         db.commit()
         raise
 
 
 def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict:
     doc_type = raw.document_type or "purchase_order"
-    partner_type = "customer" if doc_type == "purchase_order" else "vendor"
 
-    vendor_name = data.get("vendor_name") or data.get("customer_name") or "Unknown"
-    tax_code = data.get("vendor_tax_code") or data.get("customer_tax_code")
+    if doc_type == "purchase_order":
+        # For PO: partner = the BUYER (customer who placed the order)
+        # customer_name = buyer, vendor_name = seller (Satori) — we want the buyer
+        partner_name = data.get("customer_name") or data.get("recipient_name") or "Unknown"
+        # Fallback: if customer_name looks like Satori (the vendor), use delivery address company
+        if partner_name and "satori" in partner_name.lower():
+            partner_name = data.get("recipient_name") or data.get("delivery_address") or "Unknown"
+        tax_code = data.get("customer_tax_code")
+        partner_type = "customer"
+    else:
+        # For bills: partner = the VENDOR
+        partner_name = data.get("vendor_name") or data.get("customer_name") or "Unknown"
+        tax_code = data.get("vendor_tax_code") or data.get("customer_tax_code")
+        partner_type = "vendor"
+
     delivery_address_text = data.get("delivery_address")
 
-    partner = mapping_service.find_or_create_partner(db, vendor_name, tax_code, partner_type)
+    partner = mapping_service.find_or_create_partner(db, partner_name, tax_code, partner_type)
     address = mapping_service.find_or_create_address(db, partner.id, delivery_address_text)
 
     items = data.get("items") or []

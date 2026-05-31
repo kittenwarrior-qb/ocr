@@ -48,6 +48,7 @@ _MIGRATIONS = [
     "ALTER TABLE bill_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS extra_data JSONB DEFAULT '{}'::jsonb",
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(100)",
+    "ALTER TABLE sys_config ALTER COLUMN config_value TYPE VARCHAR(500)",
 ]
 
 

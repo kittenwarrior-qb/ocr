@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Modal, Input, Button, Pagination, Spin } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 
@@ -6,6 +6,7 @@ export interface SelectPopupColumn {
   title: string
   dataIndex: string
   width?: number | string
+  nowrap?: boolean
 }
 
 interface SelectPopupProps {
@@ -65,25 +66,26 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
     : ''
 
   return (
-    <Modal title={<span className="text-base font-semibold">{title}</span>} open={open} onCancel={onCancel} width={960}
-      styles={{ body: { padding: '16px 24px', maxHeight: 'calc(100vh - 120px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
+    <Modal title={<span className="text-base font-semibold">{title}</span>} open={open} onCancel={onCancel}
+      width="90vw" style={{ maxWidth: 1200 }}
+      styles={{ body: { padding: '16px 24px', height: 'calc(100vh - 200px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
       footer={null} centered>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <Input placeholder="Tìm kiếm..." prefix={<SearchOutlined className="text-gray-400" />}
-          value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} allowClear className="w-64" />
-        <span className="text-xs text-gray-400">{total} kết quả</span>
+          value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} allowClear className="w-72" />
+        <span className="text-xs text-slate-400">{total} kết quả</span>
       </div>
 
       <Spin spinning={loading}>
-        <div className="border border-gray-200 rounded overflow-x-auto overflow-y-auto flex-1 min-h-[300px] max-h-[400px]">
-          <table className="w-full min-w-[900px] border-collapse text-sm">
+        <div className="border border-slate-200 rounded overflow-auto flex-1" style={{ maxHeight: 'calc(100vh - 340px)' }}>
+          <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-2.5 w-10"></th>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-2 py-2 w-8"></th>
                 {columns.map(col => (
-                  <th key={col.dataIndex} className="px-3 py-2.5 text-left font-medium text-gray-600 whitespace-nowrap"
-                    style={{ width: col.width || 'auto', minWidth: col.width || 100 }}>{col.title}</th>
+                  <th key={col.dataIndex} className="px-2 py-2 text-left font-semibold text-slate-600"
+                    style={{ width: col.width || 'auto', minWidth: col.width || 80 }}>{col.title}</th>
                 ))}
               </tr>
             </thead>
@@ -93,31 +95,33 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
                 const isSelected = selectedRow && (selectedRow[rowKey] === key)
                 return (
                   <tr key={key} onClick={() => setSelectedRow(row)}
-                    className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-                    <td className="px-3 py-2">
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-blue-600' : 'border-gray-300'}`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+                    className={`border-b border-slate-100 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200' : 'hover:bg-slate-50'}`}>
+                    <td className="px-2 py-1.5">
+                      <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-blue-600' : 'border-slate-300'}`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
                       </div>
                     </td>
                     {columns.map(col => (
-                      <td key={col.dataIndex} className="px-3 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]">
+                      <td key={col.dataIndex}
+                        className={`px-2 py-1.5 text-slate-700 ${col.nowrap ? 'whitespace-nowrap' : 'break-words'}`}
+                        style={{ maxWidth: col.width || 'none' }}>
                         {String(row[col.dataIndex] ?? '') || '-'}
                       </td>
                     ))}
                   </tr>
                 )
               })}
-              {!loading && data.length === 0 && <tr><td colSpan={columns.length + 1} className="text-center py-8 text-gray-400">Không tìm thấy</td></tr>}
+              {!loading && data.length === 0 && <tr><td colSpan={columns.length + 1} className="text-center py-8 text-slate-400">Không tìm thấy</td></tr>}
             </tbody>
           </table>
         </div>
       </Spin>
 
-      <div className="flex items-center justify-between mt-3">
+      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
         <Pagination size="small" current={page} pageSize={pageSize} total={total} onChange={setPage} showSizeChanger={false} simple />
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-600">
-            {selectedRow ? <>Đã chọn: <strong>{selectedName}</strong></> : <span className="text-gray-400">Chưa chọn</span>}
+          <span className="text-sm text-slate-600">
+            {selectedRow ? <>Đã chọn: <strong>{selectedName}</strong></> : <span className="text-slate-400">Chưa chọn</span>}
           </span>
           <Button onClick={onCancel}>Hủy</Button>
           <Button type="primary" disabled={!selectedRow} onClick={handleOk}>Chọn</Button>

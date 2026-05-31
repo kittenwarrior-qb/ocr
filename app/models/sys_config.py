@@ -16,5 +16,5 @@ class SysConfig(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     config_key = Column(String(100), unique=True, nullable=False)
-    config_value = Column(String(50), nullable=False)
+    config_value = Column(String(500), nullable=False)
     last_number = Column(Integer, default=0, nullable=False)
