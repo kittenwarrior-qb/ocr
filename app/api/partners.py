@@ -45,12 +45,15 @@ def list_all_customers(db: Session = Depends(get_db)):
         delivery = next((a for a in c.addresses if a.address_type == "branch"), None)
         result.append({
             "code": c.code,
+            "type": "",
             "name": c.legal_name,
             "tax_code": c.tax_code or "",
             "phone": "",
             "owner": "",
             "invoice_address": billing.full_address if billing else (c.address or ""),
             "invoice_city": billing.mapping_key if billing else "",
+            "invoice_district": "",
+            "invoice_ward": "",
             "delivery_address": delivery.full_address if delivery else "",
         })
     return result

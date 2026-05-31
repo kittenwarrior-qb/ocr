@@ -8,16 +8,22 @@ export interface Product {
   code: string
   name: string
   uom: string
+  price: number
+  tax_rate: string
+  property: string
 }
 
 export interface Customer {
   code: string
   name: string
+  type: string
   tax_code: string
   phone: string
   owner: string
   invoice_address: string
   invoice_city: string
+  invoice_district: string
+  invoice_ward: string
   delivery_address: string
 }
 

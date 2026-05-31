@@ -34,7 +34,7 @@ def list_all_products(db: Session = Depends(get_db)):
     """Return all active products (for frontend catalog matching)."""
     rows = db.query(Product).filter(Product.is_active == True).order_by(Product.code).all()
     return [
-        {"code": p.code, "name": p.display_name, "uom": p.uom}
+        {"code": p.code, "name": p.display_name, "uom": p.uom, "price": 0, "tax_rate": "", "property": ""}
         for p in rows
     ]
 
