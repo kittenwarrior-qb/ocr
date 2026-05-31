@@ -75,7 +75,8 @@ export default function OrdersPage() {
   useEffect(() => { if (sessionDetail && uploadFiles.length > 0) { const done = sessionDetail.orders.map(o => o.file_name); setUploadFiles(prev => prev.map(f => f.status === 'done' || f.status === 'error' ? f : done.includes(f.name) ? { ...f, status: 'done' } : sessionDetail.processing_count > 0 ? { ...f, status: 'processing' } : f)); if (sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) setTimeout(() => setUploadFiles([]), 3000) } }, [sessionDetail])
   useEffect(() => { if (sessionDetail && sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) refetchSessions() }, [sessionDetail?.processing_count, sessionDetail?.done_count])
   useEffect(() => { if (sessions.length > 0 && !activeSessionId) setActiveSessionId(sessions[0].id) }, [sessions, activeSessionId])
-  useEffect(() => { preloadCatalogs() }, [])
+  const [catalogReady, setCatalogReady] = useState(false)
+  useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
 
   const handleStageFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'))

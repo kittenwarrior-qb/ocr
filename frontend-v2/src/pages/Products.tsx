@@ -12,15 +12,15 @@ export default function ProductsPage() {
   useEffect(() => { loadProducts().then(setProductsData) }, [])
 
   const data = useMemo(() => {
-    if (!search.trim()) return productsData as Product[]
+    if (!search.trim()) return productsData
     const q = search.toLowerCase()
-    return (productsData as Product[]).filter(p =>
+    return productsData.filter(p =>
       p.code.toLowerCase().includes(q) ||
       p.name.toLowerCase().includes(q) ||
       p.uom.toLowerCase().includes(q) ||
-      p.property.toLowerCase().includes(q)
+      (p.property || '').toLowerCase().includes(q)
     )
-  }, [search])
+  }, [search, productsData])
 
   const columns: ColumnsType<Product> = [
     {

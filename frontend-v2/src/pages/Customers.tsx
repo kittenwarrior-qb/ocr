@@ -14,14 +14,14 @@ export default function CustomersPage() {
   const data = useMemo(() => {
     if (!search.trim()) return customersData
     const q = search.toLowerCase()
-    return (customersData as Customer[]).filter(c =>
+    return customersData.filter(c =>
       c.code.toLowerCase().includes(q) ||
       c.name.toLowerCase().includes(q) ||
-      c.tax_code.toLowerCase().includes(q) ||
-      c.phone.toLowerCase().includes(q) ||
-      c.type.toLowerCase().includes(q)
+      (c.tax_code || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.type || '').toLowerCase().includes(q)
     )
-  }, [search])
+  }, [search, customersData])
 
   const columns: ColumnsType<Customer> = [
     {
