@@ -1,103 +1,45 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Input, Table, Tag } from 'antd'
-import { ReloadOutlined, SettingOutlined, FilterOutlined } from '@ant-design/icons'
+import { ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { loadProducts, type Product } from '@/utils/catalogStore'
+import { fetchProducts, type Product } from '@/utils/catalogStore'
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('')
-  const [pageSize, setPageSize] = useState(100)
-  const [productsData, setProductsData] = useState<Product[]>([])
+  const [data, setData] = useState<Product[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => { loadProducts().then(setProductsData) }, [])
+  const load = async () => {
+    setLoading(true)
+    const r = await fetchProducts(search, (page - 1) * pageSize, pageSize)
+    setData(r.items)
+    setTotal(r.total)
+    setLoading(false)
+  }
 
-  const data = useMemo(() => {
-    if (!search.trim()) return productsData
-    const q = search.toLowerCase()
-    return productsData.filter(p =>
-      p.code.toLowerCase().includes(q) ||
-      p.name.toLowerCase().includes(q) ||
-      p.uom.toLowerCase().includes(q) ||
-      (p.property || '').toLowerCase().includes(q)
-    )
-  }, [search, productsData])
+  useEffect(() => { load() }, [search, page, pageSize])
 
   const columns: ColumnsType<Product> = [
-    {
-      title: 'Mã hàng hóa',
-      dataIndex: 'code',
-      width: 130,
-      render: (val: string) => <span className="text-blue-600 font-medium">{val}</span>,
-    },
-    {
-      title: 'Tên hàng hóa',
-      dataIndex: 'name',
-      ellipsis: true,
-      render: (val: string) => <span className="text-gray-800">{val}</span>,
-    },
-    {
-      title: 'ĐVT',
-      dataIndex: 'uom',
-      width: 80,
-    },
-    {
-      title: 'Đơn giá',
-      dataIndex: 'price',
-      width: 120,
-      align: 'right',
-      render: (val: number) => val ? val.toLocaleString('vi-VN') + ' đ' : '—',
-    },
-    {
-      title: 'Thuế',
-      dataIndex: 'tax_rate',
-      width: 70,
-      render: (val: string) => val ? <Tag>{val}</Tag> : '—',
-    },
-    {
-      title: 'Tính chất',
-      dataIndex: 'property',
-      width: 120,
-      render: (val: string) => val || '—',
-    },
+    { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
+    { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true },
+    { title: 'ĐVT', dataIndex: 'uom', width: 80 },
+    { title: 'Đơn giá', dataIndex: 'price', width: 120, align: 'right', render: (v: number) => v ? v.toLocaleString('vi-VN') + ' đ' : '—' },
+    { title: 'Thuế', dataIndex: 'tax_rate', width: 70, render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
+    { title: 'Tính chất', dataIndex: 'property', width: 120, render: (v: string) => v || '—' },
   ]
 
   return (
     <div className="p-4">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Input.Search
-            placeholder="Tìm mã, tên hàng hóa..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-64"
-            allowClear
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><ReloadOutlined /></button>
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><SettingOutlined /></button>
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><FilterOutlined /></button>
-        </div>
+        <Input.Search placeholder="Tìm mã, tên hàng hóa..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="w-64" allowClear />
+        <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={load}><ReloadOutlined /></button>
       </div>
-
-      {/* Table */}
-      <Table<Product>
-        columns={columns}
-        dataSource={data}
-        rowKey="code"
-        size="small"
-        pagination={{
-          pageSize,
-          showSizeChanger: true,
-          pageSizeOptions: ['50', '100', '200'],
-          onShowSizeChange: (_, size) => setPageSize(size),
-          showTotal: (total) => `Tổng số ${total.toLocaleString('vi-VN')}`,
-          size: 'small',
-        }}
-        scroll={{ y: 'calc(100vh - 200px)' }}
-        className="border border-gray-200 rounded-lg"
-      />
+      <Table<Product> columns={columns} dataSource={data} rowKey="code" size="small" loading={loading}
+        pagination={{ current: page, pageSize, total, onChange: (p, s) => { setPage(p); setPageSize(s) }, showTotal: t => `${t} sản phẩm`, size: 'small' }}
+        scroll={{ y: 'calc(100vh - 200px)' }} className="border border-gray-200 rounded-lg" />
     </div>
   )
 }

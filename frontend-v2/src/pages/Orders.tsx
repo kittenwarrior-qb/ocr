@@ -25,7 +25,7 @@ import {
 } from '@/api/orders'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
-import { preloadCatalogs, getProducts, getCustomers } from '@/utils/catalogStore'
+import { preloadCatalogs, fetchProducts, fetchCustomers } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import client from '@/api/client'
@@ -297,16 +297,16 @@ export default function OrdersPage() {
 
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={`Chọn hàng hóa — "${selectedLine?.product_name_original || ''}"`}
-        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110 }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 }, { title: 'ĐVT', dataIndex: 'uom', width: 70 }, { title: 'Đơn giá', dataIndex: 'price', width: 100 }, { title: 'Thuế', dataIndex: 'tax_rate', width: 60 }, { title: 'Tính chất', dataIndex: 'property', width: 100 }]}
-        dataSource={getProducts() as unknown as Record<string, unknown>[]}
+        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110 }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 }, { title: 'ĐVT', dataIndex: 'uom', width: 70 }]}
+        fetchData={async (s, skip, limit) => { const r = await fetchProducts(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => { if (selectedLine) handleMapProduct(selectedLine, r as unknown as Product) }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null) }} rowKey="code"
         initialSearch={selectedLine ? (getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
 
       {/* Customer SelectPopup */}
       <SelectPopup open={customerModalOpen} title="Chọn khách hàng"
-        columns={[{ title: 'Mã KH', dataIndex: 'code', width: 100 }, { title: 'Loại KH', dataIndex: 'type', width: 130 }, { title: 'Tên khách hàng', dataIndex: 'name', width: 250 }, { title: 'MST', dataIndex: 'tax_code', width: 110 }, { title: 'ĐT', dataIndex: 'phone', width: 110 }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 250 }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100 }, { title: 'Chủ sở hữu', dataIndex: 'owner', width: 150 }, { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 250 }]}
-        dataSource={getCustomers() as unknown as Record<string, unknown>[]}
+        columns={[{ title: 'Mã KH', dataIndex: 'code', width: 100 }, { title: 'Tên khách hàng', dataIndex: 'name', width: 250 }, { title: 'MST', dataIndex: 'tax_code', width: 110 }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 250 }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100 }, { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 250 }]}
+        fetchData={async (s, skip, limit) => { const r = await fetchCustomers(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => { if (selectedOrderId) handleSelectCustomer(selectedOrderId, r as unknown as Customer) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }} rowKey="code" />
 

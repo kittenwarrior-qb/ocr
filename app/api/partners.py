@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.partner import Partner, PartnerAddress
@@ -31,14 +31,26 @@ def list_partners(
 
 
 @router.get("/catalog")
-def list_all_customers(db: Session = Depends(get_db)):
-    """Return all customers with addresses (for frontend catalog matching)."""
-    customers = (
+def list_all_customers(
+    search: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Return customers with addresses, paginated for frontend."""
+    q = (
         db.query(Partner)
+        .options(joinedload(Partner.addresses))
         .filter(Partner.is_active == True, Partner.partner_type == "customer")
-        .order_by(Partner.code)
-        .all()
     )
+    if search:
+        q = q.filter(
+            Partner.legal_name.ilike(f"%{search}%")
+            | Partner.code.ilike(f"%{search}%")
+            | Partner.tax_code.ilike(f"%{search}%")
+        )
+    total = q.count()
+    customers = q.order_by(Partner.code).offset(skip).limit(limit).all()
     result = []
     for c in customers:
         billing = next((a for a in c.addresses if a.address_type == "billing"), None)
@@ -56,7 +68,7 @@ def list_all_customers(db: Session = Depends(get_db)):
             "invoice_ward": "",
             "delivery_address": delivery.full_address if delivery else "",
         })
-    return result
+    return {"items": result, "total": total}
 
 
 @router.get("/{partner_id}", response_model=PartnerOut)

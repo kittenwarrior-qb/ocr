@@ -30,13 +30,28 @@ def list_products(
 
 
 @router.get("/catalog")
-def list_all_products(db: Session = Depends(get_db)):
-    """Return all active products (for frontend catalog matching)."""
-    rows = db.query(Product).filter(Product.is_active == True).order_by(Product.code).all()
-    return [
-        {"code": p.code, "name": p.display_name, "uom": p.uom, "price": 0, "tax_rate": "", "property": ""}
-        for p in rows
-    ]
+def list_all_products(
+    search: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Return products paginated for frontend."""
+    q = db.query(Product).filter(Product.is_active == True)
+    if search:
+        q = q.filter(
+            Product.display_name.ilike(f"%{search}%")
+            | Product.code.ilike(f"%{search}%")
+        )
+    total = q.count()
+    rows = q.order_by(Product.code).offset(skip).limit(limit).all()
+    return {
+        "items": [
+            {"code": p.code, "name": p.display_name, "uom": p.uom, "price": 0, "tax_rate": "", "property": ""}
+            for p in rows
+        ],
+        "total": total,
+    }
 
 
 @router.post("", response_model=ProductOut)

@@ -1,159 +1,45 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Input, Table, Tag } from 'antd'
-import { PhoneOutlined, ReloadOutlined, SettingOutlined, FilterOutlined } from '@ant-design/icons'
+import { useState, useEffect } from 'react'
+import { Input, Table } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { loadCustomers, type Customer } from '@/utils/catalogStore'
+import { fetchCustomers, type Customer } from '@/utils/catalogStore'
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('')
-  const [pageSize, setPageSize] = useState(100)
-  const [customersData, setCustomersData] = useState<Customer[]>([])
+  const [data, setData] = useState<Customer[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => { loadCustomers().then(setCustomersData) }, [])
+  const load = async () => {
+    setLoading(true)
+    const r = await fetchCustomers(search, (page - 1) * pageSize, pageSize)
+    setData(r.items)
+    setTotal(r.total)
+    setLoading(false)
+  }
 
-  const data = useMemo(() => {
-    if (!search.trim()) return customersData
-    const q = search.toLowerCase()
-    return customersData.filter(c =>
-      c.code.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q) ||
-      (c.tax_code || '').toLowerCase().includes(q) ||
-      (c.phone || '').toLowerCase().includes(q) ||
-      (c.type || '').toLowerCase().includes(q)
-    )
-  }, [search, customersData])
+  useEffect(() => { load() }, [search, page, pageSize])
 
   const columns: ColumnsType<Customer> = [
-    {
-      title: 'Thẻ',
-      dataIndex: 'tag',
-      width: 50,
-      render: (val: string) => val ? <Tag>{val}</Tag> : null,
-    },
-    {
-      title: 'Mã khách hàng',
-      dataIndex: 'code',
-      width: 120,
-      fixed: 'left',
-      render: (val: string) => <span className="text-blue-600 font-medium">{val}</span>,
-    },
-    {
-      title: 'Loại khách hàng',
-      dataIndex: 'type',
-      width: 150,
-    },
-    {
-      title: 'Tên khách hàng',
-      dataIndex: 'name',
-      width: 280,
-      ellipsis: true,
-      render: (val: string) => <span className="text-blue-600">{val}</span>,
-    },
-    {
-      title: 'Mã số thuế',
-      dataIndex: 'tax_code',
-      width: 120,
-    },
-    {
-      title: 'Điện thoại',
-      dataIndex: 'phone',
-      width: 120,
-      render: (val: string) => val ? (
-        <span className="flex items-center gap-1">
-          <PhoneOutlined className="text-green-500" />
-          {val}
-        </span>
-      ) : '-',
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      width: 200,
-      ellipsis: true,
-    },
-    {
-      title: 'Lĩnh vực',
-      dataIndex: 'field',
-      width: 100,
-    },
-    {
-      title: 'Địa chỉ (Hóa đơn)',
-      dataIndex: 'invoice_address',
-      width: 250,
-      ellipsis: true,
-    },
-    {
-      title: 'Tỉnh/TP (HĐ)',
-      dataIndex: 'invoice_city',
-      width: 120,
-    },
-    {
-      title: 'Quận/Huyện (HĐ)',
-      dataIndex: 'invoice_district',
-      width: 140,
-    },
-    {
-      title: 'Phường/Xã (HĐ)',
-      dataIndex: 'invoice_ward',
-      width: 140,
-    },
-    {
-      title: 'Mô tả',
-      dataIndex: 'description',
-      width: 150,
-      ellipsis: true,
-    },
-    {
-      title: 'Chủ sở hữu',
-      dataIndex: 'owner',
-      width: 180,
-      ellipsis: true,
-    },
-    {
-      title: 'Địa chỉ (Giao hàng)',
-      dataIndex: 'delivery_address',
-      width: 250,
-      ellipsis: true,
-    },
+    { title: 'Mã KH', dataIndex: 'code', width: 120, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
+    { title: 'Tên khách hàng', dataIndex: 'name', ellipsis: true },
+    { title: 'MST', dataIndex: 'tax_code', width: 130 },
+    { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', ellipsis: true, width: 300 },
+    { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 120 },
+    { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', ellipsis: true, width: 250 },
   ]
 
   return (
     <div className="p-4">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Input.Search
-            placeholder="Tìm kiếm thông minh"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-64"
-            allowClear
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><ReloadOutlined /></button>
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><SettingOutlined /></button>
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><FilterOutlined /></button>
-        </div>
+        <Input.Search placeholder="Tìm mã, tên, MST..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="w-64" allowClear />
+        <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={load}><ReloadOutlined /></button>
       </div>
-
-      {/* Table */}
-      <Table<Customer>
-        columns={columns}
-        dataSource={data}
-        rowKey="code"
-        size="small"
-        pagination={{
-          pageSize,
-          showSizeChanger: true,
-          pageSizeOptions: ['50', '100', '200'],
-          onShowSizeChange: (_, size) => setPageSize(size),
-          showTotal: (total) => `Tổng số ${total.toLocaleString('vi-VN')}`,
-          size: 'small',
-        }}
-        scroll={{ x: 2200, y: 'calc(100vh - 200px)' }}
-        className="border border-gray-200 rounded-lg"
-      />
+      <Table<Customer> columns={columns} dataSource={data} rowKey="code" size="small" loading={loading}
+        pagination={{ current: page, pageSize, total, onChange: (p, s) => { setPage(p); setPageSize(s) }, showTotal: t => `${t} khách hàng`, size: 'small' }}
+        scroll={{ y: 'calc(100vh - 200px)' }} className="border border-gray-200 rounded-lg" />
     </div>
   )
 }

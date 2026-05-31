@@ -4,7 +4,7 @@ import { SearchOutlined, PlusOutlined, GiftOutlined, PercentageOutlined, Exclama
 import { getOrder, updateOrder } from '@/api/orders'
 import SelectPopup from '@/components/SelectPopup'
 import type { OrderLine } from '@/types/order'
-import { getCustomers } from '@/utils/catalogStore'
+import { fetchCustomers } from '@/utils/catalogStore'
 import { getBestMatch, matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import dayjs from 'dayjs'
 
@@ -296,7 +296,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           open={true}
           title={POPUP_CONFIGS.customer.title}
           columns={[...POPUP_CONFIGS.customer.columns]}
-          dataSource={getCustomers() as unknown as Record<string, unknown>[]}
+          fetchData={async (s, skip, limit) => { const r = await fetchCustomers(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
           onSelect={handlePopupSelect}
           onCancel={() => setActivePopup(null)}
           rowKey="code"

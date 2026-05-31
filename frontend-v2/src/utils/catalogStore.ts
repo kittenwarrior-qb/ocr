@@ -1,6 +1,6 @@
 /**
- * Central store for product and customer catalog data.
- * Fetches once from backend API and caches in memory.
+ * Catalog API — paginated + searchable.
+ * No more loading everything into memory.
  */
 import client from '@/api/client'
 
@@ -27,42 +27,36 @@ export interface Customer {
   delivery_address: string
 }
 
+export interface PaginatedResult<T> {
+  items: T[]
+  total: number
+}
+
+export async function fetchProducts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Product>> {
+  const { data } = await client.get('/products/catalog', { params: { search, skip, limit } })
+  return data
+}
+
+export async function fetchCustomers(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Customer>> {
+  const { data } = await client.get('/partners/catalog', { params: { search, skip, limit } })
+  return data
+}
+
+// ── Lightweight cache for matching (loads first 500 for OCR suggestions) ──
 let _products: Product[] = []
 let _customers: Customer[] = []
-let _productsLoaded = false
-let _customersLoaded = false
-let _productsPromise: Promise<Product[]> | null = null
-let _customersPromise: Promise<Customer[]> | null = null
+let _loaded = false
 
-export async function loadProducts(): Promise<Product[]> {
-  if (_productsLoaded) return _products
-  if (_productsPromise) return _productsPromise
-  _productsPromise = client.get('/products/catalog').then(r => {
-    _products = r.data
-    _productsLoaded = true
-    _productsPromise = null
-    return _products
-  })
-  return _productsPromise
+export async function preloadCatalogs(): Promise<void> {
+  if (_loaded) return
+  const [p, c] = await Promise.all([
+    client.get('/products/catalog', { params: { limit: 500 } }),
+    client.get('/partners/catalog', { params: { limit: 2500 } }),
+  ])
+  _products = p.data.items
+  _customers = c.data.items
+  _loaded = true
 }
 
-export async function loadCustomers(): Promise<Customer[]> {
-  if (_customersLoaded) return _customers
-  if (_customersPromise) return _customersPromise
-  _customersPromise = client.get('/partners/catalog').then(r => {
-    _customers = r.data
-    _customersLoaded = true
-    _customersPromise = null
-    return _customers
-  })
-  return _customersPromise
-}
-
-/** Sync access — returns empty array if not loaded yet */
 export function getProducts(): Product[] { return _products }
 export function getCustomers(): Customer[] { return _customers }
-
-/** Preload both catalogs */
-export async function preloadCatalogs(): Promise<void> {
-  await Promise.all([loadProducts(), loadCustomers()])
-}
