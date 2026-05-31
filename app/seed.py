@@ -35,18 +35,31 @@ def main():
     from app.database import SessionLocal, engine
     from app.models.partner import Partner, PartnerAddress
     from app.models.product import Product
-    from app.models.mapping import MSTMapping
+    from app.models.mapping import MSTMapping, TempCodeMapping
+    from app.models.document import ProcessedOrder, ProcessedBill, OrderLine, BillLine, RawDocument
+    from app.models.session import OcrSession
+    from app.models.sys_config import SysConfig
+    from app.models.template import Template
     from app.models import Base
 
-    # Ensure tables exist
+    # Ensure ALL tables exist
     Base.metadata.create_all(bind=engine)
 
     # Run migrations (same as main.py lifespan)
     from app.main import _MIGRATIONS
     with engine.connect() as conn:
         for sql in _MIGRATIONS:
-            conn.execute(text(sql))
+            try:
+                conn.execute(text(sql))
+            except Exception:
+                pass
         conn.commit()
+
+    # Ensure sys_config defaults exist
+    from app.services.code_generator import init_default_configs
+    db = SessionLocal()
+    init_default_configs(db)
+    db.close()
 
     # ── Reset ─────────────────────────────────────────────────────────────────
     print("\n--- Resetting database ---")
