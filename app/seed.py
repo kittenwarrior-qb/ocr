@@ -114,6 +114,7 @@ def main():
     print("\n--- Seeding customers ---")
     partner_count = 0
     addr_count = 0
+    seen_tax = set()
 
     for c in customers:
         code = (c.get("code") or "").strip()
@@ -136,8 +137,9 @@ def main():
         db.flush()
         partner_count += 1
 
-        if tax:
+        if tax and tax not in seen_tax:
             db.add(MSTMapping(tax_code=tax, partner_id=partner.id))
+            seen_tax.add(tax)
 
         # Invoice address
         invoice_addr = (c.get("invoice_address") or "").strip()
