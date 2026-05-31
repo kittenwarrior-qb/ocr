@@ -30,6 +30,32 @@ def list_partners(
     return q.order_by(Partner.legal_name).offset(skip).limit(limit).all()
 
 
+@router.get("/customers/all")
+def list_all_customers(db: Session = Depends(get_db)):
+    """Return all customers with addresses (for frontend catalog matching)."""
+    customers = (
+        db.query(Partner)
+        .filter(Partner.is_active == True, Partner.partner_type == "customer")
+        .order_by(Partner.code)
+        .all()
+    )
+    result = []
+    for c in customers:
+        billing = next((a for a in c.addresses if a.address_type == "billing"), None)
+        delivery = next((a for a in c.addresses if a.address_type == "branch"), None)
+        result.append({
+            "code": c.code,
+            "name": c.legal_name,
+            "tax_code": c.tax_code or "",
+            "phone": "",
+            "owner": "",
+            "invoice_address": billing.full_address if billing else (c.address or ""),
+            "invoice_city": billing.mapping_key if billing else "",
+            "delivery_address": delivery.full_address if delivery else "",
+        })
+    return result
+
+
 @router.get("/{partner_id}", response_model=PartnerOut)
 def get_partner(partner_id: UUID, db: Session = Depends(get_db)):
     p = db.query(Partner).filter(Partner.id == partner_id).first()

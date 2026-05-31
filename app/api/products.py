@@ -29,6 +29,16 @@ def list_products(
     return q.order_by(Product.display_name).offset(skip).limit(limit).all()
 
 
+@router.get("/all")
+def list_all_products(db: Session = Depends(get_db)):
+    """Return all active products (for frontend catalog matching)."""
+    rows = db.query(Product).filter(Product.is_active == True).order_by(Product.code).all()
+    return [
+        {"code": p.code, "name": p.display_name, "uom": p.uom}
+        for p in rows
+    ]
+
+
 @router.post("", response_model=ProductOut)
 def create_product(body: ProductCreate, db: Session = Depends(get_db)):
     code = generate_product_code(db)

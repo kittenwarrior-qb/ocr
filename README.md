@@ -1,65 +1,50 @@
 # OCR Order Processing System
 
-Hệ thống OCR xử lý đơn đặt hàng PDF, tự động nhận diện sản phẩm và khách hàng, xuất Excel theo format MISA.
-
-## Tổng quan
-
-- **Backend**: FastAPI + PostgreSQL + OpenRouter (Gemini Flash) cho OCR
-- **Frontend**: React + Vite + Ant Design (deploy trên Vercel)
-- **Reverse Proxy**: Caddy (auto HTTPS)
-
-### Luồng hoạt động
-
-1. Upload file PDF đơn hàng
-2. OCR tự động trích xuất thông tin (sản phẩm, số lượng, đơn giá, khách hàng...)
-3. Hệ thống gợi ý mapping sản phẩm + khách hàng từ catalog
-4. User xác nhận/sửa mapping
-5. Xuất Excel theo format MISA import (2 sheet: Đơn hàng + Hàng hóa)
-
-## Cấu trúc
-
-```
-app/                    # Backend FastAPI
-├── api/                # API routes
-├── models/             # SQLAlchemy models
-├── services/           # Business logic (OCR, export, mapping...)
-└── utils/              # Helpers
-frontend-v2/           # Frontend React
-├── src/data/           # JSON catalog (products.json, customers.json)
-├── src/pages/          # Pages (Orders, Products, Customers)
-└── src/components/     # Shared components
-```
-
-## Chạy dự án (Development)
+Hệ thống OCR xử lý đơn đặt hàng PDF → tự động nhận diện sản phẩm/khách hàng → xuất Excel MISA.
 
 ### Yêu cầu
 - Docker + Docker Compose
-- Node.js 18+ (cho frontend dev)
+- Node.js 18+ (frontend dev)
+- File data: `products.json` + `customers.json` (hỏi chủ dự án lấy)
 
-### 1. Clone và cấu hình
+### Bước 1: Cấu hình
 
 ```bash
 git clone https://github.com/kittenwarrior-qb/ocr.git
 cd ocr
 cp .env.example .env
-# Sửa .env: thêm OPENROUTER_API_KEY
+# Mở .env, điền OPENROUTER_API_KEY
 ```
 
-### 2. Chạy backend + DB
+### Bước 2: Đặt file data
+
+Đặt 2 file JSON vào folder `data/` (nằm ở root dự án):
+
+```
+ocr/
+├── data/
+│   ├── products.json      ← 288 sản phẩm
+│   └── customers.json     ← ~2000 khách hàng
+├── app/
+├── frontend-v2/
+└── ...
+```
+
+### Bước 3: Chạy backend
 
 ```bash
 docker compose up -d
 ```
 
-Backend chạy tại `http://localhost:8000`
-
-### 3. Seed dữ liệu (288 sản phẩm + ~2000 khách hàng)
+Đợi ~10s cho DB healthy, rồi seed dữ liệu:
 
 ```bash
-docker compose exec backend python seed_catalog.py
+docker compose exec backend python -m app.seed
 ```
 
-### 4. Chạy frontend (dev mode)
+Backend chạy tại http://localhost:8000
+
+### Bước 4: Chạy frontend
 
 ```bash
 cd frontend-v2
@@ -67,66 +52,54 @@ npm install
 npm run dev
 ```
 
-Frontend chạy tại `http://localhost:3001`
+Frontend chạy tại http://localhost:3001
 
-## Chạy dự án (Production - VPS)
+---
 
-### 1. Clone và cấu hình
+## Production (VPS)
 
 ```bash
-git clone https://github.com/kittenwarrior-qb/ocr.git /app/ocr
+# Deploy
 cd /app/ocr
-cp .env.example .env
-nano .env  # Thêm OPENROUTER_API_KEY
-```
-
-### 2. Deploy
-
-```bash
+cp .env.example .env && nano .env
 docker compose -f docker-compose.prod.yml up -d
-```
 
-### 3. Seed dữ liệu
+# Seed (đặt JSON vào data/ trước)
+docker compose -f docker-compose.prod.yml exec backend python -m app.seed
 
-```bash
-docker compose -f docker-compose.prod.yml exec backend python seed_catalog.py
-```
-
-### 4. Cập nhật code
-
-```bash
+# Cập nhật
 git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build backend
 ```
 
-## Seed dữ liệu
+---
 
-Script `seed_catalog.py` sẽ:
-- **Xóa sạch** toàn bộ dữ liệu cũ (orders, sessions, mappings, partners, products)
-- Seed 288 sản phẩm từ `frontend-v2/src/data/products.json`
-- Seed ~1996 khách hàng từ `frontend-v2/src/data/customers.json`
-- Reset counter số đơn hàng về 0
+## Tổng quan kiến trúc
 
-Chạy lại bất cứ lúc nào để reset DB về trạng thái sạch.
+```
+app/                    # Backend (FastAPI + PostgreSQL)
+├── api/                # REST endpoints
+├── models/             # SQLAlchemy ORM
+├── services/           # Business logic (OCR, export, mapping)
+├── utils/              # Helpers
+└── seed.py             # Seed script (python -m app.seed)
+data/                   # JSON data (git ignored, mount vào container)
+frontend-v2/           # Frontend (React + Vite + Ant Design)
+```
+
+## Luồng hoạt động
+
+1. Upload PDF đơn hàng
+2. OCR tự động trích xuất (Gemini Flash via OpenRouter)
+3. Gợi ý mapping sản phẩm + khách hàng
+4. User xác nhận/sửa
+5. Xuất Excel format MISA (2 sheet: Đơn hàng + Hàng hóa)
 
 ## Biến môi trường (.env)
 
-| Biến | Mô tả | Mặc định |
-|------|--------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:password@db:5432/ocr_risk` |
-| `OCR_PROVIDER` | Provider OCR: `openrouter` / `nvidia` | `openrouter` |
-| `OPENROUTER_API_KEY` | API key OpenRouter | (bắt buộc) |
-| `OPENROUTER_MODEL` | Model OCR | `google/gemini-2.5-flash` |
-| `OCR_CONCURRENCY` | Số worker OCR song song | `3` |
-| `UPLOAD_DIR` | Thư mục lưu file upload | `./uploads` |
-
-## API chính
-
-| Method | Endpoint | Mô tả |
-|--------|----------|--------|
-| POST | `/api/v1/documents/upload-batch` | Upload PDF đơn hàng |
-| GET | `/api/v1/sessions` | Danh sách phiên |
-| GET | `/api/v1/sessions/{id}/details` | Chi tiết phiên (orders + lines) |
-| GET | `/api/v1/sessions/{id}/export` | Xuất Excel MISA |
-| POST | `/api/v1/mappings/{temp_code}/map` | Map sản phẩm |
-| PATCH | `/api/v1/documents/orders/{id}` | Cập nhật đơn hàng |
+| Biến | Mô tả |
+|------|--------|
+| `OPENROUTER_API_KEY` | API key OpenRouter (bắt buộc) |
+| `OPENROUTER_MODEL` | Model OCR (mặc định: `google/gemini-2.5-flash`) |
+| `OCR_CONCURRENCY` | Số worker OCR song song (mặc định: 3) |
+| `DATABASE_URL` | PostgreSQL (mặc định: `postgresql://postgres:password@db:5432/ocr_risk`) |

@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .env
 .git/
+frontend-v2/
 uploads/
 RawTest/
 *.md

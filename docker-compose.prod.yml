@@ -30,6 +30,7 @@ services:
       UPLOAD_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy

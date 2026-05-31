@@ -1,33 +1,18 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Input, Table, Tag } from 'antd'
 import { PhoneOutlined, ReloadOutlined, SettingOutlined, FilterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import customersData from '@/data/customers.json'
-
-interface Customer {
-  tag: string
-  code: string
-  type: string
-  name: string
-  tax_code: string
-  phone: string
-  email: string
-  field: string
-  invoice_address: string
-  invoice_city: string
-  invoice_district: string
-  invoice_ward: string
-  description: string
-  owner: string
-  delivery_address: string
-}
+import { loadCustomers, type Customer } from '@/utils/catalogStore'
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('')
   const [pageSize, setPageSize] = useState(100)
+  const [customersData, setCustomersData] = useState<Customer[]>([])
+
+  useEffect(() => { loadCustomers().then(setCustomersData) }, [])
 
   const data = useMemo(() => {
-    if (!search.trim()) return customersData as Customer[]
+    if (!search.trim()) return customersData
     const q = search.toLowerCase()
     return (customersData as Customer[]).filter(c =>
       c.code.toLowerCase().includes(q) ||

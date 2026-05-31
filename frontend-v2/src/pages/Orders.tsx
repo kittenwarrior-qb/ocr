@@ -23,8 +23,9 @@ import {
   type SessionLine,
   type SessionOrder,
 } from '@/api/orders'
-import { matchProduct, searchProducts, products, type Product } from '@/utils/productMatcher'
-import { customers, matchCustomer, type Customer } from '@/utils/customerMatcher'
+import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
+import { matchCustomer, type Customer } from '@/utils/customerMatcher'
+import { preloadCatalogs, getProducts, getCustomers } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import client from '@/api/client'
@@ -74,6 +75,7 @@ export default function OrdersPage() {
   useEffect(() => { if (sessionDetail && uploadFiles.length > 0) { const done = sessionDetail.orders.map(o => o.file_name); setUploadFiles(prev => prev.map(f => f.status === 'done' || f.status === 'error' ? f : done.includes(f.name) ? { ...f, status: 'done' } : sessionDetail.processing_count > 0 ? { ...f, status: 'processing' } : f)); if (sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) setTimeout(() => setUploadFiles([]), 3000) } }, [sessionDetail])
   useEffect(() => { if (sessionDetail && sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) refetchSessions() }, [sessionDetail?.processing_count, sessionDetail?.done_count])
   useEffect(() => { if (sessions.length > 0 && !activeSessionId) setActiveSessionId(sessions[0].id) }, [sessions, activeSessionId])
+  useEffect(() => { preloadCatalogs() }, [])
 
   const handleStageFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'))
@@ -295,7 +297,7 @@ export default function OrdersPage() {
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={`Chọn hàng hóa — "${selectedLine?.product_name_original || ''}"`}
         columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110 }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 }, { title: 'ĐVT', dataIndex: 'uom', width: 70 }, { title: 'Đơn giá', dataIndex: 'price', width: 100 }, { title: 'Thuế', dataIndex: 'tax_rate', width: 60 }, { title: 'Tính chất', dataIndex: 'property', width: 100 }]}
-        dataSource={products as unknown as Record<string, unknown>[]}
+        dataSource={getProducts() as unknown as Record<string, unknown>[]}
         onSelect={r => { if (selectedLine) handleMapProduct(selectedLine, r as unknown as Product) }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null) }} rowKey="code"
         initialSearch={selectedLine ? (getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
@@ -303,7 +305,7 @@ export default function OrdersPage() {
       {/* Customer SelectPopup */}
       <SelectPopup open={customerModalOpen} title="Chọn khách hàng"
         columns={[{ title: 'Mã KH', dataIndex: 'code', width: 100 }, { title: 'Loại KH', dataIndex: 'type', width: 130 }, { title: 'Tên khách hàng', dataIndex: 'name', width: 250 }, { title: 'MST', dataIndex: 'tax_code', width: 110 }, { title: 'ĐT', dataIndex: 'phone', width: 110 }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 250 }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100 }, { title: 'Chủ sở hữu', dataIndex: 'owner', width: 150 }, { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 250 }]}
-        dataSource={customers as unknown as Record<string, unknown>[]}
+        dataSource={getCustomers() as unknown as Record<string, unknown>[]}
         onSelect={r => { if (selectedOrderId) handleSelectCustomer(selectedOrderId, r as unknown as Customer) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }} rowKey="code" />
 

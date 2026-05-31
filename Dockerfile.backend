@@ -11,8 +11,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-COPY seed_catalog.py .
-COPY frontend-v2/src/data/ ./frontend-v2/src/data/
 
 RUN mkdir -p /app/uploads
 

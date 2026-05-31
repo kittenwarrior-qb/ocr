@@ -1,22 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Input, Table, Tag } from 'antd'
 import { ReloadOutlined, SettingOutlined, FilterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import productsData from '@/data/products.json'
-
-interface Product {
-  code: string
-  name: string
-  type: string
-  uom: string
-  price: number
-  tax_rate: string
-  property: string
-}
+import { loadProducts, type Product } from '@/utils/catalogStore'
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('')
   const [pageSize, setPageSize] = useState(100)
+  const [productsData, setProductsData] = useState<Product[]>([])
+
+  useEffect(() => { loadProducts().then(setProductsData) }, [])
 
   const data = useMemo(() => {
     if (!search.trim()) return productsData as Product[]
