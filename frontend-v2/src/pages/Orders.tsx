@@ -254,7 +254,7 @@ export default function OrdersPage() {
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.partner_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700 truncate">{order.delivery_address || '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tổng tiền:</span><span className="text-emerald-700 font-bold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '\u2014'}</span></div>

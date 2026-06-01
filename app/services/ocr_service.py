@@ -105,7 +105,13 @@ IMPORTANT:
 - If a field is missing use null, but try your best to find REQUIRED fields
 - MULTI-PAGE: The document may span multiple pages. Extract ALL items from ALL pages, not just the first page.
 - If total_amount is NOT explicitly printed on the document, calculate it as the SUM of all items[].line_total (plus tax if applicable)
-- NEVER use only items from the first page to calculate total — always include ALL pages"""
+- NEVER use only items from the first page to calculate total — always include ALL pages
+
+NUMBER FORMAT RULES (CRITICAL):
+- Vietnamese documents use dots (.) as THOUSAND separators, NOT decimal points. Example: "1.076.328" means 1076328, NOT 1076.328
+- All monetary amounts (total_amount, unit_price, line_total, discount_amount, tax_amount) must be returned as plain integers or numbers WITHOUT thousand separators. Example: "1.076.328" → 1076328, "25.000" → 25000
+- For VND currency, amounts are always whole numbers (no decimals). Return them as integers.
+- quantity can have decimals (e.g. 1.5 kg) — use dot as decimal separator only when the document clearly shows fractional quantities"""
 
 # NVIDIA NIM giới hạn ảnh ~180k tokens → giữ ảnh nhỏ hơn 2.5MB sau encode
 _MAX_IMAGE_BYTES = 2_500_000  # bytes trước khi base64
@@ -258,11 +264,75 @@ def extract_mst_and_type(file_path: str) -> dict:
         return {"tax_code": None, "document_type": None, "_raw": raw}
 
 
+def _normalize_vn_number(value) -> int | float | None:
+    """Normalize Vietnamese number format: '1.076.328' → 1076328, '1076.328' → 1076328 (not 1076.328)."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        # If it looks like a wrongly-parsed VN number (e.g. 1076.328 should be 1076328)
+        # Heuristic: if decimal part has 3 digits, it's likely a thousand separator
+        if isinstance(value, float):
+            s = str(value)
+            if '.' in s:
+                decimal_part = s.split('.')[1]
+                if len(decimal_part) == 3:
+                    return int(round(value * 1000))
+        return value
+    # String value
+    s = str(value).strip().replace(' ', '').replace('\u00a0', '')
+    if not s:
+        return None
+    # Remove currency symbols
+    s = re.sub(r'[đĐ₫VND]', '', s, flags=re.IGNORECASE).strip()
+    # Count dots and commas
+    dot_count = s.count('.')
+    comma_count = s.count(',')
+    if dot_count > 1:
+        # Multiple dots = thousand separators (VN format): 1.076.328
+        s = s.replace('.', '')
+    elif dot_count == 1 and comma_count == 0:
+        # Single dot: check if decimal part is 3 digits (likely thousand sep)
+        parts = s.split('.')
+        if len(parts[1]) == 3 and len(parts[0]) >= 1:
+            s = s.replace('.', '')
+    if comma_count > 1:
+        s = s.replace(',', '')
+    elif comma_count == 1 and '.' not in s:
+        parts = s.split(',')
+        if len(parts[1]) == 3:
+            s = s.replace(',', '')
+        else:
+            s = s.replace(',', '.')
+    try:
+        result = float(s)
+        if result == int(result):
+            return int(result)
+        return result
+    except (ValueError, TypeError):
+        return None
+
+
+def _normalize_extracted_amounts(data: dict) -> dict:
+    """Post-process extracted data to fix Vietnamese number format issues."""
+    amount_fields = ['total_amount', 'discount_amount', 'tax_amount']
+    for field in amount_fields:
+        if field in data and data[field] is not None:
+            data[field] = _normalize_vn_number(data[field])
+    
+    items = data.get('items') or []
+    for item in items:
+        for field in ['unit_price', 'line_total', 'discount_amount']:
+            if field in item and item[field] is not None:
+                item[field] = _normalize_vn_number(item[field])
+    return data
+
+
 def extract_full_document(file_path: str, system_prompt: str | None = None) -> dict:
     """Pass 2: trích xuất toàn bộ dữ liệu với prompt của template (hoặc generic)."""
     prompt = system_prompt or GENERIC_FULL_PROMPT
     raw = _call_ocr(prompt, file_path)
     try:
-        return _extract_json(raw)
+        result = _extract_json(raw)
+        return _normalize_extracted_amounts(result)
     except Exception:
         return {"items": [], "_raw": raw, "_parse_error": True}
