@@ -19,7 +19,10 @@ export interface Customer {
   type: string
   tax_code: string
   phone: string
+  email: string
+  field: string
   owner: string
+  description: string
   invoice_address: string
   invoice_city: string
   invoice_district: string

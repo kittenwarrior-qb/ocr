@@ -31,17 +31,19 @@ function ProductModal({ open, suggestName, onSelect, onCancel }: { open: boolean
   const [query, setQuery] = useState('')
   const results = query.trim() ? searchProducts(query) : suggestName ? matchProduct(suggestName, 20).map(r => r.product) : searchProducts('')
   return (
-    <Modal title="Chọn hàng hóa" open={open} onCancel={onCancel} width={800} footer={null} zIndex={1200}>
+    <Modal title="Chọn hàng hóa" open={open} onCancel={onCancel} width="90vw" style={{ maxWidth: 1000 }} footer={null} zIndex={1200}>
       <Input.Search placeholder="Tìm theo tên hoặc mã hàng hóa..." value={query} onChange={e => setQuery(e.target.value)} className="mb-3" allowClear autoFocus />
       {suggestName && !query && <div className="mb-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded">Gợi ý: <strong>{suggestName}</strong></div>}
       <AntTable size="small" pagination={{ pageSize: 10, size: 'small' }} dataSource={results} rowKey="code"
+        scroll={{ x: 'max-content' }}
         onRow={record => ({ onClick: () => onSelect(record as Product), className: 'cursor-pointer hover:bg-blue-50' })}
         columns={[
-          { title: 'Mã hàng hóa', dataIndex: 'code', width: 110 },
-          { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true },
-          { title: 'ĐVT', dataIndex: 'uom', width: 70 },
-          { title: 'Đơn giá', dataIndex: 'price', width: 100, render: (v: number) => v ? v.toLocaleString('vi-VN') : '\u2014' },
-          { title: 'Thuế', dataIndex: 'tax_rate', width: 60 },
+          { title: 'Mã hàng hóa', dataIndex: 'code', width: 120 },
+          { title: 'Tên hàng hóa', dataIndex: 'name', width: 320 },
+          { title: 'ĐVT', dataIndex: 'uom', width: 80 },
+          { title: 'Đơn giá', dataIndex: 'price', width: 120, render: (v: number) => v ? v.toLocaleString('vi-VN') : '\u2014' },
+          { title: 'Thuế', dataIndex: 'tax_rate', width: 80 },
+          { title: 'Tính chất', dataIndex: 'property', width: 140 },
         ]}
         locale={{ emptyText: 'Không tìm thấy hàng hóa' }} />
     </Modal>
@@ -52,10 +54,20 @@ const POPUP_CONFIGS = {
   customer: {
     title: 'Chọn khách hàng',
     columns: [
-      { title: 'Mã KH', dataIndex: 'code', width: 120 },
-      { title: 'Tên khách hàng', dataIndex: 'name', width: 280 },
-      { title: 'Địa chỉ', dataIndex: 'invoice_address', width: 250 },
-      { title: 'ĐT', dataIndex: 'phone', width: 120 },
+      { title: 'Mã KH', dataIndex: 'code', width: 120, nowrap: true },
+      { title: 'Loại KH', dataIndex: 'type', width: 160, nowrap: true },
+      { title: 'Tên khách hàng', dataIndex: 'name', width: 320, nowrap: true },
+      { title: 'Mã số thuế', dataIndex: 'tax_code', width: 130, nowrap: true },
+      { title: 'Điện thoại', dataIndex: 'phone', width: 130, nowrap: true },
+      { title: 'Email', dataIndex: 'email', width: 240, nowrap: true },
+      { title: 'Lĩnh vực', dataIndex: 'field', width: 140, nowrap: true },
+      { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 360, nowrap: true },
+      { title: 'Tỉnh/TP (HĐ)', dataIndex: 'invoice_city', width: 150, nowrap: true },
+      { title: 'Quận/Huyện (HĐ)', dataIndex: 'invoice_district', width: 160, nowrap: true },
+      { title: 'Phường/Xã (HĐ)', dataIndex: 'invoice_ward', width: 160, nowrap: true },
+      { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 360, nowrap: true },
+      { title: 'Mô tả', dataIndex: 'description', width: 200, nowrap: true },
+      { title: 'Chủ sở hữu', dataIndex: 'owner', width: 200, nowrap: true },
     ],
   },
 } as const
@@ -112,19 +124,20 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
     const meta: Record<string, string | number | null> = {}
     if (selectedCustomerData) {
       meta.customer_code = selectedCustomerData.code || ''
+      meta.customer_type = selectedCustomerData.type || ''
       meta.invoice_customer = selectedCustomerData.name || ''
+      meta.tax_code = selectedCustomerData.tax_code || ''
       meta.invoice_buyer = selectedCustomerData.owner || ''
+      meta.phone = selectedCustomerData.phone || ''
+      meta.email = selectedCustomerData.email || ''
+      meta.field = selectedCustomerData.field || ''
+      meta.description = selectedCustomerData.description || ''
+      meta.invoice_address = selectedCustomerData.invoice_address || ''
       meta.invoice_city = selectedCustomerData.invoice_city || ''
       meta.invoice_district = selectedCustomerData.invoice_district || ''
       meta.invoice_ward = selectedCustomerData.invoice_ward || ''
-      meta.invoice_street = selectedCustomerData.invoice_address || ''
-      meta.invoice_address = selectedCustomerData.invoice_address || ''
       meta.delivery_receiver = selectedCustomerData.owner || ''
       meta.delivery_phone = selectedCustomerData.phone || ''
-      meta.delivery_city = selectedCustomerData.invoice_city || ''
-      meta.delivery_district = selectedCustomerData.invoice_district || ''
-      meta.delivery_ward = selectedCustomerData.invoice_ward || ''
-      meta.delivery_street = selectedCustomerData.delivery_address || selectedCustomerData.invoice_address || ''
       meta.delivery_address = selectedCustomerData.delivery_address || selectedCustomerData.invoice_address || ''
     }
     try {
@@ -246,12 +259,18 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-6">Thông tin hóa đơn</h2>
       <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label="Khách hàng (HĐ)"><Input value={selectedCustomerData?.name || ''} readOnly /></Form.Item>
+          <Form.Item label="Mã khách hàng"><Input value={selectedCustomerData?.code || ''} readOnly /></Form.Item>
+          <Form.Item label="Loại khách hàng"><Input value={selectedCustomerData?.type || ''} readOnly /></Form.Item>
+          <Form.Item label="Tên khách hàng (HĐ)"><Input value={selectedCustomerData?.name || ''} readOnly /></Form.Item>
+          <Form.Item label="Mã số thuế"><Input value={selectedCustomerData?.tax_code || ''} readOnly /></Form.Item>
           <Form.Item label="Người mua hàng"><Input value={selectedCustomerData?.owner || ''} readOnly /></Form.Item>
+          <Form.Item label="Email"><Input value={selectedCustomerData?.email || ''} readOnly /></Form.Item>
+          <Form.Item label="Địa chỉ (HĐ)"><Input value={selectedCustomerData?.invoice_address || ''} readOnly /></Form.Item>
           <Form.Item label="Tỉnh/TP (HĐ)"><Input value={selectedCustomerData?.invoice_city || ''} readOnly /></Form.Item>
           <Form.Item label="Quận/Huyện (HĐ)"><Input value={selectedCustomerData?.invoice_district || ''} readOnly /></Form.Item>
           <Form.Item label="Phường/Xã (HĐ)"><Input value={selectedCustomerData?.invoice_ward || ''} readOnly /></Form.Item>
-          <Form.Item label="Địa chỉ (HĐ)"><Input value={selectedCustomerData?.invoice_address || ''} /></Form.Item>
+          <Form.Item label="Mô tả"><Input value={selectedCustomerData?.description || ''} readOnly /></Form.Item>
+          <Form.Item label="Lĩnh vực"><Input value={selectedCustomerData?.field || ''} readOnly /></Form.Item>
         </div>
       </Form>
 
@@ -259,9 +278,10 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">Thông tin giao hàng</h2>
       <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label="Người nhận hàng"><Input value={selectedCustomerData?.owner || ''} /></Form.Item>
-          <Form.Item label="Điện thoại"><Input value={selectedCustomerData?.phone || ''} /></Form.Item>
-          <Form.Item label="Địa chỉ (GH)"><Input value={selectedCustomerData?.delivery_address || ''} /></Form.Item>
+          <Form.Item label="Người nhận hàng"><Input value={selectedCustomerData?.owner || ''} readOnly /></Form.Item>
+          <Form.Item label="Điện thoại"><Input value={selectedCustomerData?.phone || ''} readOnly /></Form.Item>
+          <Form.Item label="Địa chỉ (GH)"><Input value={selectedCustomerData?.delivery_address || selectedCustomerData?.invoice_address || ''} readOnly /></Form.Item>
+          <Form.Item label="Email"><Input value={selectedCustomerData?.email || ''} readOnly /></Form.Item>
         </div>
       </Form>
 

@@ -62,6 +62,11 @@ def main():
         "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5,2)",
         "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
         "ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS session_id UUID",
+        "ALTER TABLE partners ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
+        "ALTER TABLE partners ADD COLUMN IF NOT EXISTS email VARCHAR(300)",
+        "ALTER TABLE partners ADD COLUMN IF NOT EXISTS field VARCHAR(200)",
+        "ALTER TABLE partners ADD COLUMN IF NOT EXISTS owner VARCHAR(200)",
+        "ALTER TABLE partners ADD COLUMN IF NOT EXISTS description TEXT",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -128,9 +133,14 @@ def main():
         partner = Partner(
             code=code,
             legal_name=name,
-            display_name=name,
+            display_name=c.get("type") or name,
             partner_type="customer",
             tax_code=tax,
+            phone=(c.get("phone") or "").strip() or None,
+            email=(c.get("email") or "").strip() or None,
+            field=(c.get("field") or "").strip() or None,
+            owner=(c.get("owner") or "").strip() or None,
+            description=(c.get("description") or "").strip() or None,
             address=c.get("invoice_address") or None,
         )
         db.add(partner)

@@ -57,11 +57,14 @@ def list_all_customers(
         delivery = next((a for a in c.addresses if a.address_type == "branch"), None)
         result.append({
             "code": c.code,
-            "type": "",
+            "type": c.display_name or "",
             "name": c.legal_name,
             "tax_code": c.tax_code or "",
-            "phone": "",
-            "owner": "",
+            "phone": c.phone or "",
+            "email": c.email or "",
+            "field": c.field or "",
+            "owner": c.owner or "",
+            "description": c.description or "",
             "invoice_address": billing.full_address if billing else (c.address or ""),
             "invoice_city": billing.mapping_key if billing else "",
             "invoice_district": "",

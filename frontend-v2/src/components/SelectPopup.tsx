@@ -79,12 +79,12 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
 
       <Spin spinning={loading}>
         <div className="border border-slate-200 rounded overflow-auto flex-1" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-          <table className="w-full border-collapse text-xs">
+          <table className="border-collapse text-xs" style={{ minWidth: 'max-content' }}>
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-2 py-2 w-8"></th>
                 {columns.map(col => (
-                  <th key={col.dataIndex} className="px-2 py-2 text-left font-semibold text-slate-600"
+                  <th key={col.dataIndex} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap"
                     style={{ width: col.width || 'auto', minWidth: col.width || 80 }}>{col.title}</th>
                 ))}
               </tr>
@@ -103,8 +103,7 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
                     </td>
                     {columns.map(col => (
                       <td key={col.dataIndex}
-                        className={`px-2 py-1.5 text-slate-700 ${col.nowrap ? 'whitespace-nowrap' : 'break-words'}`}
-                        style={{ maxWidth: col.width || 'none' }}>
+                        className="px-2 py-1.5 text-slate-700 whitespace-nowrap">
                         {String(row[col.dataIndex] ?? '') || '-'}
                       </td>
                     ))}
