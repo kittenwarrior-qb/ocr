@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.partner import Partner, PartnerAddress
+from app.models.contact import Contact
 from app.schemas.partner import PartnerAddressUpdate, PartnerOut, PartnerUpdate
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
@@ -72,6 +73,49 @@ def list_all_customers(
             "delivery_address": delivery.full_address if delivery else "",
         })
     return {"items": result, "total": total}
+
+
+@router.get("/contacts")
+def list_contacts(
+    search: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Return contacts, paginated and searchable."""
+    q = db.query(Contact)
+    if search:
+        q = q.filter(
+            Contact.name.ilike(f"%{search}%")
+            | Contact.organization.ilike(f"%{search}%")
+            | Contact.phone.ilike(f"%{search}%")
+            | Contact.code.ilike(f"%{search}%")
+        )
+    total = q.count()
+    contacts = q.order_by(Contact.name).offset(skip).limit(limit).all()
+    return {
+        "items": [
+            {
+                "code": c.code,
+                "title": c.title or "",
+                "name": c.name,
+                "job_title": c.job_title or "",
+                "phone": c.phone or "",
+                "phone_work": c.phone_work or "",
+                "email": c.email or "",
+                "email_personal": c.email_personal or "",
+                "organization": c.organization or "",
+                "delivery_address": c.delivery_address or "",
+                "address": c.address or "",
+                "city": c.city or "",
+                "district": c.district or "",
+                "ward": c.ward or "",
+                "owner": c.owner or "",
+            }
+            for c in contacts
+        ],
+        "total": total,
+    }
 
 
 @router.get("/{partner_id}", response_model=PartnerOut)

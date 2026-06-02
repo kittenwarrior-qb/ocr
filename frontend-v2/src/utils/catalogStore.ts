@@ -30,6 +30,24 @@ export interface Customer {
   delivery_address: string
 }
 
+export interface Contact {
+  code: string
+  title: string
+  name: string
+  job_title: string
+  phone: string
+  phone_work: string
+  email: string
+  email_personal: string
+  organization: string
+  delivery_address: string
+  address: string
+  city: string
+  district: string
+  ward: string
+  owner: string
+}
+
 export interface PaginatedResult<T> {
   items: T[]
   total: number
@@ -45,21 +63,30 @@ export async function fetchCustomers(search = '', skip = 0, limit = 50): Promise
   return data
 }
 
+export async function fetchContacts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Contact>> {
+  const { data } = await client.get('/partners/contacts', { params: { search, skip, limit } })
+  return data
+}
+
 // ── Lightweight cache for matching (loads first 500 for OCR suggestions) ──
 let _products: Product[] = []
 let _customers: Customer[] = []
+let _contacts: Contact[] = []
 let _loaded = false
 
 export async function preloadCatalogs(): Promise<void> {
   if (_loaded) return
-  const [p, c] = await Promise.all([
+  const [p, c, ct] = await Promise.all([
     client.get('/products/catalog', { params: { limit: 500 } }),
     client.get('/partners/catalog', { params: { limit: 2500 } }),
+    client.get('/partners/contacts', { params: { limit: 2500 } }),
   ])
   _products = p.data.items
   _customers = c.data.items
+  _contacts = ct.data.items
   _loaded = true
 }
 
 export function getProducts(): Product[] { return _products }
 export function getCustomers(): Customer[] { return _customers }
+export function getContacts(): Contact[] { return _contacts }

@@ -19,6 +19,7 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent.parent / "data"
 customers_path = DATA_DIR / "customers.json"
 products_path = DATA_DIR / "products.json"
+contacts_path = DATA_DIR / "contacts.json"
 
 for p in (customers_path, products_path):
     if not p.exists():
@@ -28,7 +29,8 @@ for p in (customers_path, products_path):
 
 customers = json.loads(customers_path.read_text(encoding="utf-8"))
 products = json.loads(products_path.read_text(encoding="utf-8"))
-print(f"Loaded {len(customers)} customers, {len(products)} products")
+contacts = json.loads(contacts_path.read_text(encoding="utf-8")) if contacts_path.exists() else []
+print(f"Loaded {len(customers)} customers, {len(products)} products, {len(contacts)} contacts")
 
 
 def _parse_decimal(value, default="0"):
@@ -45,6 +47,7 @@ def main():
     from app.database import SessionLocal, engine
     from app.models.partner import Partner, PartnerAddress
     from app.models.product import Product
+    from app.models.contact import Contact
     from app.models.mapping import MSTMapping, TempCodeMapping
     from app.models.document import ProcessedOrder, ProcessedBill, OrderLine, BillLine, RawDocument
     from app.models.session import OcrSession
@@ -216,10 +219,39 @@ def main():
             addr_count += 1
 
     db.commit()
-    db.close()
     print(f"  {partner_count} customers created")
     print(f"  {addr_count} addresses created")
-    print(f"\n✓ Done! {prod_count} products + {partner_count} customers seeded.")
+
+    # ── Seed contacts ─────────────────────────────────────────────────────────
+    print("\n--- Seeding contacts ---")
+    contact_count = 0
+    for ct in contacts:
+        code = (ct.get("code") or "").strip()
+        name = (ct.get("name") or "").strip()
+        if not code or not name:
+            continue
+        db.add(Contact(
+            code=code,
+            title=(ct.get("title") or "").strip() or None,
+            name=name,
+            job_title=(ct.get("job_title") or "").strip() or None,
+            phone=(ct.get("phone") or "").strip() or None,
+            phone_work=(ct.get("phone_work") or "").strip() or None,
+            email=(ct.get("email") or "").strip() or None,
+            email_personal=(ct.get("email_personal") or "").strip() or None,
+            organization=(ct.get("organization") or "").strip() or None,
+            delivery_address=(ct.get("delivery_address") or "").strip() or None,
+            address=(ct.get("address") or "").strip() or None,
+            city=(ct.get("city") or "").strip() or None,
+            district=(ct.get("district") or "").strip() or None,
+            ward=(ct.get("ward") or "").strip() or None,
+            owner=(ct.get("owner") or "").strip() or None,
+        ))
+        contact_count += 1
+    db.commit()
+    db.close()
+    print(f"  {contact_count} contacts created")
+    print(f"\n✓ Done! {prod_count} products + {partner_count} customers + {contact_count} contacts seeded.")
 
 
 main()

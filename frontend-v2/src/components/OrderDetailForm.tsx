@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable } from 'antd'
 import { SearchOutlined, PlusOutlined, GiftOutlined, PercentageOutlined, ExclamationCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
-import SelectPopup from '@/components/SelectPopup'
 import type { OrderLine } from '@/types/order'
-import { fetchCustomers } from '@/utils/catalogStore'
+import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { getBestMatch, matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import dayjs from 'dayjs'
 
@@ -73,30 +72,21 @@ function isSystemLine(line: Partial<OrderLine>): boolean {
   return line.mapping_status === 'overridden'
 }
 
-const POPUP_CONFIGS = {
-  customer: {
-    title: 'Chọn khách hàng',
-    columns: [
-      { title: 'Mã KH', dataIndex: 'code', width: 120, nowrap: true },
-      { title: 'Loại KH', dataIndex: 'type', width: 160, nowrap: true },
-      { title: 'Tên khách hàng', dataIndex: 'name', width: 320, nowrap: true },
-      { title: 'Mã số thuế', dataIndex: 'tax_code', width: 130, nowrap: true },
-      { title: 'Điện thoại', dataIndex: 'phone', width: 130, nowrap: true },
-      { title: 'Email', dataIndex: 'email', width: 240, nowrap: true },
-      { title: 'Lĩnh vực', dataIndex: 'field', width: 140, nowrap: true },
-      { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', width: 360, nowrap: true },
-      { title: 'Tỉnh/TP (HĐ)', dataIndex: 'invoice_city', width: 150, nowrap: true },
-      { title: 'Quận/Huyện (HĐ)', dataIndex: 'invoice_district', width: 160, nowrap: true },
-      { title: 'Phường/Xã (HĐ)', dataIndex: 'invoice_ward', width: 160, nowrap: true },
-      { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', width: 360, nowrap: true },
-      { title: 'Mô tả', dataIndex: 'description', width: 200, nowrap: true },
-      { title: 'Chủ sở hữu', dataIndex: 'owner', width: 200, nowrap: true },
-    ],
-  },
-} as const
-
 type PopupType = 'customer' | null
 type CustomerData = Record<string, string>
+
+function contactToCustomerData(contact: Contact, matchedCustomer: CustomerData | null): CustomerData {
+  const addr = contact.delivery_address || contact.address || ''
+  return {
+    ...(matchedCustomer || {}),
+    contact: contact.name,
+    contact_code: contact.code,
+    contact_phone: contact.phone || contact.phone_work || '',
+    contact_email: contact.email || contact.email_personal || '',
+    ...(addr && !matchedCustomer ? { invoice_address: addr, delivery_address: addr } : {}),
+    ...(contact.city && !matchedCustomer ? { invoice_city: contact.city } : {}),
+  }
+}
 
 interface Props {
   orderId: string
@@ -159,6 +149,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const [activePopup, setActivePopup] = useState<PopupType>(null)
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData | null>(null)
+  const [selectedContactName, setSelectedContactName] = useState('')
   const [loading, setLoading] = useState(true)
   const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
   const [discountValue, setDiscountValue] = useState<number | null>(null)
@@ -181,12 +172,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       if (customerData) {
         setSelectedCustomer(customerData.name || order.recipient_name || '')
         setSelectedCustomerData(customerData)
+        setSelectedContactName(String(order.extra_data?.contact || ''))
       } else if (order.recipient_name) {
         setSelectedCustomer(order.recipient_name)
         setSelectedCustomerData(null)
+        setSelectedContactName('')
       } else {
         setSelectedCustomer('')
         setSelectedCustomerData(null)
+        setSelectedContactName('')
       }
       // Auto-map
       const mappedLines = (order.lines || []).map(line => {
@@ -236,11 +230,29 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
     } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
   }
 
-  const handlePopupSelect = (record: Record<string, unknown>) => {
-    const customerData = toCustomerData(record)
-    setSelectedCustomer(customerData?.name || customerData?.code || '')
-    setSelectedCustomerData(customerData)
-    form.setFieldValue('partner_id', record.code)
+
+  const handleCustomerContactResult = (result: CustomerContactResult) => {
+    if (result.type === 'customer') {
+      const customerData = toCustomerData(result.customer as unknown as Record<string, unknown>)
+      setSelectedCustomer(customerData?.name || '')
+      setSelectedCustomerData(customerData)
+      setSelectedContactName('')
+      form.setFieldValue('partner_id', result.customer.code)
+    } else {
+      const matchedCustomerData = result.customer
+        ? toCustomerData(result.customer as unknown as Record<string, unknown>)
+        : null
+      const merged = contactToCustomerData(result.contact, matchedCustomerData)
+      if (matchedCustomerData) {
+        setSelectedCustomer(matchedCustomerData.name || '')
+        setSelectedCustomerData(merged)
+        form.setFieldValue('partner_id', result.customer!.code)
+      } else {
+        setSelectedCustomer(result.contact.organization || result.contact.name)
+        setSelectedCustomerData(merged)
+      }
+      setSelectedContactName(result.contact.name)
+    }
     setActivePopup(null)
   }
 
@@ -261,6 +273,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Khách hàng"><InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
+          <Form.Item label="Liên hệ"><InputWithPopup value={selectedContactName} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
           <Form.Item label={<>Hạn thanh toán <span className="text-red-500">*</span></>} name="payment_due"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
           <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
@@ -393,18 +406,12 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         onCancel={() => setProductModalIdx(null)}
       />
 
-      {/* Customer popup */}
-      {activePopup && (
-        <SelectPopup
-          open={true}
-          title={POPUP_CONFIGS.customer.title}
-          columns={[...POPUP_CONFIGS.customer.columns]}
-          fetchData={async (s, skip, limit) => { const r = await fetchCustomers(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
-          onSelect={handlePopupSelect}
-          onCancel={() => setActivePopup(null)}
-          rowKey="code"
-        />
-      )}
+      {/* Customer + Contact popup */}
+      <CustomerContactPopup
+        open={!!activePopup}
+        onSelect={handleCustomerContactResult}
+        onCancel={() => setActivePopup(null)}
+      />
 
       {/* Discount modal */}
       {discountModalOpen && (

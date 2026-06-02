@@ -31,8 +31,9 @@ import {
 } from '@/api/orders'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
-import { preloadCatalogs, fetchProducts, fetchCustomers } from '@/utils/catalogStore'
+import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
+import CustomerContactPopup, { type CustomerContactResult } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import client from '@/api/client'
 
@@ -83,7 +84,7 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
   }
 }
 
-function buildCustomerExtraData(customer: Customer): Record<string, string> {
+function buildCustomerExtraData(customer: Customer, contactName = ''): Record<string, string> {
   const invoiceAddress = customer.invoice_address || ''
   const deliveryAddress = customer.delivery_address || invoiceAddress
   return {
@@ -116,6 +117,7 @@ function buildCustomerExtraData(customer: Customer): Record<string, string> {
     delivery_ward: customer.invoice_ward || '',
     delivery_street: deliveryAddress,
     order_type: 'Kênh MT',
+    ...(contactName ? { contact: contactName } : {}),
   }
 }
 
@@ -203,17 +205,31 @@ export default function OrdersPage() {
     }
     catch (e: any) { message.error(e?.response?.data?.detail || 'Mapping thất bại') }
   }
-  const handleSelectCustomer = async (orderId: string, customer: Customer) => {
+  const handleSelectCustomer = async (orderId: string, customer: Customer, contactName = '') => {
     try {
-      const extraData = buildCustomerExtraData(customer)
+      const extraData = buildCustomerExtraData(customer, contactName)
       await client.patch(`/documents/orders/${orderId}`, { recipient_name: customer.name, description: extraData.invoice_address, extra_data: extraData })
-      // Optimistic update: patch the local cache immediately
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
         return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, recipient_name: customer.name, description: extraData.invoice_address, delivery_address: extraData.delivery_address || extraData.invoice_address, extra_data: extraData } : o) }
       })
-      message.success(`KH: ${customer.name}`); setCustomerModalOpen(false); setSelectedOrderId(null)
+      const label = contactName ? `Liên hệ: ${contactName} — KH: ${customer.name}` : `KH: ${customer.name}`
+      message.success(label); setCustomerModalOpen(false); setSelectedOrderId(null)
     } catch { message.error('Cập nhật thất bại') }
+  }
+
+  const handleCustomerContactSelect = async (orderId: string, result: CustomerContactResult) => {
+    if (result.type === 'customer') {
+      await handleSelectCustomer(orderId, result.customer)
+    } else {
+      if (result.customer) {
+        await handleSelectCustomer(orderId, result.customer, result.contact.name)
+      } else {
+        // Contact có tổ chức nhưng không match được KH → chỉ lưu liên hệ, dùng org name làm recipient
+        message.warning(`Không tìm thấy công ty "${result.contact.organization}" trong danh sách KH`)
+        setCustomerModalOpen(false); setSelectedOrderId(null)
+      }
+    }
   }
   const handleExport = (sid: string) => {
     const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
@@ -634,12 +650,12 @@ export default function OrdersPage() {
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
         initialSearch={selectedLine ? (getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
 
-      {/* Customer SelectPopup */}
-      <SelectPopup open={customerModalOpen} title="Chọn khách hàng"
-        columns={[{ title: 'Mã KH', dataIndex: 'code', width: 90, nowrap: true }, { title: 'Tên khách hàng', dataIndex: 'name', width: 280 }, { title: 'MST', dataIndex: 'tax_code', width: 110, nowrap: true }, { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address' }, { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 100, nowrap: true }]}
-        fetchData={async (s, skip, limit) => { const r = await fetchCustomers(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
-        onSelect={r => { if (selectedOrderId) handleSelectCustomer(selectedOrderId, r as unknown as Customer) }}
-        onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }} rowKey="code" />
+      {/* Customer + Contact Popup */}
+      <CustomerContactPopup
+        open={customerModalOpen}
+        onSelect={result => { if (selectedOrderId) handleCustomerContactSelect(selectedOrderId, result) }}
+        onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }}
+      />
 
       {/* Detail Modal */}
       {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
