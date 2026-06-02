@@ -132,15 +132,30 @@ def map_temp_code(
 
     updated = mapping_service.map_temp_code_to_product(db, temp_code, product_id)
 
-    # Auto-learn: save alias from OCR name → product code
-    sample_name = body.new_product_name or temp_code
-    # Try to get the real OCR name from order lines
-    from app.models.document import OrderLine
+    # Auto-learn: save alias (external_name, customer_code) → product_code
+    from app.models.document import OrderLine, ProcessedOrder
     line = db.query(OrderLine).filter(OrderLine.temp_code == temp_code).first()
-    if line and line.product_name_original:
-        sample_name = line.product_name_original
-    upsert_alias(db, external_key=sample_name, product_code=product.code,
-                 product_name=product.display_name or "", source="auto_learn")
+    sample_name = (line.product_name_original if line and line.product_name_original
+                   else body.new_product_name or temp_code)
+    # Extract customer_code from the order's extra_data
+    customer_code = None
+    if line:
+        order = db.query(ProcessedOrder).filter(ProcessedOrder.id == line.processed_order_id).first()
+        if order and order.extra_data:
+            customer_code = order.extra_data.get("customer_code") or None
+        # Also try contact_code
+        contact_code = order.extra_data.get("contact_code") if order and order.extra_data else None
+    else:
+        contact_code = None
+    upsert_alias(
+        db,
+        external_key=sample_name,
+        product_code=product.code,
+        customer_code=customer_code,
+        product_name=product.display_name or "",
+        contact_code=contact_code,
+        source="auto_learn",
+    )
 
     db.commit()
     return {

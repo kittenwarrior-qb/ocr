@@ -18,8 +18,10 @@ def _out(a: SkuAlias) -> dict:
         "id": str(a.id),
         "external_key": a.external_key,
         "external_normalized": a.external_normalized,
+        "customer_code": a.customer_code or "",
         "product_code": a.product_code,
         "product_name": a.product_name or "",
+        "contact_code": a.contact_code or "",
         "source": a.source,
         "note": a.note or "",
         "created_at": a.created_at.isoformat(),
@@ -49,13 +51,15 @@ def list_aliases(
 
 @router.get("/preload")
 def preload_aliases(db: Session = Depends(get_db)):
-    """Return all aliases for frontend cache (up to 10k)."""
+    """Return all aliases for frontend in-memory cache (up to 10k rows)."""
     items = db.query(SkuAlias).order_by(SkuAlias.updated_at.desc()).limit(10000).all()
     return [
         {
             "external_normalized": a.external_normalized,
+            "customer_code": a.customer_code or "",
             "product_code": a.product_code,
             "product_name": a.product_name or "",
+            "contact_code": a.contact_code or "",
             "updated_at": a.updated_at.isoformat(),
         }
         for a in items
@@ -72,7 +76,9 @@ def create_alias(body: dict, db: Session = Depends(get_db)):
         db,
         external_key=key,
         product_code=code,
+        customer_code=(body.get("customer_code") or None),
         product_name=(body.get("product_name") or "").strip(),
+        contact_code=(body.get("contact_code") or None),
         source=body.get("source", "manual"),
         note=(body.get("note") or "").strip(),
     )
@@ -119,9 +125,9 @@ def export_aliases(db: Session = Depends(get_db)):
     items = db.query(SkuAlias).order_by(SkuAlias.external_key).all()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["external_key", "product_code", "product_name", "source", "note"])
+    writer.writerow(["external_key", "customer_code", "product_code", "product_name", "contact_code", "source", "note"])
     for a in items:
-        writer.writerow([a.external_key, a.product_code, a.product_name or "", a.source, a.note or ""])
+        writer.writerow([a.external_key, a.customer_code or "", a.product_code, a.product_name or "", a.contact_code or "", a.source, a.note or ""])
     buf.seek(0)
     return StreamingResponse(
         iter([buf.getvalue()]),

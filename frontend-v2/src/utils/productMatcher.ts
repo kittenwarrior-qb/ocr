@@ -65,23 +65,33 @@ export interface MatchResult {
   score: number
 }
 
-/** Check alias dictionary first — returns exact-match product if found */
-function checkAlias(ocrName: string): Product | null {
+/**
+ * Check alias cache with priority:
+ *   1. (norm, customerCode)  — customer-specific
+ *   2. (norm, "")            — generic fallback
+ */
+function checkAlias(ocrName: string, customerCode = ''): Product | null {
   const aliases = getAliases()
   if (!aliases.length) return null
   const norm = normalize(ocrName)
-  // exact normalized match
-  const hit = aliases.find(a => a.external_normalized === norm)
-  if (!hit) return null
   const products = getProducts()
-  return products.find(p => p.code === hit.product_code) || null
+
+  // Priority 1: customer-specific
+  if (customerCode) {
+    const hit = aliases.find(a => a.external_normalized === norm && a.customer_code === customerCode)
+    if (hit) return products.find(p => p.code === hit.product_code) || null
+  }
+  // Priority 2: generic
+  const generic = aliases.find(a => a.external_normalized === norm && !a.customer_code)
+  if (generic) return products.find(p => p.code === generic.product_code) || null
+  return null
 }
 
-export function matchProduct(ocrName: string, topN = 5): MatchResult[] {
+export function matchProduct(ocrName: string, topN = 5, customerCode = ''): MatchResult[] {
   if (!ocrName?.trim()) return []
 
-  // 1. Check alias dictionary — treat as score 1.0 if found
-  const aliasHit = checkAlias(ocrName)
+  // 1. Check alias dictionary (exact, customer-aware) — score 1.0
+  const aliasHit = checkAlias(ocrName, customerCode)
   if (aliasHit) {
     const rest = matchProduct_fuzzy(ocrName, topN - 1).filter(r => r.product.code !== aliasHit.code)
     return [{ product: aliasHit, score: 1.0 }, ...rest].slice(0, topN)
@@ -102,9 +112,8 @@ function matchProduct_fuzzy(ocrName: string, topN: number): MatchResult[] {
   return results.filter(r => r.score > 0.2).sort((a, b) => b.score - a.score).slice(0, topN)
 }
 
-export function getBestMatch(ocrName: string, threshold = 0.5): Product | null {
-  // Alias hit always wins
-  const aliasHit = checkAlias(ocrName)
+export function getBestMatch(ocrName: string, threshold = 0.5, customerCode = ''): Product | null {
+  const aliasHit = checkAlias(ocrName, customerCode)
   if (aliasHit) return aliasHit
   const results = matchProduct_fuzzy(ocrName, 1)
   if (!results.length || results[0].score < threshold) return null

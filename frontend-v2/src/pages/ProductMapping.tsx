@@ -65,7 +65,7 @@ export default function ProductMappingPage() {
     const values = await form.validateFields()
     setSaving(true)
     try {
-      await client.post('/sku-aliases', { ...values, source: editItem ? (editItem.source || 'manual') : 'manual' })
+      await client.post('/sku-aliases', { ...values, source: editItem ? (editItem.source || 'manual') : 'manual', customer_code: values.customer_code || null, contact_code: values.contact_code || null })
       message.success(editItem ? 'Đã cập nhật' : 'Đã thêm')
       setAddOpen(false)
       setEditItem(null)
@@ -109,7 +109,7 @@ export default function ProductMappingPage() {
 
   const openEdit = (item: SkuAlias) => {
     setEditItem(item)
-    form.setFieldsValue({ external_key: item.external_key, product_code: item.product_code, product_name: item.product_name, note: item.note })
+    form.setFieldsValue({ external_key: item.external_key, customer_code: item.customer_code, product_code: item.product_code, product_name: item.product_name, contact_code: item.contact_code, note: item.note })
     setAddOpen(true)
   }
 
@@ -178,10 +178,10 @@ export default function ProductMappingPage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <th className="px-3 py-2.5 text-left">Tên/SKU trên PDF (external key)</th>
+                  <th className="px-3 py-2.5 text-left w-28">Mã KH</th>
                   <th className="px-3 py-2.5 text-left w-32">Mã hàng hóa</th>
                   <th className="px-3 py-2.5 text-left">Tên hàng hóa</th>
                   <th className="px-2 py-2.5 text-center w-24">Nguồn</th>
-                  <th className="px-3 py-2.5 text-left w-32">Ghi chú</th>
                   <th className="px-2 py-2.5 text-center w-36">Cập nhật</th>
                   <th className="px-2 py-2.5 text-center w-20"></th>
                 </tr>
@@ -193,6 +193,7 @@ export default function ProductMappingPage() {
                       <div className="font-medium text-slate-800">{row.external_key}</div>
                       <div className="text-slate-400 text-[10px] font-mono mt-0.5">{row.external_normalized}</div>
                     </td>
+                    <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">{row.customer_code || <span className="text-slate-300 text-[10px]">tất cả</span>}</td>
                     <td className="px-3 py-2 font-mono font-bold text-blue-700">{row.product_code}</td>
                     <td className="px-3 py-2 text-slate-600">{row.product_name || '—'}</td>
                     <td className="px-2 py-2 text-center">
@@ -200,7 +201,6 @@ export default function ProductMappingPage() {
                         {SOURCE_LABEL[row.source] || row.source}
                       </Tag>
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{row.note || '—'}</td>
                     <td className="px-2 py-2 text-center text-slate-400">
                       {new Date(row.updated_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
@@ -265,6 +265,14 @@ export default function ProductMappingPage() {
           >
             <Input placeholder="Nhập đúng text xuất hiện trong PDF..." />
           </Form.Item>
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item label="Mã khách hàng (tuỳ chọn)" name="customer_code" extra="Để trống = áp dụng tất cả KH">
+              <Input placeholder="KH70000401" />
+            </Form.Item>
+            <Form.Item label="Mã liên hệ (tuỳ chọn)" name="contact_code">
+              <Input placeholder="LH0000051" />
+            </Form.Item>
+          </div>
           <Form.Item
             label="Mã hàng hóa nội bộ"
             name="product_code"

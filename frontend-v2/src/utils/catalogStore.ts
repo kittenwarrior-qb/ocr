@@ -99,8 +99,10 @@ export async function reloadAliases(): Promise<void> {
 
 export interface SkuAlias {
   external_normalized: string
+  customer_code: string   // "" means generic (applies to all)
   product_code: string
   product_name: string
+  contact_code: string
   updated_at: string
 }
 
