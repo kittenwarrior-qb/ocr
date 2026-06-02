@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ocr_risk}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      # Trust all connections from within Docker network — no password needed internally
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5433:5432"
     volumes:
