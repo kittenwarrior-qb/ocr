@@ -656,7 +656,7 @@ export default function OrdersPage() {
                       <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0).toLocaleString('vi-VN')}</span>
                       <span className="w-16" />
                       <span className="text-xs text-slate-600 w-[72px] text-right">{order.lines.reduce((s,l)=>{const r=Number(l.tax_rate)||0;return s+Math.round((Number(l.line_total)||0)*r/100)},0).toLocaleString('vi-VN')}</span>
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>{const lt=Number(l.line_total)||0;const tx=Math.round(lt*(Number(l.tax_rate)||0)/100);return s+lt+tx},0).toLocaleString('vi-VN')}</span>
                       <span className="w-16" />
                     </div>
                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">

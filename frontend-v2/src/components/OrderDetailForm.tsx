@@ -193,11 +193,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
     }).catch(() => { setLoading(false) })
   }, [orderId, form])
 
-  // Tự động đồng bộ tổng tiền khi đổi dòng hàng
+  // Tự động đồng bộ tổng tiền (bao gồm thuế) khi đổi dòng hàng
   useEffect(() => {
     if (loading) return
-    const subtotal = lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0)
-    form.setFieldValue('total_amount', subtotal)
+    const totalWithTax = lines.reduce((s, l) => {
+      const lt = Number(l.line_total) || 0
+      const tx = Math.round(lt * (Number(l.tax_rate) || 0) / 100)
+      return s + lt + tx
+    }, 0)
+    form.setFieldValue('total_amount', totalWithTax)
   }, [lines, form, loading])
 
   const updateLine = (i: number, field: string, value: unknown) => {

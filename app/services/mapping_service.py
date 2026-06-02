@@ -384,8 +384,9 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
         line.product_id = product_id
         if product:
             line.product_name_original = product.display_name or line.product_name_original
+            line.ocr_product_code = product.code  # update to mapped code so chi tiết shows correct code
             line.uom_original = product.uom or line.uom_original
-            if product.price is not None:
+            if product.price and product.price > 0:
                 line.unit_price = product.price
                 if line.quantity is not None:
                     line.line_total = line.quantity * product.price
