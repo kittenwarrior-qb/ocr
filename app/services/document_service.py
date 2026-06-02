@@ -349,7 +349,7 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
             tax_rate=tax_rate,
             line_total=line_total,
             uom_original=item.get("unit"),
-            mapping_status="mapped" if product_id else "pending",
+            mapping_status="pending"  # Always pending — user must confirm,
         )
         db.add(line)
         lines.append(line)
@@ -387,7 +387,7 @@ def _build_bill_lines(db: Session, bill_id: UUID, items: list) -> list[BillLine]
             tax_rate=tax_rate,
             line_total=line_total,
             uom_original=item.get("unit"),
-            mapping_status="mapped" if product_id else "pending",
+            mapping_status="pending"  # Always pending — user must confirm,
         )
         db.add(line)
         lines.append(line)

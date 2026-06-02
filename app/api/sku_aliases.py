@@ -13,6 +13,58 @@ from app.services.sku_alias_service import upsert_alias, bulk_upsert, normalize_
 router = APIRouter(prefix="/sku-aliases", tags=["SkuAliases"])
 
 
+@router.get("/temp-mappings")
+def list_temp_mappings(
+    search: str = "",
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    """Return TempCodeMapping (the actual auto-map dictionary) with product info."""
+    from app.models.mapping import TempCodeMapping
+    from app.models.document import OrderLine
+    from app.models.product import Product
+    from sqlalchemy import func
+
+    q = db.query(TempCodeMapping)
+    if search:
+        q = q.filter(TempCodeMapping.temp_code.ilike(f"%{search}%"))
+
+    total = q.count()
+    mappings = q.order_by(TempCodeMapping.last_used_at.desc()).offset(skip).limit(limit).all()
+
+    # Get sample OCR names from order lines
+    temp_codes = [m.temp_code for m in mappings]
+    name_rows = (
+        db.query(OrderLine.temp_code, OrderLine.product_name_original,
+                 func.count(OrderLine.id).label("cnt"))
+        .filter(OrderLine.temp_code.in_(temp_codes))
+        .group_by(OrderLine.temp_code, OrderLine.product_name_original)
+        .all()
+    )
+    name_map: dict[str, str] = {}
+    cnt_map: dict[str, int] = {}
+    for tc, name, cnt in name_rows:
+        if cnt > cnt_map.get(tc, 0):
+            name_map[tc] = name
+            cnt_map[tc] = cnt
+
+    result = []
+    for m in mappings:
+        product = db.query(Product).filter(Product.id == m.product_id).first() if m.product_id else None
+        result.append({
+            "id": str(m.id),
+            "temp_code": m.temp_code,
+            "ocr_name": name_map.get(m.temp_code, ""),
+            "product_code": product.code if product else "",
+            "product_name": product.display_name if product else "",
+            "status": m.status,
+            "usage_count": cnt_map.get(m.temp_code, 0),
+            "last_used_at": m.last_used_at.isoformat(),
+        })
+    return {"items": result, "total": total}
+
+
 def _out(a: SkuAlias) -> dict:
     return {
         "id": str(a.id),
