@@ -11,8 +11,10 @@ interface SkuAlias {
   id: string
   external_key: string
   external_normalized: string
+  customer_code: string
   product_code: string
   product_name: string
+  contact_code: string
   source: string
   note: string
   created_at: string
