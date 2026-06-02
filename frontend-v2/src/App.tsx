@@ -55,7 +55,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
       <nav className="mt-1">
         {items.map(item => {
-          const active = location.pathname.startsWith(item.key)
+          const active = location.pathname === item.key || location.pathname.startsWith(item.key + '/')
           return (
             <button
               key={item.key}

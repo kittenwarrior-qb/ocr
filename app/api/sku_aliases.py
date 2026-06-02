@@ -137,6 +137,18 @@ def create_alias(body: dict, db: Session = Depends(get_db)):
     return _out(alias)
 
 
+@router.delete("/temp/{mapping_id}")
+def delete_temp_mapping(mapping_id: UUID, db: Session = Depends(get_db)):
+    """Delete a TempCodeMapping entry."""
+    from app.models.mapping import TempCodeMapping
+    m = db.query(TempCodeMapping).filter(TempCodeMapping.id == mapping_id).first()
+    if not m:
+        raise HTTPException(404, "Not found")
+    db.delete(m)
+    db.commit()
+    return {"deleted": str(mapping_id)}
+
+
 @router.delete("/{alias_id}")
 def delete_alias(alias_id: UUID, db: Session = Depends(get_db)):
     a = db.query(SkuAlias).filter(SkuAlias.id == alias_id).first()

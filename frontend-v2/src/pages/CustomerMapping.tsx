@@ -211,24 +211,20 @@ export default function CustomerMappingPage() {
   )
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="mb-5">
-        <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><TeamOutlined />Mapping Khách hàng</h1>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Ba lớp nhận diện khách hàng — MST đáng tin nhất, tên công ty tự học, địa chỉ tham khảo thêm.
-        </p>
+    <div className="p-5 max-w-[1400px] mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-base font-semibold text-gray-800 flex items-center gap-2"><TeamOutlined />Mapping Khách hàng</h1>
       </div>
 
-      {/* Info banner */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      {/* Compact info strip */}
+      <div className="flex gap-2 mb-4">
         {[
-          { icon: <SafetyCertificateOutlined className="text-emerald-500" />, label: 'MST Mapping', desc: 'Mã số thuế → KH. Chính xác nhất, không bao giờ sai.', color: 'border-emerald-200 bg-emerald-50' },
-          { icon: <ApartmentOutlined className="text-blue-500" />, label: 'Tên công ty', desc: 'Tên OCR → KH. Tự học từ kế toán. Nên review định kỳ.', color: 'border-blue-200 bg-blue-50' },
-          { icon: <HomeOutlined className="text-amber-500" />, label: 'Địa chỉ', desc: 'Địa chỉ OCR → KH. Dùng làm gợi ý phụ thêm.', color: 'border-amber-200 bg-amber-50' },
+          { icon: <SafetyCertificateOutlined className="text-emerald-500" />, label: 'MST', desc: 'Chính xác nhất', color: 'border-emerald-200 bg-emerald-50' },
+          { icon: <ApartmentOutlined className="text-blue-500" />, label: 'Tên công ty', desc: 'Tự học', color: 'border-blue-200 bg-blue-50' },
+          { icon: <HomeOutlined className="text-amber-500" />, label: 'Địa chỉ', desc: 'Phụ trợ', color: 'border-amber-200 bg-amber-50' },
         ].map(s => (
-          <div key={s.label} className={`border rounded-lg px-4 py-3 ${s.color}`}>
-            <div className="flex items-center gap-2 font-semibold text-sm text-slate-700 mb-1">{s.icon}{s.label}</div>
-            <p className="text-xs text-slate-500">{s.desc}</p>
+          <div key={s.label} className={`flex items-center gap-2 border rounded px-3 py-1.5 text-xs ${s.color}`}>
+            {s.icon}<span className="font-semibold text-slate-700">{s.label}</span><span className="text-slate-400">— {s.desc}</span>
           </div>
         ))}
       </div>

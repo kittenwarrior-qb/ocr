@@ -132,189 +132,168 @@ export default function ProductMappingPage() {
     setImportLoading(false); return false
   }
 
+  const handleDeleteTemp = (id: string, label: string) => {
+    Modal.confirm({
+      title: 'Xóa khỏi lịch sử mapping?',
+      content: `"${label}" sẽ bị xóa. Kết quả mapping này sẽ không còn được ghi nhớ.`,
+      okText: 'Xóa', okType: 'danger', cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          await client.delete(`/sku-aliases/temp/${id}`)
+          message.success('Đã xóa'); loadTemp(tempSearch, tempPage)
+        } catch { message.error('Xóa thất bại') }
+      },
+    })
+  }
+
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><SwapOutlined />Mapping hàng hóa</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Lịch sử mapping và dictionary SKU alias. Sản phẩm luôn bắt đầu là <strong>Chờ xác nhận</strong> — kế toán bấm ✓ mới được xác nhận.
-          </p>
-        </div>
+    <div className="p-5 max-w-[1400px] mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-base font-semibold text-gray-800 flex items-center gap-2"><SwapOutlined />Mapping hàng hóa</h1>
       </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={k => setActiveTab(k as any)}
-        items={[
-          {
-            key: 'history',
-            label: `Lịch sử mapping (${tempTotal})`,
-            children: (
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm mã OCR, mã hàng hóa..."
-                    value={tempSearch} onChange={e => { setTempSearch(e.target.value); setTempPage(1) }}
-                    allowClear className="w-80" size="small" />
-                  <div className="flex items-center gap-2">
-                    <Button size="small" icon={<ReloadOutlined />} onClick={() => loadTemp(tempSearch, tempPage)}>Làm mới</Button>
-                    <span className="text-xs text-slate-400">{tempTotal} entries</span>
-                  </div>
-                </div>
-                <Spin spinning={tempLoading}>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                          <th className="px-3 py-2.5 text-left">Mã OCR (temp_code)</th>
-                          <th className="px-3 py-2.5 text-left">Tên sản phẩm OCR</th>
-                          <th className="px-3 py-2.5 text-left w-28">Mã hàng hóa</th>
-                          <th className="px-3 py-2.5 text-left">Tên hàng hóa</th>
-                          <th className="px-2 py-2.5 text-center w-20">Trạng thái</th>
-                          <th className="px-2 py-2.5 text-center w-16">SL dùng</th>
-                          <th className="px-2 py-2.5 text-center w-32">Lần cuối</th>
+      <Tabs activeKey={activeTab} onChange={k => setActiveTab(k as any)} items={[
+        {
+          key: 'history',
+          label: `Lịch sử (${tempTotal})`,
+          children: (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm mã OCR, mã hàng..."
+                  value={tempSearch} onChange={e => { setTempSearch(e.target.value); setTempPage(1) }}
+                  allowClear className="w-72" size="small" />
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => loadTemp(tempSearch, tempPage)} />
+                <span className="ml-auto text-xs text-slate-400">{tempTotal} entries</span>
+              </div>
+              <Spin spinning={tempLoading}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <th className="px-3 py-2 text-left">Mã OCR</th>
+                        <th className="px-3 py-2 text-left">Tên OCR</th>
+                        <th className="px-3 py-2 text-left w-28">Mã hàng hóa</th>
+                        <th className="px-3 py-2 text-left">Tên hàng hóa</th>
+                        <th className="px-2 py-2 text-center w-20">Trạng thái</th>
+                        <th className="px-2 py-2 text-center w-14">Dùng</th>
+                        <th className="px-2 py-2 text-center w-28">Lần cuối</th>
+                        <th className="px-2 py-2 w-10" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tempData.map(row => (
+                        <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 group">
+                          <td className="px-3 py-1.5 font-mono text-slate-600 text-[11px]">{row.temp_code}</td>
+                          <td className="px-3 py-1.5 text-slate-800 font-medium">{row.ocr_name || <span className="text-slate-300">—</span>}</td>
+                          <td className="px-3 py-1.5 font-mono font-bold text-blue-700">{row.product_code || <span className="text-red-400 font-normal">Chưa map</span>}</td>
+                          <td className="px-3 py-1.5 text-slate-600">{row.product_name || '—'}</td>
+                          <td className="px-2 py-1.5 text-center">
+                            <Tag color={row.status === 'mapped' ? 'green' : 'orange'} className="text-[10px] m-0">{row.status === 'mapped' ? 'Đã map' : 'Chờ'}</Tag>
+                          </td>
+                          <td className="px-2 py-1.5 text-center text-slate-500">{row.usage_count}</td>
+                          <td className="px-2 py-1.5 text-center text-slate-400 text-[10px]">{new Date(row.last_used_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' })}</td>
+                          <td className="px-2 py-1.5 text-center opacity-0 group-hover:opacity-100">
+                            <Tooltip title="Xóa"><button className="text-red-400 hover:text-red-600 border border-red-200 rounded px-1 py-0.5 hover:bg-red-50" onClick={() => handleDeleteTemp(row.id, row.ocr_name || row.temp_code)}><DeleteOutlined /></button></Tooltip>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {tempData.map(row => (
-                          <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="px-3 py-2 font-mono text-slate-600">{row.temp_code}</td>
-                            <td className="px-3 py-2 text-slate-800 font-medium">{row.ocr_name || <span className="text-slate-300 italic">—</span>}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-blue-700">{row.product_code || <span className="text-red-400">Chưa map</span>}</td>
-                            <td className="px-3 py-2 text-slate-600">{row.product_name || '—'}</td>
-                            <td className="px-2 py-2 text-center">
-                              <Tag color={row.status === 'mapped' ? 'green' : 'orange'} className="text-[10px]">
-                                {row.status === 'mapped' ? 'Đã map' : 'Chờ'}
-                              </Tag>
-                            </td>
-                            <td className="px-2 py-2 text-center text-slate-500">{row.usage_count}</td>
-                            <td className="px-2 py-2 text-center text-slate-400 text-[10px]">
-                              {new Date(row.last_used_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                            </td>
-                          </tr>
-                        ))}
-                        {!tempLoading && tempData.length === 0 && (
-                          <tr><td colSpan={7} className="text-center py-10 text-slate-400">
-                            Chưa có dữ liệu. Upload PDF và xác nhận mapping để bắt đầu.
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </Spin>
-                <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>{tempTotal} entries · trang {tempPage}/{Math.ceil(tempTotal / PAGE_SIZE) || 1}</span>
-                  <div className="flex gap-1">
-                    <Button size="small" disabled={tempPage <= 1} onClick={() => setTempPage(p => p - 1)}>← Trước</Button>
-                    <Button size="small" disabled={tempPage * PAGE_SIZE >= tempTotal} onClick={() => setTempPage(p => p + 1)}>Tiếp →</Button>
-                  </div>
+                      ))}
+                      {!tempLoading && tempData.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-slate-400">Chưa có dữ liệu</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Spin>
+              <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>{tempTotal} entries · trang {tempPage}/{Math.ceil(tempTotal / PAGE_SIZE) || 1}</span>
+                <div className="flex gap-1">
+                  <Button size="small" disabled={tempPage <= 1} onClick={() => setTempPage(p => p - 1)}>←</Button>
+                  <Button size="small" disabled={tempPage * PAGE_SIZE >= tempTotal} onClick={() => setTempPage(p => p + 1)}>→</Button>
                 </div>
               </div>
-            ),
-          },
-          {
-            key: 'aliases',
-            label: `SKU Alias thủ công (${aliasTotal})`,
-            children: (
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm tên OCR, mã hàng hóa..."
-                    value={aliasSearch} onChange={e => { setAliasSearch(e.target.value); setAliasPage(1) }}
-                    allowClear className="w-80" size="small" />
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-xs text-slate-400"><RobotOutlined className="text-emerald-500" />Tự học khi kế toán xác nhận</span>
-                    <Upload accept=".csv,.json" showUploadList={false} beforeUpload={handleImport}>
-                      <Button icon={<UploadOutlined />} loading={importLoading} size="small">Import</Button>
-                    </Upload>
-                    <Button icon={<DownloadOutlined />} size="small" onClick={() => {
-                      const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
-                      window.open(`${base}/sku-aliases/export`, '_blank')
-                    }}>Export</Button>
-                    <Button type="primary" icon={<PlusOutlined />} size="small" onClick={() => { setEditItem(null); form.resetFields(); setAddOpen(true) }}>Thêm alias</Button>
-                  </div>
-                </div>
-                <Spin spinning={aliasLoading}>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                          <th className="px-3 py-2.5 text-left">Tên/SKU trên PDF</th>
-                          <th className="px-3 py-2.5 text-left w-28">Mã KH</th>
-                          <th className="px-3 py-2.5 text-left w-28">Mã hàng hóa</th>
-                          <th className="px-3 py-2.5 text-left">Tên hàng hóa</th>
-                          <th className="px-2 py-2.5 text-center w-20">Nguồn</th>
-                          <th className="px-2 py-2.5 text-center w-32">Cập nhật</th>
-                          <th className="px-2 py-2.5 text-center w-16"></th>
+            </div>
+          ),
+        },
+        {
+          key: 'aliases',
+          label: `SKU Alias (${aliasTotal})`,
+          children: (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm tên OCR, mã hàng..."
+                  value={aliasSearch} onChange={e => { setAliasSearch(e.target.value); setAliasPage(1) }}
+                  allowClear className="w-72" size="small" />
+                <Upload accept=".csv,.json" showUploadList={false} beforeUpload={handleImport}>
+                  <Button icon={<UploadOutlined />} loading={importLoading} size="small">Import</Button>
+                </Upload>
+                <Button icon={<DownloadOutlined />} size="small" onClick={() => { const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, ''); window.open(`${base}/sku-aliases/export`, '_blank') }}>Export</Button>
+                <Button type="primary" icon={<PlusOutlined />} size="small" onClick={() => { setEditItem(null); form.resetFields(); setAddOpen(true) }}>Thêm</Button>
+                <span className="ml-auto text-xs text-slate-400">{aliasTotal} entries</span>
+              </div>
+              <Spin spinning={aliasLoading}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <th className="px-3 py-2 text-left">Tên/SKU trên PDF</th>
+                        <th className="px-3 py-2 text-left w-24">Mã KH</th>
+                        <th className="px-3 py-2 text-left w-28">Mã hàng hóa</th>
+                        <th className="px-3 py-2 text-left">Tên hàng hóa</th>
+                        <th className="px-2 py-2 text-center w-20">Nguồn</th>
+                        <th className="px-2 py-2 text-center w-28">Cập nhật</th>
+                        <th className="px-2 py-2 w-16" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aliasData.map(row => (
+                        <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 group">
+                          <td className="px-3 py-1.5">
+                            <div className="font-medium text-slate-800">{row.external_key}</div>
+                            <div className="text-[10px] font-mono text-slate-400">{row.external_normalized}</div>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-slate-500">{row.customer_code || <span className="text-slate-300 text-[10px]">tất cả</span>}</td>
+                          <td className="px-3 py-1.5 font-mono font-bold text-blue-700">{row.product_code}</td>
+                          <td className="px-3 py-1.5 text-slate-600">{row.product_name || '—'}</td>
+                          <td className="px-2 py-1.5 text-center"><Tag color={SOURCE_COLOR[row.source] || 'default'} className="text-[10px] m-0">{SOURCE_LABEL[row.source] || row.source}</Tag></td>
+                          <td className="px-2 py-1.5 text-center text-[10px] text-slate-400">{new Date(row.updated_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td className="px-2 py-1.5 text-center">
+                            <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100">
+                              <button className="text-[10px] text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-50" onClick={() => { setEditItem(row); form.setFieldsValue({ external_key: row.external_key, customer_code: row.customer_code, product_code: row.product_code, product_name: row.product_name, note: row.note }); setAddOpen(true) }}>Sửa</button>
+                              <Tooltip title="Xóa"><button className="text-red-400 hover:text-red-600 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50" onClick={() => handleDeleteAlias(row.id, row.external_key)}><DeleteOutlined /></button></Tooltip>
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {aliasData.map(row => (
-                          <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 group">
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-slate-800">{row.external_key}</div>
-                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">{row.external_normalized}</div>
-                            </td>
-                            <td className="px-3 py-2 font-mono text-slate-500">{row.customer_code || <span className="text-slate-300 text-[10px]">tất cả</span>}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-blue-700">{row.product_code}</td>
-                            <td className="px-3 py-2 text-slate-600">{row.product_name || '—'}</td>
-                            <td className="px-2 py-2 text-center">
-                              <Tag color={SOURCE_COLOR[row.source] || 'default'} className="text-[10px]">
-                                {SOURCE_LABEL[row.source] || row.source}
-                              </Tag>
-                            </td>
-                            <td className="px-2 py-2 text-center text-[10px] text-slate-400">
-                              {new Date(row.updated_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            </td>
-                            <td className="px-2 py-2 text-center">
-                              <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100">
-                                <button className="text-blue-500 hover:text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 text-[10px]"
-                                  onClick={() => { setEditItem(row); form.setFieldsValue({ external_key: row.external_key, customer_code: row.customer_code, product_code: row.product_code, product_name: row.product_name, note: row.note }); setAddOpen(true) }}>Sửa</button>
-                                <Tooltip title="Xóa">
-                                  <button className="text-red-400 hover:text-red-600 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50"
-                                    onClick={() => handleDeleteAlias(row.id, row.external_key)}><DeleteOutlined /></button>
-                                </Tooltip>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {!aliasLoading && aliasData.length === 0 && (
-                          <tr><td colSpan={7} className="text-center py-10 text-slate-400">
-                            Chưa có alias. Alias tự học khi kế toán bấm ✓ trong đơn hàng, hoặc thêm thủ công.
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </Spin>
-                <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>{aliasTotal} alias · trang {aliasPage}/{Math.ceil(aliasTotal / PAGE_SIZE) || 1}</span>
-                  <div className="flex gap-1">
-                    <Button size="small" disabled={aliasPage <= 1} onClick={() => setAliasPage(p => p - 1)}>← Trước</Button>
-                    <Button size="small" disabled={aliasPage * PAGE_SIZE >= aliasTotal} onClick={() => setAliasPage(p => p + 1)}>Tiếp →</Button>
-                  </div>
+                      ))}
+                      {!aliasLoading && aliasData.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-slate-400">Chưa có alias. Tự học khi kế toán bấm ✓, hoặc thêm thủ công.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Spin>
+              <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>{aliasTotal} entries · trang {aliasPage}/{Math.ceil(aliasTotal / PAGE_SIZE) || 1}</span>
+                <div className="flex gap-1">
+                  <Button size="small" disabled={aliasPage <= 1} onClick={() => setAliasPage(p => p - 1)}>←</Button>
+                  <Button size="small" disabled={aliasPage * PAGE_SIZE >= aliasTotal} onClick={() => setAliasPage(p => p + 1)}>→</Button>
                 </div>
               </div>
-            ),
-          },
-        ]}
-      />
+            </div>
+          ),
+        },
+      ]} />
 
-      {/* Add/Edit alias modal */}
       <Modal open={addOpen} title={editItem ? 'Sửa alias' : 'Thêm alias'} onCancel={() => { setAddOpen(false); setEditItem(null); form.resetFields() }}
-        onOk={handleSaveAlias} okText={editItem ? 'Cập nhật' : 'Thêm'} confirmLoading={saving} width={520} centered>
+        onOk={handleSaveAlias} okText={editItem ? 'Cập nhật' : 'Thêm'} confirmLoading={saving} width={480} centered>
         <Form form={form} layout="vertical" size="middle" className="mt-3">
-          <Form.Item label="Tên/SKU trên PDF" name="external_key" rules={[{ required: true }]} extra="Text xuất hiện trong PDF">
+          <Form.Item label="Tên/SKU trên PDF" name="external_key" rules={[{ required: true }]}>
             <Input placeholder="VD: 3447920-2 Nuoc t.khiet Satori 500ml" />
           </Form.Item>
           <div className="grid grid-cols-2 gap-3">
-            <Form.Item label="Mã khách hàng (tuỳ chọn)" name="customer_code" extra="Để trống = áp dụng tất cả">
-              <Input placeholder="KH70000401" />
+            <Form.Item label="Mã khách hàng (tuỳ chọn)" name="customer_code">
+              <Input placeholder="KH70000401 (để trống = tất cả)" />
             </Form.Item>
             <Form.Item label="Mã hàng hóa" name="product_code" rules={[{ required: true }]}>
               <Input placeholder="TP-00003NC" />
             </Form.Item>
           </div>
-          <Form.Item label="Tên hàng hóa (tham khảo)" name="product_name">
+          <Form.Item label="Tên hàng hóa" name="product_name">
             <Input placeholder="Tuỳ chọn" />
           </Form.Item>
           <Form.Item label="Ghi chú" name="note">
@@ -322,10 +301,6 @@ export default function ProductMappingPage() {
           </Form.Item>
         </Form>
       </Modal>
-
-      <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-700">
-        <div className="font-semibold flex items-center gap-1 mb-1"><ImportOutlined />Import CSV: <span className="font-mono font-normal ml-1">external_key, customer_code, product_code, product_name, note</span></div>
-      </div>
     </div>
   )
 }
