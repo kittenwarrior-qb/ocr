@@ -272,5 +272,40 @@
         "max_total": 0
       }
     ]
+  },
+  {
+    "code": "KM0000013",
+    "name": "CTKM Hệ Thống Menas",
+    "type": "Mua 1 hàng hóa - đạt số lượng - tặng hàng",
+    "target": "Theo khách hàng cụ thể",
+    "customers": [
+      "KH70000401"
+    ],
+    "description": "Mua 1 tặng 1 hàng 450ml",
+    "from_date": "2026-05-24",
+    "to_date": "2026-06-20",
+    "is_active": true,
+    "apply_with_others": "Áp dụng tất cả chương trình",
+    "multiplier": true,
+    "accumulate": false,
+    "base_on": "Theo hàng hóa",
+    "apply_once": false,
+    "uom_type": "Đơn vị tính chính",
+    "unit_price_type": null,
+    "items": [
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "uom": "Thùng",
+        "quantity": 1,
+        "gift_product_code": "TP-00051",
+        "gift_product_name": "Nước tinh khiết Satori Premium 450ml",
+        "gift_quantity": 1,
+        "gift_uom": "Thùng",
+        "max_per_order": 0,
+        "max_per_customer": 0,
+        "max_total": 0
+      }
+    ]
   }
 ]
