@@ -39,7 +39,6 @@ export interface Order {
   lines: OrderLine[]
   pending_count: number
   mapped_count: number
-  discount_amount?: number | null
 }
 
 export interface RawDocument {
