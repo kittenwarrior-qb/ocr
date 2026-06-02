@@ -434,6 +434,13 @@ def _recalculate_affected_documents(db: Session, temp_code: str) -> None:
     )
     for order in orders:
         _update_document_status(db, order, order.lines)
+        # Recalculate total_amount = sum(line_total + tax) for all lines
+        total = sum(
+            float(l.line_total or 0) * (1 + float(l.tax_rate or 0) / 100)
+            for l in order.lines
+        )
+        if total > 0:
+            order.total_amount = round(total, 2)
 
     bills = (
         db.query(ProcessedBill)
