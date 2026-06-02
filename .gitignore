@@ -48,5 +48,6 @@ Thumbs.db
 
 # ── Else ────────────────────────────────────────────────────────────────────────
 /RawTest
-# ── Seed data (user provides JSON files) ──────────────────────────────────────
-data/*.json
+# ── Seed data (customers/products private, vouchers/contacts tracked) ─────────
+data/customers.json
+data/products.json
