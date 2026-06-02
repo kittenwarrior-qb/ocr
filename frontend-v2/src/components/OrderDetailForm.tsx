@@ -148,12 +148,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const [productModalIdx, setProductModalIdx] = useState<number | null>(null)
   const [activePopup, setActivePopup] = useState<PopupType>(null)
   const [selectedCustomer, setSelectedCustomer] = useState('')
-  const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData | null>(null)
+  const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData>({})
   const [selectedContactName, setSelectedContactName] = useState('')
   const [loading, setLoading] = useState(true)
   const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
   const [discountValue, setDiscountValue] = useState<number | null>(null)
   const [discountModalOpen, setDiscountModalOpen] = useState(false)
+
+  const setCustField = (key: string, val: string) =>
+    setSelectedCustomerData(prev => ({ ...prev, [key]: val }))
 
   useEffect(() => {
     if (!orderId) return
@@ -168,20 +171,17 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         order_type: String(order.extra_data?.order_type || 'Kênh MT'),
         payment_due: order.order_date ? dayjs(order.order_date).add(1, 'month') : null,
       })
-      const customerData = toCustomerData(order.extra_data as Record<string, unknown> | null)
-      if (customerData) {
-        setSelectedCustomer(customerData.name || order.recipient_name || '')
-        setSelectedCustomerData(customerData)
-        setSelectedContactName(String(order.extra_data?.contact || ''))
-      } else if (order.recipient_name) {
-        setSelectedCustomer(order.recipient_name)
-        setSelectedCustomerData(null)
-        setSelectedContactName('')
-      } else {
-        setSelectedCustomer('')
-        setSelectedCustomerData(null)
-        setSelectedContactName('')
-      }
+      const extra = order.extra_data as Record<string, unknown> | null
+      const customerData = toCustomerData(extra)
+      const baseData: CustomerData = customerData || {}
+      setSelectedCustomer(baseData.name || order.recipient_name || '')
+      setSelectedCustomerData({
+        ...baseData,
+        salesperson: String(extra?.salesperson || ''),
+        credit_days: String(extra?.credit_days || ''),
+        contact: String(extra?.contact || ''),
+      })
+      setSelectedContactName(String(extra?.contact || ''))
       // Auto-map
       const mappedLines = (order.lines || []).map(line => {
         if (line.mapping_status === 'mapped') return line
@@ -213,15 +213,20 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
 
   const handleSave = async () => {
     const values = form.getFieldsValue()
-    const meta = selectedCustomerData ? buildExtraData(selectedCustomerData) : {}
-    meta.order_type = values.order_type || 'Kênh MT'
+    const meta: Record<string, string> = {
+      ...buildExtraData(selectedCustomerData),
+      order_type: values.order_type || 'Kênh MT',
+      salesperson: selectedCustomerData.salesperson || '',
+      credit_days: selectedCustomerData.credit_days || '',
+      contact: selectedContactName || selectedCustomerData.contact || '',
+    }
     try {
       await updateOrder(orderId, {
         ...values,
         order_date: values.order_date ? (values.order_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
         delivery_date: values.delivery_date ? (values.delivery_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
         recipient_name: selectedCustomer || null,
-        description: selectedCustomerData?.invoice_address || null,
+        description: selectedCustomerData.invoice_address || null,
         extra_data: meta,
         lines,
       })
@@ -232,26 +237,20 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
 
 
   const handleCustomerContactResult = (result: CustomerContactResult) => {
+    const prevExtra = { salesperson: selectedCustomerData.salesperson || '', credit_days: selectedCustomerData.credit_days || '' }
     if (result.type === 'customer') {
-      const customerData = toCustomerData(result.customer as unknown as Record<string, unknown>)
-      setSelectedCustomer(customerData?.name || '')
-      setSelectedCustomerData(customerData)
+      const d = toCustomerData(result.customer as unknown as Record<string, unknown>) || {}
+      setSelectedCustomer(d.name || '')
+      setSelectedCustomerData({ ...d, ...prevExtra, contact: selectedContactName })
       setSelectedContactName('')
       form.setFieldValue('partner_id', result.customer.code)
     } else {
-      const matchedCustomerData = result.customer
-        ? toCustomerData(result.customer as unknown as Record<string, unknown>)
-        : null
-      const merged = contactToCustomerData(result.contact, matchedCustomerData)
-      if (matchedCustomerData) {
-        setSelectedCustomer(matchedCustomerData.name || '')
-        setSelectedCustomerData(merged)
-        form.setFieldValue('partner_id', result.customer!.code)
-      } else {
-        setSelectedCustomer(result.contact.organization || result.contact.name)
-        setSelectedCustomerData(merged)
-      }
+      const matchedData = result.customer ? toCustomerData(result.customer as unknown as Record<string, unknown>) : null
+      const merged = contactToCustomerData(result.contact, matchedData)
+      setSelectedCustomer(matchedData?.name || result.contact.organization || result.contact.name)
+      setSelectedCustomerData({ ...merged, ...prevExtra })
       setSelectedContactName(result.contact.name)
+      if (result.customer) form.setFieldValue('partner_id', result.customer.code)
     }
     setActivePopup(null)
   }
@@ -273,11 +272,18 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Khách hàng"><InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
-          <Form.Item label="Liên hệ"><InputWithPopup value={selectedContactName} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
+          <Form.Item label="Liên hệ">
+            <div className="flex gap-1">
+              <Input value={selectedContactName} onChange={e => { setSelectedContactName(e.target.value); setCustField('contact', e.target.value) }} placeholder="Nhập hoặc chọn từ danh sách" className="flex-1" />
+              <Button icon={<SearchOutlined />} onClick={() => setActivePopup('customer')} title="Chọn từ danh sách" />
+            </div>
+          </Form.Item>
           <Form.Item label={<>Hạn thanh toán <span className="text-red-500">*</span></>} name="payment_due"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
           <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
           <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}><Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} /></Form.Item>
+          <Form.Item label="Nhân viên bán hàng"><Input value={selectedCustomerData.salesperson || ''} onChange={e => setCustField('salesperson', e.target.value)} placeholder="VD: KM-1989 Nguyễn Văn Ân" /></Form.Item>
+          <Form.Item label="Số ngày được nợ"><Input value={selectedCustomerData.credit_days || ''} onChange={e => setCustField('credit_days', e.target.value)} placeholder="VD: 30" /></Form.Item>
         </div>
       </Form>
 
@@ -360,18 +366,19 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-6">Thông tin hóa đơn</h2>
       <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label="Mã khách hàng"><Input value={selectedCustomerData?.code || ''} readOnly /></Form.Item>
-          <Form.Item label="Loại khách hàng"><Input value={selectedCustomerData?.type || ''} readOnly /></Form.Item>
-          <Form.Item label="Tên khách hàng (HĐ)"><Input value={selectedCustomerData?.name || ''} readOnly /></Form.Item>
-          <Form.Item label="Mã số thuế"><Input value={selectedCustomerData?.tax_code || ''} readOnly /></Form.Item>
-          <Form.Item label="Người mua hàng"><Input value={selectedCustomerData?.owner || ''} readOnly /></Form.Item>
-          <Form.Item label="Email"><Input value={selectedCustomerData?.email || ''} readOnly /></Form.Item>
-          <Form.Item label="Địa chỉ (HĐ)"><Input value={selectedCustomerData?.invoice_address || ''} readOnly /></Form.Item>
-          <Form.Item label="Tỉnh/TP (HĐ)"><Input value={selectedCustomerData?.invoice_city || ''} readOnly /></Form.Item>
-          <Form.Item label="Quận/Huyện (HĐ)"><Input value={selectedCustomerData?.invoice_district || ''} readOnly /></Form.Item>
-          <Form.Item label="Phường/Xã (HĐ)"><Input value={selectedCustomerData?.invoice_ward || ''} readOnly /></Form.Item>
-          <Form.Item label="Mô tả"><Input value={selectedCustomerData?.description || ''} readOnly /></Form.Item>
-          <Form.Item label="Lĩnh vực"><Input value={selectedCustomerData?.field || ''} readOnly /></Form.Item>
+          <Form.Item label="Mã khách hàng"><Input value={selectedCustomerData.code || ''} onChange={e => setCustField('code', e.target.value)} /></Form.Item>
+          <Form.Item label="Loại khách hàng"><Input value={selectedCustomerData.type || ''} onChange={e => setCustField('type', e.target.value)} /></Form.Item>
+          <Form.Item label="Tên khách hàng (HĐ)"><Input value={selectedCustomerData.name || ''} onChange={e => { setCustField('name', e.target.value); setSelectedCustomer(e.target.value) }} /></Form.Item>
+          <Form.Item label="Mã số thuế"><Input value={selectedCustomerData.tax_code || ''} onChange={e => setCustField('tax_code', e.target.value)} /></Form.Item>
+          <Form.Item label="Người mua hàng"><Input value={selectedCustomerData.owner || ''} onChange={e => setCustField('owner', e.target.value)} /></Form.Item>
+          <Form.Item label="Điện thoại"><Input value={selectedCustomerData.phone || ''} onChange={e => setCustField('phone', e.target.value)} /></Form.Item>
+          <Form.Item label="Email"><Input value={selectedCustomerData.email || ''} onChange={e => setCustField('email', e.target.value)} /></Form.Item>
+          <Form.Item label="Lĩnh vực"><Input value={selectedCustomerData.field || ''} onChange={e => setCustField('field', e.target.value)} /></Form.Item>
+          <Form.Item label="Địa chỉ (HĐ)"><Input value={selectedCustomerData.invoice_address || ''} onChange={e => setCustField('invoice_address', e.target.value)} /></Form.Item>
+          <Form.Item label="Tỉnh/TP (HĐ)"><Input value={selectedCustomerData.invoice_city || ''} onChange={e => setCustField('invoice_city', e.target.value)} /></Form.Item>
+          <Form.Item label="Quận/Huyện (HĐ)"><Input value={selectedCustomerData.invoice_district || ''} onChange={e => setCustField('invoice_district', e.target.value)} /></Form.Item>
+          <Form.Item label="Phường/Xã (HĐ)"><Input value={selectedCustomerData.invoice_ward || ''} onChange={e => setCustField('invoice_ward', e.target.value)} /></Form.Item>
+          <Form.Item label="Mô tả"><Input value={selectedCustomerData.description || ''} onChange={e => setCustField('description', e.target.value)} /></Form.Item>
         </div>
       </Form>
 
@@ -379,10 +386,12 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-3 border-b border-gray-100 pb-2 mt-4">Thông tin giao hàng</h2>
       <Form layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label="Người nhận hàng"><Input value={selectedCustomerData?.owner || ''} readOnly /></Form.Item>
-          <Form.Item label="Điện thoại"><Input value={selectedCustomerData?.phone || ''} readOnly /></Form.Item>
-          <Form.Item label="Địa chỉ (GH)"><Input value={selectedCustomerData?.delivery_address || selectedCustomerData?.invoice_address || ''} readOnly /></Form.Item>
-          <Form.Item label="Email"><Input value={selectedCustomerData?.email || ''} readOnly /></Form.Item>
+          <Form.Item label="Người nhận hàng"><Input value={selectedCustomerData.delivery_receiver || selectedCustomerData.owner || ''} onChange={e => setCustField('delivery_receiver', e.target.value)} /></Form.Item>
+          <Form.Item label="Điện thoại"><Input value={selectedCustomerData.delivery_phone || selectedCustomerData.phone || ''} onChange={e => setCustField('delivery_phone', e.target.value)} /></Form.Item>
+          <Form.Item label="Địa chỉ (GH)"><Input value={selectedCustomerData.delivery_address || selectedCustomerData.invoice_address || ''} onChange={e => setCustField('delivery_address', e.target.value)} /></Form.Item>
+          <Form.Item label="Tỉnh/TP (GH)"><Input value={selectedCustomerData.delivery_city || selectedCustomerData.invoice_city || ''} onChange={e => setCustField('delivery_city', e.target.value)} /></Form.Item>
+          <Form.Item label="Quận/Huyện (GH)"><Input value={selectedCustomerData.delivery_district || ''} onChange={e => setCustField('delivery_district', e.target.value)} /></Form.Item>
+          <Form.Item label="Phường/Xã (GH)"><Input value={selectedCustomerData.delivery_ward || ''} onChange={e => setCustField('delivery_ward', e.target.value)} /></Form.Item>
         </div>
       </Form>
 
