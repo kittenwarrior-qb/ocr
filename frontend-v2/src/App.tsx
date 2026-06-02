@@ -1,13 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
-import { FileTextOutlined, MenuFoldOutlined, MenuUnfoldOutlined, TeamOutlined, ShoppingOutlined, SettingOutlined } from '@ant-design/icons'
+import {
+  ContactsOutlined,
+  FileTextOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  SettingOutlined,
+  ShoppingOutlined,
+  TagsOutlined,
+  TeamOutlined,
+} from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
 
 import OrdersPage from './pages/Orders'
 import CustomersPage from './pages/Customers'
 import ProductsPage from './pages/Products'
+import ContactsPage from './pages/Contacts'
+import VouchersPage from './pages/Vouchers'
 import SettingsPage from './pages/Settings'
 
 const queryClient = new QueryClient({
@@ -22,6 +33,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     { key: '/orders', label: 'Đơn hàng', icon: <FileTextOutlined /> },
     { key: '/products', label: 'Hàng hóa', icon: <ShoppingOutlined /> },
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
+    { key: '/contacts', label: 'Liên hệ', icon: <ContactsOutlined /> },
+    { key: '/vouchers', label: 'Voucher', icon: <TagsOutlined /> },
     { key: '/settings', label: 'Cài đặt', icon: <SettingOutlined /> },
   ]
 
@@ -68,6 +81,8 @@ function AppLayout() {
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/vouchers" element={<VouchersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/orders" replace />} />
         </Routes>

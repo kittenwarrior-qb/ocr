@@ -34,8 +34,8 @@ export interface Voucher {
   items: VoucherItem[]
 }
 
-export async function fetchVouchers(search = '', customerCode = ''): Promise<{ items: Voucher[]; total: number }> {
-  const { data } = await client.get('/vouchers', { params: { search, customer_code: customerCode } })
+export async function fetchVouchers(search = '', customerCode = '', skip = 0, limit = 50): Promise<{ items: Voucher[]; total: number }> {
+  const { data } = await client.get('/vouchers', { params: { search, customer_code: customerCode, skip, limit } })
   return data
 }
 

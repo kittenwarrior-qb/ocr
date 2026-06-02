@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, Input, Pagination, Spin } from 'antd'
+import { Tag, Button, message, Modal, Tooltip, Progress, Tabs } from 'antd'
 import {
   InboxOutlined,
   CheckCircleOutlined,
@@ -17,8 +17,6 @@ import {
   SearchOutlined,
   ArrowsAltOutlined,
   DeleteOutlined,
-  TeamOutlined,
-  TagsOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -31,11 +29,11 @@ import {
 } from '@/api/orders'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
-import { preloadCatalogs, fetchProducts, fetchContacts, type Contact } from '@/utils/catalogStore'
+import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
-import { fetchVouchers, fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
+import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import client from '@/api/client'
 
 type Confidence = 'high' | 'medium' | 'low' | 'none'
@@ -130,37 +128,6 @@ export default function OrdersPage() {
   const [uploadFiles, setUploadFiles] = useState<UploadFileItem[]>([])
   const [stagedFiles, setStagedFiles] = useState<File[]>([])
   const [activeTab, setActiveTab] = useState('current')
-
-  // Contacts tab state
-  const [contactSearch, setContactSearch] = useState('')
-  const [voucherSearch, setVoucherSearch] = useState('')
-  const [voucherPage, setVoucherPage] = useState(1)
-  const [allVouchers, setAllVouchers] = useState<Voucher[]>([])
-  const [voucherTotal, setVoucherTotal] = useState(0)
-  const [voucherTabLoading, setVoucherTabLoading] = useState(false)
-  const VOUCHER_PAGE_SIZE = 20
-  const [contactPage, setContactPage] = useState(1)
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [contactTotal, setContactTotal] = useState(0)
-  const [contactLoading, setContactLoading] = useState(false)
-  const CONTACT_PAGE_SIZE = 25
-
-  useEffect(() => {
-    if (activeTab !== 'contacts') return
-    setContactLoading(true)
-    fetchContacts(contactSearch, (contactPage - 1) * CONTACT_PAGE_SIZE, CONTACT_PAGE_SIZE)
-      .then(r => { setContacts(r.items); setContactTotal(r.total) })
-      .catch(() => { setContacts([]); setContactTotal(0) })
-      .finally(() => setContactLoading(false))
-  }, [activeTab, contactSearch, contactPage])
-
-  useEffect(() => {
-    if (activeTab !== 'vouchers') return
-    setVoucherTabLoading(true)
-    fetchVouchers(voucherSearch).then(r => { setAllVouchers(r.items); setVoucherTotal(r.total) })
-      .catch(() => { setAllVouchers([]); setVoucherTotal(0) })
-      .finally(() => setVoucherTabLoading(false))
-  }, [activeTab, voucherSearch])
 
   // Modals
   const [productModalOpen, setProductModalOpen] = useState(false)
@@ -401,11 +368,9 @@ export default function OrdersPage() {
       </div>)}
 
       {/* Tabs */}
-      <Tabs activeKey={activeTab} onChange={k => { setActiveTab(k); if (k === 'contacts') { setContactPage(1) } }} items={[
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
         { key: 'current', label: <span><PlusOutlined className="mr-1" />Phiên hiện tại</span> },
         { key: 'history', label: <span><HistoryOutlined className="mr-1" />Lịch sử ({sessions.length})</span> },
-        { key: 'contacts', label: <span><TeamOutlined className="mr-1" />Liên hệ</span> },
-        { key: 'vouchers', label: <span><TagsOutlined className="mr-1" />Voucher</span> },
       ]} className="mb-3" />
 
       {/* Current Tab */}
@@ -696,146 +661,6 @@ export default function OrdersPage() {
         {sessions.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">Chưa có lịch sử</div>}
       </div>)}
 
-      {/* Contacts Tab */}
-      {activeTab === 'contacts' && (
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-700 flex items-center gap-2"><TeamOutlined />Danh sách liên hệ</span>
-            <Input
-              prefix={<SearchOutlined className="text-slate-400" />}
-              placeholder="Tìm theo tên, công ty, SĐT..."
-              value={contactSearch}
-              onChange={e => { setContactSearch(e.target.value); setContactPage(1) }}
-              allowClear
-              className="w-72"
-              size="small"
-            />
-          </div>
-          <Spin spinning={contactLoading}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Mã LH</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Họ và tên</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Công ty</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Chức danh</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">SĐT</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Email</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Địa chỉ giao hàng</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Tỉnh/TP</th>
-                    <th className="px-3 py-2 text-left whitespace-nowrap">Chủ sở hữu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contacts.map(c => (
-                    <tr key={c.code} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{c.code}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{c.name}</td>
-                      <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate">{c.organization || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.job_title || '—'}</td>
-                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{c.phone || c.phone_work || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500 max-w-[180px] truncate">{c.email || c.email_personal || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500 max-w-[220px] truncate">{c.delivery_address || c.address || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.city || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.owner || '—'}</td>
-                    </tr>
-                  ))}
-                  {!contactLoading && contacts.length === 0 && (
-                    <tr><td colSpan={9} className="text-center py-10 text-slate-400">Không tìm thấy liên hệ</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Spin>
-          <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-slate-400">{contactTotal} liên hệ</span>
-            <Pagination size="small" current={contactPage} pageSize={CONTACT_PAGE_SIZE} total={contactTotal} onChange={setContactPage} showSizeChanger={false} simple />
-          </div>
-        </div>
-      )}
-
-      {/* Vouchers Tab */}
-      {activeTab === 'vouchers' && (
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200 bg-purple-50 flex items-center justify-between">
-            <span className="text-sm font-semibold text-purple-800 flex items-center gap-2"><TagsOutlined />Chương trình khuyến mại ({voucherTotal})</span>
-            <Input
-              prefix={<SearchOutlined className="text-slate-400" />}
-              placeholder="Tìm theo mã, tên, mô tả..."
-              value={voucherSearch}
-              onChange={e => { setVoucherSearch(e.target.value); setVoucherPage(1) }}
-              allowClear
-              className="w-72"
-              size="small"
-            />
-          </div>
-          <Spin spinning={voucherTabLoading}>
-            <div className="p-3 space-y-3">
-              {allVouchers.slice((voucherPage - 1) * VOUCHER_PAGE_SIZE, voucherPage * VOUCHER_PAGE_SIZE).map(v => (
-                <div key={v.code} className="border border-purple-200 rounded-lg overflow-hidden">
-                  {/* Header */}
-                  <div className="px-4 py-2.5 bg-purple-100 flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <span className="font-bold text-purple-800 font-mono text-sm whitespace-nowrap">{v.code}</span>
-                      <span className="text-sm font-semibold text-purple-900 truncate">{v.name}</span>
-                      {v.is_active
-                        ? <span className="shrink-0 text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full px-2 py-0.5 font-semibold">Kích hoạt</span>
-                        : <span className="shrink-0 text-[10px] bg-slate-100 text-slate-500 border border-slate-300 rounded-full px-2 py-0.5">Chưa kích hoạt</span>}
-                    </div>
-                    <span className="text-xs text-purple-600 whitespace-nowrap shrink-0">{v.from_date} → {v.to_date}</span>
-                  </div>
-                  {/* Meta */}
-                  <div className="px-4 py-2 bg-purple-50/40 border-b border-purple-100 grid grid-cols-3 gap-x-6 gap-y-1 text-xs">
-                    <div className="flex gap-1"><span className="text-slate-500 font-medium">Loại:</span><span className="text-slate-700">{v.type}</span></div>
-                    <div className="flex gap-1"><span className="text-slate-500 font-medium">Đối tượng:</span><span className="text-slate-700">{v.target}</span></div>
-                    <div className="flex gap-1"><span className="text-slate-500 font-medium">Căn cứ:</span><span className="text-slate-700">{v.base_on}</span></div>
-                    <div className="flex gap-1"><span className="text-slate-500 font-medium">KH áp dụng:</span><span className="text-purple-700 font-semibold">{v.customers?.length ? v.customers.join(', ') : 'Tất cả'}</span></div>
-                    <div className="flex gap-1"><span className="text-slate-500 font-medium">Đồng thời KM:</span><span className="text-slate-700">{v.apply_with_others || '—'}</span></div>
-                    {v.description && <div className="flex gap-1 col-span-1"><span className="text-slate-500 font-medium">Mô tả:</span><span className="text-slate-700">{v.description}</span></div>}
-                  </div>
-                  {/* Items table */}
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
-                        <th className="px-3 py-1.5 text-left font-semibold">Hàng hóa mua</th>
-                        <th className="px-2 py-1.5 text-center font-semibold w-16">ĐVT</th>
-                        <th className="px-2 py-1.5 text-center font-semibold w-12">SL</th>
-                        <th className="px-3 py-1.5 text-left font-semibold">Tặng hàng hóa</th>
-                        <th className="px-2 py-1.5 text-center font-semibold w-12">SL tặng</th>
-                        <th className="px-2 py-1.5 text-center font-semibold w-16">TĐ/đơn</th>
-                        <th className="px-2 py-1.5 text-center font-semibold w-16">TĐ/KH</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {v.items.map((item, i) => (
-                        <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                          <td className="px-3 py-1.5"><span className="font-mono text-purple-600 font-semibold">{item.product_code}</span> <span className="text-slate-600">{item.product_name}</span></td>
-                          <td className="px-2 py-1.5 text-center text-slate-500">{item.uom}</td>
-                          <td className="px-2 py-1.5 text-center font-bold text-purple-700">{item.quantity}</td>
-                          <td className="px-3 py-1.5"><span className="font-mono text-emerald-600 font-semibold">{item.gift_product_code}</span> <span className="text-slate-600">{item.gift_product_name}</span></td>
-                          <td className="px-2 py-1.5 text-center font-bold text-emerald-700">{item.gift_quantity}</td>
-                          <td className="px-2 py-1.5 text-center text-slate-400">{item.max_per_order || '∞'}</td>
-                          <td className="px-2 py-1.5 text-center text-slate-400">{item.max_per_customer || '∞'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-              {!voucherTabLoading && allVouchers.length === 0 && (
-                <div className="text-center py-12 text-slate-400">Không tìm thấy chương trình khuyến mại</div>
-              )}
-            </div>
-          </Spin>
-          {voucherTotal > VOUCHER_PAGE_SIZE && (
-            <div className="px-4 py-3 border-t border-slate-100 flex justify-end">
-              <Pagination size="small" current={voucherPage} pageSize={VOUCHER_PAGE_SIZE} total={voucherTotal} onChange={setVoucherPage} showSizeChanger={false} simple />
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={selectedLine ? `Chọn hàng hóa — "${selectedLine.product_name_original || ''}"` : 'Chọn hàng hóa'}
         columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name' }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }]}
@@ -892,4 +717,7 @@ export default function OrdersPage() {
     </div>
   )
 }
+
+
+
 
