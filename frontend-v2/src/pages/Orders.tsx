@@ -63,6 +63,10 @@ function systemLineCode(line: Partial<SessionLine>): string {
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
 interface UploadFileItem { name: string; size: number; status: FileStatus; file?: File }
 
+function hasMappedCustomer(order: SessionOrder): boolean {
+  return !!(order.extra_data?.customer_code || order.partner_id)
+}
+
 function productTaxRate(product: Product): number {
   return parseFloat(String(product.tax_rate || '').replace('%', '')) || 0
 }
@@ -431,10 +435,10 @@ export default function OrdersPage() {
                 {sessionDetail.processing_count > 0 && <Tag color="processing"><LoadingOutlined spin className="mr-1" />OCR ({sessionDetail.done_count}/{sessionDetail.doc_count})</Tag>}
                 {(sessionDetail as any).failed_count > 0 && <Tag color="error"><CloseCircleOutlined className="mr-1" />{(sessionDetail as any).failed_count} lỗi</Tag>}
                 {sessionDetail.total_unmapped > 0 && sessionDetail.processing_count === 0 && <Tag color="warning"><WarningOutlined className="mr-1" />{sessionDetail.total_unmapped} cần xử lý</Tag>}
-                {sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0 && sessionDetail.processing_count === 0 && <Tag color="success"><CheckCircleOutlined className="mr-1" />Sẵn sàng</Tag>}
+                {sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0 && sessionDetail.processing_count === 0 && sessionDetail.orders.every(hasMappedCustomer) && <Tag color="success"><CheckCircleOutlined className="mr-1" />Sẵn sàng</Tag>}
               </div>
               {sessionDetail.processing_count === 0 && sessionDetail.done_count > 0 && (() => {
-                const ok = sessionDetail.orders.every(o => !!o.partner_name || !!o.recipient_name) && sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0
+                const ok = sessionDetail.orders.every(hasMappedCustomer) && sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0
                 return ok ? <Button type="primary" icon={<ExportOutlined />} onClick={() => handleExport(activeSessionId)}>Xuất Excel</Button>
                   : <Tooltip title="Vui lòng hoàn tất mapping KH + SP"><Button type="primary" icon={<ExportOutlined />} disabled>Xuất Excel</Button></Tooltip>
               })()}
@@ -442,7 +446,7 @@ export default function OrdersPage() {
 
             {/* Warning */}
             {sessionDetail.processing_count === 0 && sessionDetail.done_count > 0 && (() => {
-              const mc = sessionDetail.orders.filter(o => !o.partner_name && !o.recipient_name)
+              const mc = sessionDetail.orders.filter(o => !hasMappedCustomer(o))
               const um = sessionDetail.total_unmapped > 0
               if (!mc.length && !um) return null
               return <div className="px-4 py-2 bg-orange-50 border-b border-slate-300 text-xs"><WarningOutlined className="text-orange-500 mr-2" />{mc.length > 0 && <span>Chưa chọn KH: {mc.map(o => o.file_name).join(', ')}. </span>}{um && <span>{sessionDetail.total_unmapped} SP chưa map.</span>}</div>
@@ -486,7 +490,7 @@ export default function OrdersPage() {
                       <FilePdfOutlined className="text-red-300 text-base" />
                       <span className="text-sm font-bold text-white">{order.file_name}</span>
                       <span className="text-xs text-slate-300 ml-2">{order.order_number || ''}</span>
-                      {(() => { const ok = order.pending_count === 0 && (!!order.partner_name || !!order.recipient_name); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; return null })()}
+                      {(() => { const ok = order.pending_count === 0 && hasMappedCustomer(order); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; if (!hasMappedCustomer(order)) return <Tag color="warning" className="text-xs ml-2">Chưa chọn KH</Tag>; return null })()}
                     </div>
                     <button className="text-xs text-slate-200 hover:text-white border border-slate-500 rounded-md px-2.5 py-1 font-medium hover:bg-slate-600 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
                   </div>
@@ -494,7 +498,7 @@ export default function OrdersPage() {
                   {/* PDF Data — light blue tint */}
                   <div className="px-4 py-3 border-b border-slate-100 bg-sky-50/60">
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.partner_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.partner_name || order.recipient_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>

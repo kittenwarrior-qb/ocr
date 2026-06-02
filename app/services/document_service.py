@@ -143,7 +143,7 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
         if contact_partner:
             partner = contact_partner
         else:
-            partner = mapping_service.find_or_create_partner(
+            partner = mapping_service.find_existing_partner(
                 db,
                 (matched_contact.organization if matched_contact and matched_contact.organization else partner_name),
                 tax_code,
@@ -151,15 +151,15 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
             )
         if matched_contact:
             delivery_address_text = matched_contact.delivery_address or matched_contact.address or delivery_address_text
+        address = mapping_service.find_existing_address(db, partner.id if partner else None, delivery_address_text)
     else:
         partner = mapping_service.find_or_create_partner(db, partner_name, tax_code, partner_type)
-
-    address = mapping_service.find_or_create_address(db, partner.id, delivery_address_text)
+        address = mapping_service.find_or_create_address(db, partner.id, delivery_address_text)
 
     items = data.get("items") or []
 
     if doc_type == "purchase_order":
-        return _create_order(db, raw, partner, address, data, items, matched_contact)
+        return _create_order(db, raw, partner, address, data, items, matched_contact, partner_name, delivery_address_text)
     else:
         return _create_bill(db, raw, partner, address, data, items)
 
@@ -175,19 +175,28 @@ def _parse_date(val) -> date | None:
         return None
 
 
-def _first_partner_address(partner: Partner, address_type: str) -> PartnerAddress | None:
+def _first_partner_address(partner: Partner | None, address_type: str) -> PartnerAddress | None:
+    if not partner:
+        return None
     return next((a for a in partner.addresses if a.address_type == address_type), None)
 
 
-def _build_order_extra_data(partner: Partner, address: PartnerAddress | None, contact: Contact | None) -> dict[str, str]:
+def _build_order_extra_data(
+    partner: Partner | None,
+    address: PartnerAddress | None,
+    contact: Contact | None,
+    fallback_name: str = "",
+    fallback_address: str | None = None,
+) -> dict[str, str]:
     billing = _first_partner_address(partner, "billing")
     branch = _first_partner_address(partner, "branch")
-    invoice_address = (billing.full_address if billing else None) or partner.address or ""
+    invoice_address = (billing.full_address if billing else None) or (partner.address if partner else None) or ""
     delivery_address = (
         (contact.delivery_address if contact else None)
         or (contact.address if contact else None)
         or (address.full_address if address else None)
         or (branch.full_address if branch else None)
+        or fallback_address
         or invoice_address
     )
     contact_phone = ""
@@ -197,30 +206,30 @@ def _build_order_extra_data(partner: Partner, address: PartnerAddress | None, co
         contact_email = contact.email or contact.email_personal or ""
 
     return {
-        "code": partner.code or "",
-        "type": partner.display_name or "",
-        "name": partner.legal_name or "",
-        "tax_code": partner.tax_code or "",
-        "phone": partner.phone or "",
-        "email": partner.email or "",
-        "field": partner.field or "",
-        "owner": partner.owner or "",
-        "description": partner.description or "",
+        "code": partner.code if partner else "",
+        "type": partner.display_name if partner else "",
+        "name": partner.legal_name if partner else "",
+        "tax_code": partner.tax_code if partner else "",
+        "phone": partner.phone if partner else "",
+        "email": partner.email if partner else "",
+        "field": partner.field if partner else "",
+        "owner": partner.owner if partner else "",
+        "description": partner.description if partner else "",
         "invoice_address": invoice_address,
         "invoice_city": billing.mapping_key if billing else "",
         "invoice_district": "",
         "invoice_ward": "",
         "delivery_address": delivery_address,
-        "customer_code": partner.code or "",
-        "customer_name": partner.legal_name or "",
-        "customer_tax_code": partner.tax_code or "",
-        "customer_phone": partner.phone or "",
-        "customer_owner": partner.owner or "",
-        "invoice_customer": partner.legal_name or "",
-        "invoice_buyer": partner.owner or "",
+        "customer_code": partner.code if partner else "",
+        "customer_name": partner.legal_name if partner else "",
+        "customer_tax_code": partner.tax_code if partner else "",
+        "customer_phone": partner.phone if partner else "",
+        "customer_owner": partner.owner if partner else "",
+        "invoice_customer": partner.legal_name if partner else "",
+        "invoice_buyer": partner.owner if partner else "",
         "invoice_street": invoice_address,
-        "delivery_receiver": (contact.name if contact else None) or partner.owner or "",
-        "delivery_phone": contact_phone or partner.phone or "",
+        "delivery_receiver": (contact.name if contact else None) or (partner.owner if partner else "") or "",
+        "delivery_phone": contact_phone or (partner.phone if partner else "") or "",
         "delivery_city": (contact.city if contact else "") or "",
         "delivery_district": (contact.district if contact else "") or "",
         "delivery_ward": (contact.ward if contact else "") or "",
@@ -232,15 +241,27 @@ def _build_order_extra_data(partner: Partner, address: PartnerAddress | None, co
         "contact_email": contact_email,
         "contact_organization": (contact.organization if contact else "") or "",
         "contact_address": delivery_address if contact else "",
+        "ocr_customer_name": fallback_name or "",
+        "ocr_delivery_address": fallback_address or "",
     }
 
 
-def _create_order(db: Session, raw, partner, address, data: dict, items: list, contact: Contact | None = None) -> dict:
+def _create_order(
+    db: Session,
+    raw,
+    partner: Partner | None,
+    address: PartnerAddress | None,
+    data: dict,
+    items: list,
+    contact: Contact | None = None,
+    fallback_partner_name: str = "",
+    fallback_address: str | None = None,
+) -> dict:
     missing = _check_missing_order_fields(data, partner, address, items)
-    extra_data = _build_order_extra_data(partner, address, contact)
+    extra_data = _build_order_extra_data(partner, address, contact, fallback_partner_name, fallback_address)
     order = ProcessedOrder(
         raw_document_id=raw.id,
-        partner_id=partner.id,
+        partner_id=partner.id if partner else None,
         delivery_address_id=address.id if address else None,
         order_number=generate_order_number(db),
         po_number=data.get("order_number"),
@@ -248,7 +269,7 @@ def _create_order(db: Session, raw, partner, address, data: dict, items: list, c
         delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
-        recipient_name=partner.legal_name,
+        recipient_name=(partner.legal_name if partner else None) or data.get("recipient_name") or fallback_partner_name,
         description=data.get("description") or extra_data.get("invoice_address") or data.get("delivery_address"),
         total_amount=data.get("total_amount"),
         discount_amount=data.get("discount_amount"),

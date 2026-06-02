@@ -109,6 +109,57 @@ def find_or_create_partner(
     return partner
 
 
+def find_existing_partner(
+    db: Session,
+    legal_name: str | None,
+    tax_code: str | None,
+    partner_type: str,
+) -> Partner | None:
+    if tax_code:
+        mst = db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first()
+        if mst:
+            partner = db.query(Partner).filter(Partner.id == mst.partner_id).first()
+            if partner:
+                return partner
+
+        partner = (
+            db.query(Partner)
+            .filter(
+                Partner.partner_type == partner_type,
+                Partner.is_active == True,
+                Partner.tax_code == tax_code,
+            )
+            .first()
+        )
+        if partner:
+            return partner
+
+    if not legal_name:
+        return None
+
+    all_partners = db.query(Partner).filter(Partner.partner_type == partner_type, Partner.is_active == True).all()
+    candidates = [{"id": str(p.id), "name": p.legal_name or "", "obj": p} for p in all_partners]
+    match = fuzzy_match(legal_name, candidates, key="name", threshold=70)
+    return match["obj"] if match else None
+
+
+def find_existing_address(
+    db: Session,
+    partner_id: UUID | None,
+    address_text: str | None,
+) -> PartnerAddress | None:
+    if not partner_id or not address_text:
+        return None
+
+    existing = db.query(PartnerAddress).filter(PartnerAddress.partner_id == partner_id).all()
+    for addr in existing:
+        if addr.mapping_key and addr.mapping_key.lower() in address_text.lower():
+            return addr
+        if addr.full_address and fuzzy_score(addr.full_address, address_text) >= 80:
+            return addr
+    return None
+
+
 def find_best_contact(
     db: Session,
     company_name: str | None,

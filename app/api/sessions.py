@@ -136,8 +136,6 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         # Find file name and partner name
         raw_doc = next((d for d in raw_docs if d.id == order.raw_document_id), None)
         partner_name = order.partner.legal_name if order.partner else None
-        # Fallback: use recipient_name if partner not linked
-        display_name = partner_name or order.recipient_name
         delivery_addr = order.delivery_address.full_address if order.delivery_address else None
 
         orders_out.append({
@@ -150,7 +148,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "total_amount": float(order.total_amount) if order.total_amount else None,
             "tax_amount": float(order.tax_amount) if order.tax_amount else None,
             "recipient_name": order.recipient_name,
-            "partner_name": display_name,
+            "partner_name": partner_name,
             "delivery_address": delivery_addr or (order.description if order.description and len(order.description) < 200 else None),
             "description": order.description,
             "partner_id": str(order.partner_id) if order.partner_id else None,
