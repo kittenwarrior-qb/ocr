@@ -136,7 +136,12 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         # Find file name and partner name
         raw_doc = next((d for d in raw_docs if d.id == order.raw_document_id), None)
         partner_name = order.partner.legal_name if order.partner else None
-        delivery_addr = order.delivery_address.full_address if order.delivery_address else None
+        extracted = raw_doc.extracted_data or {} if raw_doc else {}
+        ocr_company_name = extracted.get("customer_name") or extracted.get("recipient_name") or order.recipient_name
+        ocr_delivery_address = extracted.get("delivery_address") or order.description
+        ocr_recipient_name = extracted.get("recipient_name") or order.recipient_name
+        ocr_total_amount = extracted.get("total_amount") if extracted.get("total_amount") is not None else order.total_amount
+        ocr_tax_amount = extracted.get("tax_amount") if extracted.get("tax_amount") is not None else order.tax_amount
 
         orders_out.append({
             "id": str(order.id),
@@ -149,10 +154,15 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "tax_amount": float(order.tax_amount) if order.tax_amount else None,
             "recipient_name": order.recipient_name,
             "partner_name": partner_name,
-            "delivery_address": delivery_addr or (order.description if order.description and len(order.description) < 200 else None),
+            "delivery_address": ocr_delivery_address,
             "description": order.description,
             "partner_id": str(order.partner_id) if order.partner_id else None,
             "extra_data": order.extra_data,
+            "ocr_company_name": ocr_company_name,
+            "ocr_delivery_address": ocr_delivery_address,
+            "ocr_recipient_name": ocr_recipient_name,
+            "ocr_total_amount": float(ocr_total_amount) if ocr_total_amount else None,
+            "ocr_tax_amount": float(ocr_tax_amount) if ocr_tax_amount else None,
             "status": order.status,
             "pending_count": pending,
             "mapped_count": mapped,

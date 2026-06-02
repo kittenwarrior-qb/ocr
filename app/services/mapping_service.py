@@ -38,6 +38,36 @@ def _normalize_text(text: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+_GENERIC_PARTNER_WORDS = {
+    "cty", "cong", "ty", "tnhh", "tm", "dv", "dich", "vu", "thuong", "mai",
+    "co", "phan", "cp", "mtv", "hh", "limited", "company", "viet", "nam",
+}
+
+
+def _distinctive_partner_tokens(text: str | None) -> set[str]:
+    value = _normalize_text(text)
+    value = re.sub(r"^(cty|cong ty tnhh|cong ty co phan|cong ty|ho kinh doanh|doanh nghiep tu nhan|chi nhanh)\s+", "", value)
+    return {word for word in value.split() if len(word) >= 3 and word not in _GENERIC_PARTNER_WORDS}
+
+
+def _address_numbers(text: str | None) -> set[str]:
+    return set(re.findall(r"\d+[a-z]?(?:/\d+[a-z]?)*", _normalize_text(text)))
+
+
+def _address_match_score(query: str | None, target: str | None) -> int:
+    if not query or not target:
+        return 0
+    score = fuzzy_score(query, target)
+    q_nums = _address_numbers(query)
+    t_nums = _address_numbers(target)
+    if q_nums and t_nums:
+        if q_nums & t_nums:
+            score += 12
+        else:
+            score -= 28
+    return max(0, min(score, 100))
+
+
 def _product_match_score(query: str, target: str) -> int:
     from thefuzz import fuzz
 
@@ -137,10 +167,18 @@ def find_existing_partner(
     if not legal_name:
         return None
 
+    query_tokens = _distinctive_partner_tokens(legal_name)
+    if not query_tokens:
+        return None
+
     all_partners = db.query(Partner).filter(Partner.partner_type == partner_type, Partner.is_active == True).all()
     candidates = [{"id": str(p.id), "name": p.legal_name or "", "obj": p} for p in all_partners]
     match = fuzzy_match(legal_name, candidates, key="name", threshold=70)
-    return match["obj"] if match else None
+    if not match:
+        return None
+
+    target_tokens = _distinctive_partner_tokens(match["obj"].legal_name)
+    return match["obj"] if query_tokens & target_tokens else None
 
 
 def find_existing_address(
@@ -181,7 +219,7 @@ def find_best_contact(
         org_norm = _normalize_text(org)
 
         org_score = fuzzy_score(company_name or "", org) if company_name and org else 0
-        address_score = fuzzy_score(address_text or "", contact_address) if address_text and contact_address else 0
+        address_score = _address_match_score(address_text, contact_address)
         recipient_score = fuzzy_score(recipient_name or "", contact.name or "") if recipient_name and contact.name else 0
 
         if company_norm and org_norm and (company_norm in org_norm or org_norm in company_norm):
@@ -191,11 +229,15 @@ def find_best_contact(
         ):
             recipient_score = max(recipient_score, 90)
 
+        org_tokens = _distinctive_partner_tokens(company_name)
+        contact_org_tokens = _distinctive_partner_tokens(org)
+        has_org_overlap = bool(org_tokens & contact_org_tokens)
+
         score = org_score
-        if address_score >= 72:
+        if address_score >= 82 and (has_org_overlap or org_score >= 72):
             score += min(18, address_score // 5)
-        if address_score >= 88:
-            score = max(score, 82)
+        if address_score >= 94 and has_org_overlap:
+            score = max(score, 88)
         if recipient_score >= 78:
             score = max(score, recipient_score)
 

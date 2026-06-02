@@ -92,7 +92,8 @@ function orderLineSubtotal(order: SessionOrder): number {
   return order.lines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
 }
 
-function orderTaxAmount(order: SessionOrder): number {
+function orderTaxAmount(order: SessionOrder, preferOcr = false): number {
+  if (preferOcr) return Number(order.ocr_tax_amount ?? order.tax_amount) || 0
   const explicitTax = Number(order.tax_amount) || 0
   if (explicitTax) return explicitTax
   return order.lines.reduce((sum, line) => {
@@ -102,7 +103,12 @@ function orderTaxAmount(order: SessionOrder): number {
   }, 0)
 }
 
-function orderBeforeVat(order: SessionOrder): number {
+function orderBeforeVat(order: SessionOrder, preferOcr = false): number {
+  if (preferOcr) {
+    const total = Number(order.ocr_total_amount ?? order.total_amount) || 0
+    const tax = orderTaxAmount(order, true)
+    return total && tax ? Math.max(0, total - tax) : total
+  }
   const subtotal = orderLineSubtotal(order)
   if (subtotal) return subtotal
   const total = Number(order.total_amount) || 0
@@ -110,10 +116,10 @@ function orderBeforeVat(order: SessionOrder): number {
   return total && tax ? Math.max(0, total - tax) : total
 }
 
-function orderAfterVat(order: SessionOrder): number {
-  const total = Number(order.total_amount) || 0
-  const subtotal = orderBeforeVat(order)
-  const tax = orderTaxAmount(order)
+function orderAfterVat(order: SessionOrder, preferOcr = false): number {
+  const total = Number((preferOcr ? order.ocr_total_amount : order.total_amount) ?? order.total_amount) || 0
+  const subtotal = orderBeforeVat(order, preferOcr)
+  const tax = orderTaxAmount(order, preferOcr)
   const calculated = subtotal + tax
   if (!tax) return total || subtotal
   if (total && Math.abs(total - calculated) <= 2) return total
@@ -267,10 +273,10 @@ export default function OrdersPage() {
     try {
       const contactName = typeof contact === 'string' ? contact : contact?.name || ''
       const extraData = buildCustomerExtraData(customer, contact)
-      await client.patch(`/documents/orders/${orderId}`, { recipient_name: customer.name, description: extraData.invoice_address, extra_data: extraData })
+      await client.patch(`/documents/orders/${orderId}`, { extra_data: extraData })
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
-        return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, recipient_name: customer.name, description: extraData.invoice_address, delivery_address: extraData.delivery_address || extraData.invoice_address, extra_data: extraData } : o) }
+        return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, extra_data: extraData } : o) }
       })
       const label = contactName ? `Liên hệ: ${contactName} — KH: ${customer.name}` : `KH: ${customer.name}`
       message.success(label); setCustomerModalOpen(false); setSelectedOrderId(null)
@@ -498,13 +504,13 @@ export default function OrdersPage() {
                   {/* PDF Data — light blue tint */}
                   <div className="px-4 py-3 border-b border-slate-100 bg-sky-50/60">
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.partner_name || order.recipient_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.ocr_company_name || order.recipient_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.delivery_address || '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.ocr_delivery_address || order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '—'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{orderBeforeVat(order) ? orderBeforeVat(order).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
-                      {orderTaxAmount(order) ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{orderTaxAmount(order).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{orderAfterVat(order).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.ocr_recipient_name || order.recipient_name || '—'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{orderBeforeVat(order, true) ? orderBeforeVat(order, true).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
+                      {orderTaxAmount(order, true) ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{orderTaxAmount(order, true).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
                       {(() => {
                         const custCode = String(order.extra_data?.customer_code || '')
                         const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
@@ -545,9 +551,9 @@ export default function OrdersPage() {
                       if (alreadySelected) return (
                         <div className="flex items-center justify-between">
                           <table className="text-xs"><tbody>
-                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-emerald-700 font-semibold">{order.recipient_name} ✓</td></tr>
+                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-emerald-700 font-semibold">{order.extra_data?.customer_name || order.partner_name || 'Đã chọn KH'} ✓</td></tr>
                             <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{order.extra_data?.customer_code}{order.extra_data?.customer_tax_code ? ` / ${order.extra_data.customer_tax_code}` : ''}</td></tr>
-                            {order.description && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{order.description}</td></tr>}
+                            {(order.extra_data?.invoice_address || order.extra_data?.invoice_street) && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{order.extra_data?.invoice_address || order.extra_data?.invoice_street}</td></tr>}
                             <tr>
                               <td className="text-slate-500 pr-3 py-0.5 font-medium">Liên hệ:</td>
                               <td className="text-slate-700">
@@ -563,8 +569,8 @@ export default function OrdersPage() {
                           </div>
                         </div>
                       )
-                      const name = order.partner_name || order.recipient_name || ''
-                      const sugg = name ? matchCustomer(name, order.delivery_address || '', 3) : []
+                      const name = order.ocr_company_name || order.recipient_name || ''
+                      const sugg = name ? matchCustomer(name, order.ocr_delivery_address || order.delivery_address || '', 3) : []
                       const has = sugg.length > 0 && sugg[0].score >= 0.7
                       if (has) return (
                         <div className="flex items-center justify-between">

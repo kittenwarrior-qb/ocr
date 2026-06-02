@@ -120,6 +120,11 @@ export interface SessionOrder {
   description: string | null
   partner_id: string | null
   extra_data: Record<string, string> | null
+  ocr_company_name?: string | null
+  ocr_delivery_address?: string | null
+  ocr_recipient_name?: string | null
+  ocr_total_amount?: number | null
+  ocr_tax_amount?: number | null
   status: string
   pending_count: number
   mapped_count: number

@@ -9,6 +9,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import get_db
 from app.models.document import OrderLine, ProcessedBill, ProcessedOrder, RawDocument
+from app.models.partner import Partner
 from app.models.product import Product
 from app.schemas.document import (
     CorrectionCreate,
@@ -344,6 +345,11 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
     if body.extra_data is not None:
         order.extra_data = body.extra_data
         flag_modified(order, "extra_data")
+        customer_code = body.extra_data.get("customer_code") if isinstance(body.extra_data, dict) else None
+        if customer_code:
+            partner = db.query(Partner).filter(Partner.code == customer_code, Partner.partner_type == "customer").first()
+            if partner:
+                order.partner_id = partner.id
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
         kept_line_ids: set[str] = set()

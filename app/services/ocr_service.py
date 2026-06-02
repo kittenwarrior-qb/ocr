@@ -50,8 +50,11 @@ FIELD ALIASES — the same field may appear under many different labels:
 - delivery_date: "Ngày giao hàng", "Ngày nhận hàng", "Delivery Date", "Ngày giao", "NGÀY GIAO HÀNG", "Expected Delivery", "Ngày dự kiến giao", "Ngày xác nhận", "Confirmation Date"
 - delivery_address: "Ship to", "Ship To", "GIAO TỚI", "Địa chỉ giao hàng", "ĐỊA CHỈ GIAO HÀNG", "Nơi giao hàng", "Giao hàng tại kho", "ĐỊA ĐIỂM GIAO HÀNG", "SHIP ADDRESS", "Delivered To", "Delivery to", "Delivery Address", "Delivery to / Giao hàng tới"
 - payment_method: "Phương thức thanh toán", "HÌNH THỨC THANH TOÁN", "Thanh toán", "Terms", "TERMS", "Payment Terms"
-- recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT"
-- customer_name: The BUYER who placed the order (Đơn vị mua hàng, Ordered By, Bill To, Kính gửi, Store Name, Tên cửa hàng, CUSTOMER). This is the company that ORDERS goods. Look for store/branch name, "Giao tới", "Ship to" company name.
+- recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT". This can be a person name. NEVER use a person/contact name as customer_name.
+- customer_name: The BUYER ORGANIZATION/COMPANY who placed the order (Đơn vị mua hàng, Ordered By, Bill To, Bên mua, Công ty, Company, Store/Branch owner, CUSTOMER). This is the legal company or retail chain that ORDERS goods.
+  CRITICAL: customer_name must be an organization/company/store chain name, NOT a person's name. If the document shows a personal contact such as "Lai Quang Mien", put it in recipient_name and keep searching for the buyer organization.
+  For E-mart/Emart/THISO documents: prefer the legal buyer/company name such as "THISO RETAIL COMPANY LIMITED" / "CÔNG TY TNHH THISO RETAIL" from Bill To/Company/Buyer header. Do NOT use store manager/contact/person names as customer_name.
+  Delivery/store names like "E-mart Phan Huy Ích", "GO! BAC GIANG", "Circle K", "GS25" can help identify the branch/delivery_address, but customer_name should still be the buyer organization if printed.
 - vendor_name: The SELLER/SUPPLIER who fulfills the order (NHÀ CUNG CẤP, VENDOR, Supplier, Đơn vị bán hàng, By Supplier). On purchase orders sent TO Satori, vendor_name = "Satori" — DO NOT use this as customer_name.
 - customer_tax_code: MST of the BUYER (not the vendor/supplier)
 - items.product_code: "Item No.", "Item Code", "Mã hàng", "PLU CODE", "SKU Number", "Article", "Prod cd", "Mã sản phẩm", "Mã SP của NCC", "MÃ GỢI NHỚ", "CK Item Code"
@@ -99,6 +102,9 @@ Extract all information and return valid JSON only (no markdown, no explanation)
 }
 IMPORTANT: 
 - order_date, delivery_date, total_amount are REQUIRED — extract them carefully
+- Header identity rule: customer_name, recipient_name, and delivery_address must come from the PDF only. Do not infer them from a customer database, search result, voucher, or prior examples.
+- If both a company/legal buyer and a contact/person are present, return company/legal buyer in customer_name and the person in recipient_name.
+- If no company/legal buyer is printed, use the store/branch name as customer_name; only use a person name for customer_name when the document is clearly issued to an individual customer.
 - For each item: quantity, unit, line_total are REQUIRED
 - Items must never be empty if products are listed
 - Skip rows with no quantity AND no price (e.g. free-goods placeholder rows)

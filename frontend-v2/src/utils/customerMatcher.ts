@@ -14,21 +14,34 @@ function normalize(str: string): string {
 
 function stripCompanyPrefix(name: string): string {
   return normalize(name)
-    .replace(/^(cong ty tnhh|cong ty co phan|cong ty|ho kinh doanh|doanh nghiep tu nhan|chi nhanh)\s+/i, '')
+    .replace(/^(cty|cong ty tnhh|cong ty co phan|cong ty|ho kinh doanh|doanh nghiep tu nhan|chi nhanh)\s+/i, '')
     .trim()
 }
 
+const GENERIC_CUSTOMER_WORDS = new Set([
+  'cty', 'cong', 'ty', 'tnhh', 'tm', 'dv', 'dich', 'vu', 'thuong', 'mai',
+  'co', 'phan', 'cp', 'mtv', 'hh', 'limited', 'company', 'viet', 'nam',
+])
+
+function distinctiveWords(text: string): string[] {
+  return stripCompanyPrefix(text)
+    .split(' ')
+    .filter(w => w.length >= 3 && !GENERIC_CUSTOMER_WORDS.has(w))
+}
+
 function wordOverlapScore(query: string, target: string): number {
-  const qWords = stripCompanyPrefix(query).split(' ').filter(w => w.length > 2)
-  const tNorm = stripCompanyPrefix(target)
+  const qWords = distinctiveWords(query)
+  const tWords = new Set(distinctiveWords(target))
   if (!qWords.length) return 0
-  const matches = qWords.filter(w => tNorm.includes(w))
+  const matches = qWords.filter(w => tWords.has(w))
   return matches.length / qWords.length
 }
 
 function substringScore(query: string, target: string): number {
-  const q = stripCompanyPrefix(query)
-  const t = stripCompanyPrefix(target)
+  const qWords = distinctiveWords(query)
+  const tWords = distinctiveWords(target)
+  const q = qWords.join(' ')
+  const t = tWords.join(' ')
   if (!q || !t) return 0
   if (t.includes(q)) return 1
   if (q.includes(t) && t.length > 5) return 0.85
@@ -53,6 +66,7 @@ export interface CustomerMatchResult {
 
 export function matchCustomer(companyName: string, address?: string, topN = 5): CustomerMatchResult[] {
   if (!companyName?.trim()) return []
+  if (!distinctiveWords(companyName).length) return []
   const customers = getCustomers()
   const results: CustomerMatchResult[] = customers.map(c => {
     const sub = substringScore(companyName, c.name)
