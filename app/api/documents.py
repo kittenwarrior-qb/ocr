@@ -350,6 +350,15 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
             partner = db.query(Partner).filter(Partner.code == customer_code, Partner.partner_type == "customer").first()
             if partner:
                 order.partner_id = partner.id
+                # Auto-learn: save company name + address → customer_code
+                from app.services.company_alias_service import upsert as upsert_company
+                customer_name = body.extra_data.get("customer_name") or partner.legal_name or ""
+                ocr_company = order.recipient_name or (body.extra_data.get("name") or "")
+                ocr_address = order.description or (body.extra_data.get("invoice_address") or "")
+                if ocr_company:
+                    upsert_company(db, ocr_company, customer_code, customer_name, "name", "auto_learn")
+                if ocr_address and len(ocr_address) > 10:
+                    upsert_company(db, ocr_address, customer_code, customer_name, "address", "auto_learn")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
         kept_line_ids: set[str] = set()

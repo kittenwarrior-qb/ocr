@@ -79,16 +79,18 @@ let _loaded = false
 
 export async function preloadCatalogs(): Promise<void> {
   if (_loaded) return
-  const [p, c, ct, al] = await Promise.all([
+  const [p, c, ct, al, ca] = await Promise.all([
     client.get('/products/catalog', { params: { limit: 500 } }),
     client.get('/partners/catalog', { params: { limit: 2500 } }),
     client.get('/partners/contacts', { params: { limit: 2500 } }),
     client.get('/sku-aliases/preload').catch(() => ({ data: [] })),
+    client.get('/company-aliases/preload').catch(() => ({ data: [] })),
   ])
   _products = p.data.items
   _customers = c.data.items
   _contacts = ct.data.items
   _aliases = al.data
+  _companyAliases = ca.data
   _loaded = true
 }
 
@@ -106,9 +108,19 @@ export interface SkuAlias {
   updated_at: string
 }
 
+export interface CompanyAlias {
+  external_normalized: string
+  customer_code: string
+  customer_name: string
+  alias_type: string
+}
+
 export function getProducts(): Product[] { return _products }
 export function getCustomers(): Customer[] { return _customers }
 export function getContacts(): Contact[] { return _contacts }
+
+let _companyAliases: CompanyAlias[] = []
+export function getCompanyAliases(): CompanyAlias[] { return _companyAliases }
 
 let _aliases: SkuAlias[] = []
 export function getAliases(): SkuAlias[] { return _aliases }

@@ -1,6 +1,33 @@
-import { getCustomers, type Customer } from './catalogStore'
+import { getCustomers, getCompanyAliases, type Customer } from './catalogStore'
 
 export type { Customer }
+
+function normalizeCompany(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\b(cong ty|tnhh|co phan|cp|ltd|llc|inc|jsc|hkd|dntn|chi nhanh)\b/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function checkCompanyAlias(companyName: string, address?: string): Customer | null {
+  const aliases = getCompanyAliases()
+  if (!aliases.length) return null
+  const customers = getCustomers()
+
+  const tryFind = (text: string) => {
+    const norm = normalizeCompany(text)
+    if (norm.length < 3) return null
+    const hit = aliases.find(a => a.external_normalized === norm)
+    if (!hit) return null
+    return customers.find(c => c.code === hit.customer_code) || null
+  }
+
+  return tryFind(companyName) || (address ? tryFind(address) : null)
+}
 
 function normalize(str: string): string {
   return str
@@ -66,6 +93,19 @@ export interface CustomerMatchResult {
 
 export function matchCustomer(companyName: string, address?: string, topN = 5): CustomerMatchResult[] {
   if (!companyName?.trim()) return []
+
+  // 1. Check company alias (learned from accountant corrections) — score 1.0
+  const aliasHit = checkCompanyAlias(companyName, address)
+  if (aliasHit) {
+    const rest = matchCustomerFuzzy(companyName, address, topN - 1)
+      .filter(r => r.customer.code !== aliasHit.code)
+    return [{ customer: aliasHit, score: 1.0 }, ...rest].slice(0, topN)
+  }
+
+  return matchCustomerFuzzy(companyName, address, topN)
+}
+
+function matchCustomerFuzzy(companyName: string, address?: string, topN = 5): CustomerMatchResult[] {
   if (!distinctiveWords(companyName).length) return []
   const customers = getCustomers()
   const results: CustomerMatchResult[] = customers.map(c => {
