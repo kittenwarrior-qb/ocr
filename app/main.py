@@ -84,6 +84,7 @@ app = FastAPI(
 CORS_ORIGINS = [
     "https://ocr-sandy-nu.vercel.app",
     "https://quocbui.site",
+    "https://ocr.quocbui.dev",
     "http://localhost:3000",
     "http://localhost:5173",
 ]
