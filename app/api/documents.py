@@ -310,6 +310,22 @@ def complete_order(order_id: UUID, db: Session = Depends(get_db)):
     return {"status": order.status}
 
 
+@router.delete("/orders/{order_id}")
+def delete_order(order_id: UUID, also_raw: bool = False, db: Session = Depends(get_db)):
+    """Delete an order (and optionally its raw document / PDF)."""
+    order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    raw_doc_id = order.raw_document_id
+    db.delete(order)
+    if also_raw and raw_doc_id:
+        raw = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
+        if raw:
+            db.delete(raw)
+    db.commit()
+    return {"deleted": str(order_id)}
+
+
 @router.patch("/orders/{order_id}")
 def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends(get_db)):
     """Update order fields - dùng cho OrderReview"""

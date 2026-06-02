@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Input, Modal, Form, message, Spin, Upload, Tooltip, Tag, Tabs } from 'antd'
+import { Button, Input, Modal, Form, message, Spin, Upload, Tooltip, Tag, Tabs, Popconfirm } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, SearchOutlined, UploadOutlined,
   DownloadOutlined, ReloadOutlined, RobotOutlined, ImportOutlined,
@@ -107,11 +107,18 @@ export default function ProductMappingPage() {
     setSaving(false)
   }
 
-  const handleDeleteAlias = async (id: string) => {
-    try {
-      await client.delete(`/sku-aliases/${id}`)
-      message.success('Đã xóa'); loadAlias(aliasSearch, aliasPage); reloadAliases()
-    } catch { message.error('Xóa thất bại') }
+  const handleDeleteAlias = (id: string, label: string) => {
+    Modal.confirm({
+      title: 'Xóa SKU alias?',
+      content: `"${label}" sẽ bị xóa. Lần sau OCR sẽ không tự nhận diện được sản phẩm này nữa.`,
+      okText: 'Xóa', okType: 'danger', cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          await client.delete(`/sku-aliases/${id}`)
+          message.success('Đã xóa'); loadAlias(aliasSearch, aliasPage); reloadAliases()
+        } catch { message.error('Xóa thất bại') }
+      },
+    })
   }
 
   const handleImport = async (file: File) => {
@@ -264,7 +271,7 @@ export default function ProductMappingPage() {
                                   onClick={() => { setEditItem(row); form.setFieldsValue({ external_key: row.external_key, customer_code: row.customer_code, product_code: row.product_code, product_name: row.product_name, note: row.note }); setAddOpen(true) }}>Sửa</button>
                                 <Tooltip title="Xóa">
                                   <button className="text-red-400 hover:text-red-600 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50"
-                                    onClick={() => handleDeleteAlias(row.id)}><DeleteOutlined /></button>
+                                    onClick={() => handleDeleteAlias(row.id, row.external_key)}><DeleteOutlined /></button>
                                 </Tooltip>
                               </div>
                             </td>

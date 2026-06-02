@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Input, Modal, Form, message, Spin, Tooltip, Tag, Tabs } from 'antd'
 import {
   SearchOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined,
@@ -38,12 +38,15 @@ function useTableData<T>(
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
 
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher  // always latest, no re-render trigger
+
   const load = useCallback(async (q: string, p: number) => {
     setLoading(true)
-    try { const r = await fetcher(q, p); setData(r.items); setTotal(r.total) }
+    try { const r = await fetcherRef.current(q, p); setData(r.items); setTotal(r.total) }
     catch { message.error('Tải thất bại') }
     setLoading(false)
-  }, [fetcher])
+  }, [])  // stable — no deps, uses ref
 
   useEffect(() => {
     if (activeKey !== tabKey) return
@@ -75,9 +78,16 @@ export default function CustomerMappingPage() {
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi') }
   }
 
-  const deleteMst = async (tax_code: string) => {
-    await client.delete(`/company-aliases/mst/${encodeURIComponent(tax_code)}`)
-    message.success('Đã xóa'); mst.reload()
+  const deleteMst = (tax_code: string) => {
+    Modal.confirm({
+      title: 'Xóa MST mapping?',
+      content: `MST "${tax_code}" sẽ bị xóa khỏi bảng nhận diện khách hàng.`,
+      okText: 'Xóa', okType: 'danger', cancelText: 'Hủy',
+      onOk: async () => {
+        await client.delete(`/company-aliases/mst/${encodeURIComponent(tax_code)}`)
+        message.success('Đã xóa'); mst.reload()
+      },
+    })
   }
 
   // ── Company name alias ───────────────────────────────────────────────────
@@ -104,10 +114,17 @@ export default function CustomerMappingPage() {
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi') }
   }
 
-  const deleteAlias = async (id: string, type: 'name' | 'address') => {
-    await client.delete(`/company-aliases/${id}`)
-    message.success('Đã xóa')
-    if (type === 'name') names.reload(); else addrs.reload()
+  const deleteAlias = (id: string, type: 'name' | 'address', label: string) => {
+    Modal.confirm({
+      title: `Xóa alias ${type === 'name' ? 'tên công ty' : 'địa chỉ'}?`,
+      content: `"${label}" sẽ bị xóa. Hệ thống sẽ không còn nhận diện được KH từ tên/địa chỉ này.`,
+      okText: 'Xóa', okType: 'danger', cancelText: 'Hủy',
+      onOk: async () => {
+        await client.delete(`/company-aliases/${id}`)
+        message.success('Đã xóa')
+        if (type === 'name') names.reload(); else addrs.reload()
+      },
+    })
   }
 
   const openAliasEdit = (row: CompanyAliasRow, type: 'name' | 'address') => {
@@ -167,7 +184,7 @@ export default function CustomerMappingPage() {
                       <button className="text-[10px] text-blue-500 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-50"
                         onClick={() => openAliasEdit(row, type)}>Sửa</button>
                       <Tooltip title="Xóa"><button className="text-red-400 hover:text-red-600 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50"
-                        onClick={() => deleteAlias(row.id, type)}><DeleteOutlined /></button></Tooltip>
+                        onClick={() => deleteAlias(row.id, type, row.external_key)}><DeleteOutlined /></button></Tooltip>
                     </div>
                   </td>
                 </tr>

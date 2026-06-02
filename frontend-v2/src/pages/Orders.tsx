@@ -505,7 +505,12 @@ export default function OrdersPage() {
                       <span className="text-xs text-slate-300 ml-2">{order.order_number || ''}</span>
                       {(() => { const ok = order.pending_count === 0 && hasMappedCustomer(order); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; if (!hasMappedCustomer(order)) return <Tag color="warning" className="text-xs ml-2">Chưa chọn KH</Tag>; return null })()}
                     </div>
-                    <button className="text-xs text-slate-200 hover:text-white border border-slate-500 rounded-md px-2.5 py-1 font-medium hover:bg-slate-600 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
+                    <div className="flex items-center gap-1.5">
+                      <button className="text-xs text-slate-200 hover:text-white border border-slate-500 rounded-md px-2.5 py-1 font-medium hover:bg-slate-600 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
+                      <Tooltip title="Xóa đơn hàng này">
+                        <button className="text-xs text-red-300 hover:text-red-100 border border-red-700/50 rounded-md px-2 py-1 hover:bg-red-900/30 transition-colors" onClick={(e) => { e.stopPropagation(); Modal.confirm({ title: 'Xóa đơn hàng?', content: `Đơn "${order.file_name}" sẽ bị xóa vĩnh viễn khỏi phiên này.`, okText: 'Xóa', okType: 'danger', cancelText: 'Hủy', onOk: async () => { try { await client.delete(`/documents/orders/${order.id}`); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }); message.success('Đã xóa') } catch { message.error('Xóa thất bại') } } }) }}><DeleteOutlined /></button>
+                      </Tooltip>
+                    </div>
                   </div>
 
                   {/* PDF Data — light blue tint */}
@@ -697,7 +702,7 @@ export default function OrdersPage() {
 
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={selectedLine ? `Chọn hàng hóa — "${selectedLine.product_name_original || ''}"` : 'Chọn hàng hóa'}
-        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name' }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }]}
+        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 120, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 300 }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }, { title: 'Đơn giá', dataIndex: 'price', width: 110, nowrap: true }, { title: 'Thuế', dataIndex: 'tax_rate', width: 70, nowrap: true }, { title: 'Tính chất', dataIndex: 'property', width: 120, nowrap: true }]}
         fetchData={async (s, skip, limit) => { const r = await fetchProducts(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => {
           const product = r as unknown as Product
