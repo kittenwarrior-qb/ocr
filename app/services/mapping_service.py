@@ -238,7 +238,7 @@ def find_best_contact(
             score += min(18, address_score // 5)
         if address_score >= 94 and has_org_overlap:
             score = max(score, 88)
-        if recipient_score >= 78:
+        if recipient_score >= 78 and has_org_overlap:
             score = max(score, recipient_score)
 
         if score > best_score:

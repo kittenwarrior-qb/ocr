@@ -83,7 +83,7 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
     uom_original: product.uom,
     uom_mapped: product.uom,
     unit_price: unitPrice,
-    tax_rate: productTaxRate(product),
+    tax_rate: line.tax_rate,
     line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
   }
 }
@@ -94,13 +94,7 @@ function orderLineSubtotal(order: SessionOrder): number {
 
 function orderTaxAmount(order: SessionOrder, preferOcr = false): number {
   if (preferOcr) return Number(order.ocr_tax_amount ?? order.tax_amount) || 0
-  const explicitTax = Number(order.tax_amount) || 0
-  if (explicitTax) return explicitTax
-  return order.lines.reduce((sum, line) => {
-    const amount = Number(line.line_total) || 0
-    const rate = Number(line.tax_rate) || 0
-    return sum + (amount && rate ? Math.round(amount * rate / 100) : 0)
-  }, 0)
+  return Number(order.tax_amount) || 0
 }
 
 function orderBeforeVat(order: SessionOrder, preferOcr = false): number {
@@ -350,7 +344,7 @@ export default function OrdersPage() {
       line_total: Number(product.price) || 0,
       uom_original: product.uom,
       uom_mapped: product.uom,
-      tax_rate: productTaxRate(product),
+      tax_rate: 0,
       mapping_status: 'mapped',
     }
     await saveOrderLines(order, [...order.lines, line])
@@ -509,8 +503,7 @@ export default function OrdersPage() {
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.ocr_delivery_address || order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.ocr_recipient_name || order.recipient_name || '—'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{orderBeforeVat(order, true) ? orderBeforeVat(order, true).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
-                      {orderTaxAmount(order, true) ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{orderTaxAmount(order, true).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tổng tiền:</span><span className="text-emerald-700 font-bold">{orderAfterVat(order, true) ? orderAfterVat(order, true).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
                       {(() => {
                         const custCode = String(order.extra_data?.customer_code || '')
                         const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
@@ -589,7 +582,7 @@ export default function OrdersPage() {
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
-                      <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-20 text-right text-blue-600">Tiền thuế</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-20" />
+                      <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-20" />
                     </div>
                     {order.lines.map(line => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'high' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'low' || conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'medium' ? 'bg-amber-50/70' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
@@ -599,9 +592,7 @@ export default function OrdersPage() {
                         <span className="text-xs text-slate-700 w-14 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
                         <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
-                        <span className="text-xs text-blue-500 w-20 text-right">{(line.line_total && line.tax_rate) ? Math.round(Number(line.line_total) * Number(line.tax_rate) / 100).toLocaleString('vi-VN') : ''}</span>
                         <span className="text-xs text-slate-500 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
-                        <span className="text-xs text-slate-500 w-10 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
                         <div className="w-20 flex-shrink-0 flex justify-end gap-1">
                           {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'high' && conf.suggestion && <button className="text-xs text-emerald-600 border border-emerald-300 rounded px-1.5 py-0.5 hover:bg-emerald-50 font-medium" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
                           {!systemLine && <button className="text-xs text-blue-600 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50 font-medium" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>}
@@ -611,45 +602,11 @@ export default function OrdersPage() {
                     ) })}
                     <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-slate-50/80">
                       <span className="w-2.5" />
-                      <span className="text-xs text-slate-500 flex-1 uppercase tracking-wide">Tổng chưa VAT</span>
-                      <span className="w-20" />
-                      <span className="text-xs text-slate-700 w-20 text-right font-semibold">{orderBeforeVat(order).toLocaleString('vi-VN')}</span>
-                      <span className="w-20" />
+                      <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền theo PDF</span>
                       <span className="w-12" />
-                      <span className="w-10" />
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN')}</span>
                       <span className="w-20" />
                     </div>
-                    {orderTaxAmount(order) ? <>
-                    <div className="flex items-center gap-2 py-1.5 rounded px-2 bg-blue-50/50">
-                      <span className="w-2.5" />
-                      <span className="text-xs text-blue-600 flex-1 uppercase tracking-wide">Tiền thuế VAT</span>
-                      <span className="w-20" />
-                      <span className="text-xs text-blue-600 w-20 text-right font-semibold">{orderTaxAmount(order).toLocaleString('vi-VN')}</span>
-                      <span className="w-20" />
-                      <span className="w-12" />
-                      <span className="w-10" />
-                      <span className="w-20" />
-                    </div>
-                    <div className="flex items-center gap-2 py-2 border-t-2 border-emerald-300 rounded px-2 bg-emerald-50/40">
-                      <span className="w-2.5" />
-                      <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng sau VAT</span>
-                      <span className="w-20" />
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order).toLocaleString('vi-VN')}</span>
-                      <span className="w-20" />
-                      <span className="w-12" />
-                      <span className="w-10" />
-                      <span className="w-20" />
-                    </div>
-                    </> : <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-emerald-50/30">
-                      <span className="w-2.5" />
-                      <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
-                      <span className="w-20" />
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order).toLocaleString('vi-VN')}</span>
-                      <span className="w-20" />
-                      <span className="w-12" />
-                      <span className="w-10" />
-                      <span className="w-20" />
-                    </div>}
                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); handleAddBlankLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm dòng thất bại')) }}>Thêm dòng</Button>

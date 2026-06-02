@@ -133,22 +133,18 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
     matched_contact = None
 
     if doc_type == "purchase_order":
+        partner = mapping_service.find_existing_partner(db, partner_name, tax_code, partner_type)
         matched_contact = mapping_service.find_best_contact(
             db,
-            partner_name,
+            partner.legal_name if partner else partner_name,
             delivery_address_text,
             data.get("recipient_name"),
         )
         contact_partner = mapping_service.find_customer_for_contact(db, matched_contact)
-        if contact_partner:
+        if contact_partner and not partner:
             partner = contact_partner
-        else:
-            partner = mapping_service.find_existing_partner(
-                db,
-                (matched_contact.organization if matched_contact and matched_contact.organization else partner_name),
-                tax_code,
-                partner_type,
-            )
+        elif contact_partner and partner and contact_partner.id != partner.id:
+            matched_contact = None
         if matched_contact:
             delivery_address_text = matched_contact.delivery_address or matched_contact.address or delivery_address_text
         address = mapping_service.find_existing_address(db, partner.id if partner else None, delivery_address_text)
@@ -340,8 +336,6 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
                 unit_price = product.price
             if line_total is None and unit_price is not None and quantity is not None:
                 line_total = unit_price * quantity
-            if tax_rate is None and product.tax_rate is not None:
-                tax_rate = product.tax_rate
         line = OrderLine(
             processed_order_id=order_id,
             temp_code=temp_code,
@@ -380,8 +374,6 @@ def _build_bill_lines(db: Session, bill_id: UUID, items: list) -> list[BillLine]
                 unit_price = product.price
             if line_total is None and unit_price is not None and quantity is not None:
                 line_total = unit_price * quantity
-            if tax_rate is None and product.tax_rate is not None:
-                tax_rate = product.tax_rate
         line = BillLine(
             processed_bill_id=bill_id,
             temp_code=temp_code,
