@@ -46,8 +46,8 @@ function getConfidence(line: SessionLine): { level: Confidence; suggestion: Prod
   if (results[0].score >= 0.5) return { level: 'medium', suggestion: results[0].product }
   return { level: 'low', suggestion: results[0].product }
 }
-const DOT_COLORS: Record<Confidence, string> = { confirmed: 'bg-emerald-500', suggest: 'bg-blue-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
-const DOT_TIPS: Record<Confidence, string> = { confirmed: 'Đã xác nhận', suggest: 'Khớp tốt — bấm ✓ để xác nhận', medium: 'Gợi ý cần xem lại', low: 'Không tìm thấy — chọn thủ công', none: 'Không có gợi ý' }
+const DOT_COLORS: Record<Confidence, string> = { confirmed: 'bg-emerald-500', suggest: 'bg-emerald-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
+const DOT_TIPS: Record<Confidence, string> = { confirmed: 'Đã xác nhận', suggest: 'Gợi ý tốt — bấm ✓ để xác nhận nhanh', medium: 'Gợi ý cần xem lại — bấm Xác nhận', low: 'Không tìm thấy — chọn thủ công', none: 'Không có gợi ý' }
 
 function isSystemLine(line: Partial<SessionLine>): boolean {
   return line.mapping_status === 'overridden'
@@ -471,8 +471,7 @@ export default function OrdersPage() {
 
             {/* Legend */}
             <div className="px-4 py-1.5 bg-slate-100 border-b border-slate-300 flex items-center gap-4 text-xs text-slate-600">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Đã xác nhận</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Gợi ý (bấm ✓)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Đã xác nhận / Gợi ý tốt</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" /> Cần xem lại</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Chọn thủ công</span>
             </div>
@@ -585,7 +584,7 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
                       <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-24" />
                     </div>
-                    {order.lines.map(line => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'confirmed' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'low' ? 'bg-orange-50/60' : conf.level === 'medium' ? 'bg-amber-50/70' : conf.level === 'suggest' ? 'bg-blue-50/40' : 'hover:bg-slate-50'; return (
+                    {order.lines.map(line => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'confirmed' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'low' ? 'bg-orange-50/60' : conf.level === 'medium' ? 'bg-amber-50/70' : conf.level === 'suggest' ? 'bg-emerald-50/50' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
                         <Tooltip title={DOT_TIPS[conf.level]}><span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLORS[conf.level]}`} /></Tooltip>
                         <span className="text-xs text-slate-800 flex-1 truncate font-medium">{line.product_name_original}</span>
@@ -595,7 +594,7 @@ export default function OrdersPage() {
                         <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-500 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
                         <div className="w-20 flex-shrink-0 flex justify-end gap-1">
-                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && <button className="text-xs text-emerald-600 border border-emerald-300 rounded px-1.5 py-0.5 hover:bg-emerald-50 font-medium" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
+                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && <button className="text-xs text-white bg-emerald-500 hover:bg-emerald-600 rounded px-2 py-0.5 font-semibold shadow-sm" title={`Xác nhận: ${conf.suggestion.code}`} onClick={() => handleMapProduct(line, conf.suggestion!)}>✓ Xác nhận</button>}
                           {!systemLine && <button className="text-xs text-blue-600 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50 font-medium" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>}
                           <button className="text-xs text-red-500 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 font-medium" onClick={(e) => { e.stopPropagation(); handleDeleteLine(order, line).catch(err => message.error(err?.response?.data?.detail || 'Xóa dòng thất bại')) }} title="Xóa dòng"><DeleteOutlined /></button>
                         </div>
