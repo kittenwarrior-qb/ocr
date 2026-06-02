@@ -17,6 +17,7 @@ import {
   SearchOutlined,
   ArrowsAltOutlined,
   DeleteOutlined,
+  TagsOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -142,7 +143,7 @@ export default function OrdersPage() {
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [vouchersByCustomer, setVouchersByCustomer] = useState<Record<string, Voucher[]>>({})
-  const [expandedVouchers, setExpandedVouchers] = useState<Record<string, boolean>>({})
+  const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null)
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({ queryKey: ['sessions'], queryFn: getSessions, refetchInterval: uploading ? 3000 : false })
   const { data: sessionDetail, refetch: refetchDetail } = useQuery({
@@ -456,6 +457,35 @@ export default function OrdersPage() {
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '—'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
                       {order.tax_amount ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{(Number(order.total_amount || 0) + Number(order.tax_amount)).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
+                      {(() => {
+                        const custCode = String(order.extra_data?.customer_code || '')
+                        const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
+                        if (!vouchers.length) return null
+                        return (
+                          <div className="col-span-2 flex items-start gap-2 pt-1 min-w-0">
+                            <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Voucher:</span>
+                            <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
+                              {vouchers.map((v, idx) => {
+                                const cls = idx % 2 === 0
+                                  ? 'bg-purple-600 border-purple-600 text-white hover:bg-purple-700'
+                                  : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'
+                                return (
+                                  <button
+                                    key={v.code}
+                                    className={`inline-flex max-w-[260px] items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors ${cls}`}
+                                    onClick={e => { e.stopPropagation(); setSelectedVoucher(v) }}
+                                    title={v.name}
+                                  >
+                                    <TagsOutlined className="shrink-0" />
+                                    <span className="font-mono shrink-0">{v.code}</span>
+                                    <span className="truncate">{v.name}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -490,71 +520,6 @@ export default function OrdersPage() {
                       return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button></div>
                     })()}
                   </div>
-
-                  {/* Vouchers — applicable promotions */}
-                  {(() => {
-                    const custCode = String(order.extra_data?.customer_code || '')
-                    const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
-                    if (!vouchers.length) return null
-                    const key = order.id
-                    const expanded = expandedVouchers[key]
-                    return (
-                      <div className="px-4 py-2 border-b border-slate-100 bg-purple-50/40">
-                        <button
-                          className="flex items-center gap-2 w-full text-left"
-                          onClick={e => { e.stopPropagation(); setExpandedVouchers(prev => ({ ...prev, [key]: !prev[key] })) }}
-                        >
-                          <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Khuyến mại áp dụng</span>
-                          <span className="ml-1 inline-flex items-center justify-center rounded-full bg-purple-600 text-white text-[10px] font-bold w-4 h-4">{vouchers.length}</span>
-                          <span className="ml-auto text-xs text-purple-400">{expanded ? '▲ Thu gọn' : '▼ Xem'}</span>
-                        </button>
-                        {expanded && (
-                          <div className="mt-2 space-y-2">
-                            {vouchers.map(v => (
-                              <div key={v.code} className="border border-purple-200 rounded-lg bg-white overflow-hidden">
-                                <div className="px-3 py-2 bg-purple-100 flex items-start justify-between gap-2">
-                                  <div>
-                                    <span className="text-xs font-bold text-purple-800 font-mono">{v.code}</span>
-                                    <span className="mx-2 text-purple-400">·</span>
-                                    <span className="text-xs font-semibold text-purple-900">{v.name}</span>
-                                  </div>
-                                  <span className="text-[10px] text-purple-600 whitespace-nowrap shrink-0">{v.from_date} → {v.to_date}</span>
-                                </div>
-                                <div className="px-3 py-1.5 border-b border-purple-100">
-                                  <div className="flex gap-4 text-[11px] text-slate-600">
-                                    <span><span className="font-medium text-slate-500">Loại:</span> {v.type}</span>
-                                    <span><span className="font-medium text-slate-500">Mô tả:</span> {v.description}</span>
-                                  </div>
-                                </div>
-                                <table className="w-full text-[11px]">
-                                  <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
-                                      <th className="px-3 py-1 text-left font-medium">Hàng hóa mua</th>
-                                      <th className="px-2 py-1 text-center font-medium w-12">ĐVT</th>
-                                      <th className="px-2 py-1 text-center font-medium w-10">SL</th>
-                                      <th className="px-3 py-1 text-left font-medium">Tặng hàng hóa</th>
-                                      <th className="px-2 py-1 text-center font-medium w-10">SL</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {v.items.map((item, i) => (
-                                      <tr key={i} className="border-b border-slate-50 last:border-0">
-                                        <td className="px-3 py-1 text-slate-700"><span className="font-mono text-purple-600">{item.product_code}</span> · {item.product_name}</td>
-                                        <td className="px-2 py-1 text-center text-slate-500">{item.uom}</td>
-                                        <td className="px-2 py-1 text-center font-semibold text-purple-700">{item.quantity}</td>
-                                        <td className="px-3 py-1 text-slate-700"><span className="font-mono text-emerald-600">{item.gift_product_code}</span> · {item.gift_product_name}</td>
-                                        <td className="px-2 py-1 text-center font-semibold text-emerald-700">{item.gift_quantity}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
 
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
@@ -692,6 +657,64 @@ export default function OrdersPage() {
       {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
         <OrderDetailForm orderId={editingOrder.id} onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }} />
       </Modal>}
+
+      {selectedVoucher && (
+        <Modal
+          open
+          width={980}
+          centered
+          footer={null}
+          title={<span><TagsOutlined className="mr-2 text-purple-600" />{selectedVoucher.code} - {selectedVoucher.name}</span>}
+          onCancel={() => setSelectedVoucher(null)}
+          styles={{ body: { paddingTop: 12 } }}
+        >
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs bg-purple-50 border border-purple-100 rounded px-3 py-2">
+              <div><span className="text-slate-500 font-medium">Loại:</span> <span className="text-slate-800">{selectedVoucher.type || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Đối tượng:</span> <span className="text-slate-800">{selectedVoucher.target || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Căn cứ:</span> <span className="text-slate-800">{selectedVoucher.base_on || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-purple-700 font-semibold">{selectedVoucher.from_date || '—'} → {selectedVoucher.to_date || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Khách hàng:</span> <span className="text-slate-800">{selectedVoucher.customers?.length ? selectedVoucher.customers.join(', ') : 'Tất cả'}</span></div>
+              <div><span className="text-slate-500 font-medium">Trạng thái:</span> <span className={selectedVoucher.is_active ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>{selectedVoucher.is_active ? 'Kích hoạt' : 'Không hoạt động'}</span></div>
+              {selectedVoucher.description && <div className="col-span-3"><span className="text-slate-500 font-medium">Mô tả:</span> <span className="text-slate-800">{selectedVoucher.description}</span></div>}
+            </div>
+
+            <div className="border border-slate-200 rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                    <th className="px-3 py-2 text-left font-semibold">Hàng hóa mua</th>
+                    <th className="px-2 py-2 text-center font-semibold w-20">ĐVT</th>
+                    <th className="px-2 py-2 text-right font-semibold w-20">SL mua</th>
+                    <th className="px-3 py-2 text-left font-semibold">Hàng hóa tặng</th>
+                    <th className="px-2 py-2 text-center font-semibold w-20">ĐVT tặng</th>
+                    <th className="px-2 py-2 text-right font-semibold w-20">SL tặng</th>
+                    <th className="px-2 py-2 text-right font-semibold w-24">Tối đa/đơn</th>
+                    <th className="px-2 py-2 text-right font-semibold w-24">Tối đa/KH</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedVoucher.items?.map((item, i) => (
+                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-purple-600 font-semibold">{item.product_code}</span> · {item.product_name}</td>
+                      <td className="px-2 py-2 text-center text-slate-500">{item.uom || '—'}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-purple-700">{item.quantity || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-emerald-600 font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
+                      <td className="px-2 py-2 text-center text-slate-500">{item.gift_uom || '—'}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-emerald-700">{item.gift_quantity || '—'}</td>
+                      <td className="px-2 py-2 text-right text-slate-500">{item.max_per_order || '∞'}</td>
+                      <td className="px-2 py-2 text-right text-slate-500">{item.max_per_customer || '∞'}</td>
+                    </tr>
+                  ))}
+                  {!selectedVoucher.items?.length && (
+                    <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm trong voucher</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {previewOrder && (
         <Modal
