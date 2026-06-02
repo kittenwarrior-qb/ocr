@@ -15,10 +15,13 @@ import {
   HistoryOutlined,
   PlusOutlined,
   SearchOutlined,
+  ArrowsAltOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
   getSessionDetails,
+  getOrderFileUrl,
+  getRawFileUrl,
   uploadBatch,
   type SessionLine,
   type SessionOrder,
@@ -118,6 +121,8 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
+  const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
+  const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 
@@ -197,11 +202,16 @@ export default function OrdersPage() {
     window.open(`${base}/sessions/${sid}/export`, '_blank')
   }
 
+  const getPdfPreviewUrl = (order: SessionOrder) => (
+    order.raw_document_id ? getRawFileUrl(order.raw_document_id) : getOrderFileUrl(order.id)
+  )
+
   const doneCount = uploadFiles.filter(f => f.status === 'done').length
   const progressPercent = uploadFiles.length > 0 ? Math.round((doneCount / uploadFiles.length) * 100) : 0
+  const previewPanelOrder = sessionDetail?.orders.find(o => o.id === previewPanelOrderId) || sessionDetail?.orders[0] || null
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-[1500px] mx-auto">
       <h1 className="text-lg font-semibold text-gray-800 mb-4">Đơn đặt hàng</h1>
 
       {/* Upload */}
@@ -249,6 +259,7 @@ export default function OrdersPage() {
       {/* Current Tab */}
       {activeTab === 'current' && (<>
         {activeSessionId && sessionDetail ? (
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_430px] gap-4 items-start">
           <div className="rounded-lg overflow-hidden border-2 border-slate-300 bg-slate-100 shadow">
             {/* Batch header */}
             <div className="px-4 py-3 bg-slate-200 border-b border-slate-300 flex items-center justify-between">
@@ -302,7 +313,11 @@ export default function OrdersPage() {
             {/* Orders */}
             <div className="p-3 space-y-4">
               {sessionDetail.orders.map(order => (
-                <div key={order.id} className="border border-slate-200 rounded-lg overflow-hidden shadow-sm bg-white">
+                <div
+                  key={order.id}
+                  className={`border rounded-lg overflow-hidden shadow-sm bg-white cursor-pointer transition-colors ${previewPanelOrder?.id === order.id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}
+                  onClick={() => setPreviewPanelOrderId(order.id)}
+                >
                   {/* Header — navy accent */}
                   <div className="px-4 py-2.5 bg-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -385,6 +400,25 @@ export default function OrdersPage() {
               {sessionDetail.orders.length === 0 && sessionDetail.processing_count > 0 && <div className="py-10 text-center text-gray-400"><LoadingOutlined spin className="text-3xl mb-2 block" /><p className="text-sm">Đang xử lý OCR...</p></div>}
             </div>
           </div>
+          <aside className="xl:sticky xl:top-4 rounded-lg border border-slate-300 bg-white shadow overflow-hidden">
+            <div className="h-11 px-3 border-b border-slate-200 flex items-center justify-between bg-slate-700">
+              <div className="min-w-0 flex items-center gap-2">
+                <FilePdfOutlined className="text-red-300" />
+                <span className="text-sm font-semibold text-white truncate">{previewPanelOrder?.file_name || 'PDF'}</span>
+              </div>
+              <Button size="small" icon={<ArrowsAltOutlined />} disabled={!previewPanelOrder} onClick={() => previewPanelOrder && setPreviewOrder(previewPanelOrder)}>Phóng to</Button>
+            </div>
+            {previewPanelOrder ? (
+              <iframe
+                title={previewPanelOrder.file_name || 'PDF preview'}
+                src={`${getPdfPreviewUrl(previewPanelOrder)}#toolbar=0&navpanes=0`}
+                className="block w-full h-[calc(100vh-180px)] min-h-[520px] bg-white"
+              />
+            ) : (
+              <div className="h-[520px] flex items-center justify-center text-xs text-slate-400">Không có file PDF</div>
+            )}
+          </aside>
+          </div>
         ) : sessions.length === 0 && uploadFiles.length === 0 ? <div className="text-center py-16 text-gray-400"><InboxOutlined className="text-5xl mb-3 block" /><p className="text-sm">Upload file PDF để bắt đầu</p></div> : null}
       </>)}
 
@@ -416,6 +450,28 @@ export default function OrdersPage() {
       {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
         <OrderDetailForm orderId={editingOrder.id} onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }} />
       </Modal>}
+
+      {previewOrder && (
+        <Modal
+          open
+          onCancel={() => setPreviewOrder(null)}
+          footer={null}
+          width="96vw"
+          centered
+          title={previewOrder.file_name || 'PDF'}
+          styles={{
+            content: { padding: 0, overflow: 'hidden' },
+            header: { margin: 0, padding: '10px 14px', borderBottom: '1px solid #e2e8f0' },
+            body: { height: '90vh', padding: 0 },
+          }}
+        >
+          <iframe
+            title={previewOrder.file_name || 'PDF preview large'}
+            src={`${getPdfPreviewUrl(previewOrder)}#toolbar=1&navpanes=0`}
+            className="block w-full h-full bg-white"
+          />
+        </Modal>
+      )}
     </div>
   )
 }

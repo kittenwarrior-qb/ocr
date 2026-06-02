@@ -142,6 +142,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
 
         orders_out.append({
             "id": str(order.id),
+            "raw_document_id": str(order.raw_document_id),
             "file_name": raw_doc.file_name if raw_doc else None,
             "order_number": order.order_number,
             "order_date": str(order.order_date) if order.order_date else None,

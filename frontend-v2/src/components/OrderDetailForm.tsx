@@ -238,7 +238,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-4">Thông tin chung</h2>
       <Form form={form} layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label={<>Số đơn hàng <span className="text-red-500">*</span></>} name="order_number"><Input readOnly /></Form.Item>
+          <Form.Item label={<>Số đơn hàng <span className="text-red-500">*</span></>} name="order_number" rules={[{ required: true, message: 'Nhập số đơn hàng' }]}><Input /></Form.Item>
           <Form.Item label={<>Ngày đặt hàng <span className="text-red-500">*</span></>} name="order_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>

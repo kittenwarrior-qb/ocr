@@ -292,6 +292,14 @@ def get_order(order_id: UUID, db: Session = Depends(get_db)):
     return _enrich_order(order, db)
 
 
+@router.get("/orders/{order_id}/file")
+def get_order_file(order_id: UUID, db: Session = Depends(get_db)):
+    order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return get_raw_file(order.raw_document_id, db)
+
+
 @router.post("/orders/{order_id}/complete")
 def complete_order(order_id: UUID, db: Session = Depends(get_db)):
     order = document_service.manually_complete_order(db, order_id)

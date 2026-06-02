@@ -66,6 +66,16 @@ export function getImageUrl(rawDocId: string, annotated = false): string {
   return `${base}/documents/raw/${rawDocId}${suffix}`
 }
 
+export function getRawFileUrl(rawDocId: string): string {
+  const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
+  return `${base}/documents/raw/${rawDocId}/file`
+}
+
+export function getOrderFileUrl(orderId: string): string {
+  const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
+  return `${base}/documents/orders/${orderId}/file`
+}
+
 // Sessions (batches)
 export interface SessionSummary {
   id: string
@@ -97,6 +107,7 @@ export interface SessionLine {
 
 export interface SessionOrder {
   id: string
+  raw_document_id: string
   file_name: string | null
   order_number: string | null
   order_date: string | null
