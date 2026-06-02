@@ -383,12 +383,14 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
             
             kept_line_ids.add(str(line.id))
 
-        for line_id, line in existing_lines.items():
-            if line_id not in kept_line_ids:
+        current_lines = db.query(OrderLine).filter(OrderLine.processed_order_id == order.id).all()
+        for line in current_lines:
+            if str(line.id) not in kept_line_ids:
                 db.delete(line)
 
         db.flush()
-        pending = sum(1 for line in order.lines if line.mapping_status == "pending")
+        remaining_lines = db.query(OrderLine).filter(OrderLine.processed_order_id == order.id).all()
+        pending = sum(1 for line in remaining_lines if line.mapping_status == "pending")
         if pending == 0:
             order.status = "completed"
     
@@ -398,7 +400,7 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
 
 
 def _enrich_order(order: ProcessedOrder, db: Session | None = None) -> dict:
-    lines = order.lines
+    lines = db.query(OrderLine).filter(OrderLine.processed_order_id == order.id).all() if db else order.lines
     # Lấy file_name từ RawDocument
     file_name = None
     if db and order.raw_document_id:
