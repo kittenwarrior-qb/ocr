@@ -32,7 +32,7 @@ import { matchProduct, searchProducts, type Product } from '@/utils/productMatch
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
 import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
-import CustomerContactPopup, { type CustomerContactResult } from '@/components/CustomerContactPopup'
+import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import client from '@/api/client'
@@ -84,9 +84,46 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
   }
 }
 
-function buildCustomerExtraData(customer: Customer, contactName = ''): Record<string, string> {
+function orderLineSubtotal(order: SessionOrder): number {
+  return order.lines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
+}
+
+function orderTaxAmount(order: SessionOrder): number {
+  const explicitTax = Number(order.tax_amount) || 0
+  if (explicitTax) return explicitTax
+  return order.lines.reduce((sum, line) => {
+    const amount = Number(line.line_total) || 0
+    const rate = Number(line.tax_rate) || 0
+    return sum + (amount && rate ? Math.round(amount * rate / 100) : 0)
+  }, 0)
+}
+
+function orderBeforeVat(order: SessionOrder): number {
+  const subtotal = orderLineSubtotal(order)
+  if (subtotal) return subtotal
+  const total = Number(order.total_amount) || 0
+  const tax = orderTaxAmount(order)
+  return total && tax ? Math.max(0, total - tax) : total
+}
+
+function orderAfterVat(order: SessionOrder): number {
+  const total = Number(order.total_amount) || 0
+  const subtotal = orderBeforeVat(order)
+  const tax = orderTaxAmount(order)
+  const calculated = subtotal + tax
+  if (!tax) return total || subtotal
+  if (total && Math.abs(total - calculated) <= 2) return total
+  if (total && subtotal && total > subtotal) return total
+  return calculated
+}
+
+function buildCustomerExtraData(customer: Customer, contact?: Contact | string): Record<string, string> {
+  const contactName = typeof contact === 'string' ? contact : contact?.name || ''
+  const contactPhone = typeof contact === 'string' ? '' : (contact?.phone || contact?.phone_work || '')
+  const contactEmail = typeof contact === 'string' ? '' : (contact?.email || contact?.email_personal || '')
+  const contactDeliveryAddress = typeof contact === 'string' ? '' : (contact?.delivery_address || contact?.address || '')
   const invoiceAddress = customer.invoice_address || ''
-  const deliveryAddress = customer.delivery_address || invoiceAddress
+  const deliveryAddress = contactDeliveryAddress || customer.delivery_address || invoiceAddress
   return {
     code: customer.code || '',
     type: customer.type || '',
@@ -110,14 +147,19 @@ function buildCustomerExtraData(customer: Customer, contactName = ''): Record<st
     invoice_customer: customer.name || '',
     invoice_buyer: customer.owner || '',
     invoice_street: invoiceAddress,
-    delivery_receiver: customer.owner || '',
-    delivery_phone: customer.phone || '',
-    delivery_city: customer.invoice_city || '',
-    delivery_district: customer.invoice_district || '',
-    delivery_ward: customer.invoice_ward || '',
+    delivery_receiver: contactName || customer.owner || '',
+    delivery_phone: contactPhone || customer.phone || '',
+    delivery_city: (typeof contact === 'string' ? '' : contact?.city) || customer.invoice_city || '',
+    delivery_district: (typeof contact === 'string' ? '' : contact?.district) || customer.invoice_district || '',
+    delivery_ward: (typeof contact === 'string' ? '' : contact?.ward) || customer.invoice_ward || '',
     delivery_street: deliveryAddress,
     order_type: 'Kênh MT',
-    ...(contactName ? { contact: contactName } : {}),
+    contact: contactName,
+    contact_code: typeof contact === 'string' ? '' : contact?.code || '',
+    contact_phone: contactPhone,
+    contact_email: contactEmail,
+    contact_organization: typeof contact === 'string' ? '' : contact?.organization || '',
+    contact_address: contactDeliveryAddress,
   }
 }
 
@@ -136,6 +178,7 @@ export default function OrdersPage() {
   const [productTargetOrderId, setProductTargetOrderId] = useState<string | null>(null)
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [customerPopupInitialTab, setCustomerPopupInitialTab] = useState<'customer' | 'contact'>('customer')
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
@@ -216,9 +259,10 @@ export default function OrdersPage() {
     }
     catch (e: any) { message.error(e?.response?.data?.detail || 'Mapping thất bại') }
   }
-  const handleSelectCustomer = async (orderId: string, customer: Customer, contactName = '') => {
+  const handleSelectCustomer = async (orderId: string, customer: Customer, contact?: Contact | string) => {
     try {
-      const extraData = buildCustomerExtraData(customer, contactName)
+      const contactName = typeof contact === 'string' ? contact : contact?.name || ''
+      const extraData = buildCustomerExtraData(customer, contact)
       await client.patch(`/documents/orders/${orderId}`, { recipient_name: customer.name, description: extraData.invoice_address, extra_data: extraData })
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
@@ -234,7 +278,7 @@ export default function OrdersPage() {
       await handleSelectCustomer(orderId, result.customer)
     } else {
       if (result.customer) {
-        await handleSelectCustomer(orderId, result.customer, result.contact.name)
+        await handleSelectCustomer(orderId, result.customer, result.contact)
       } else {
         // Contact có tổ chức nhưng không match được KH → chỉ lưu liên hệ, dùng org name làm recipient
         message.warning(`Không tìm thấy công ty "${result.contact.organization}" trong danh sách KH`)
@@ -455,8 +499,8 @@ export default function OrdersPage() {
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '—'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
-                      {order.tax_amount ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{(Number(order.total_amount || 0) + Number(order.tax_amount)).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{orderBeforeVat(order) ? orderBeforeVat(order).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
+                      {orderTaxAmount(order) ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{orderTaxAmount(order).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{orderAfterVat(order).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
                       {(() => {
                         const custCode = String(order.extra_data?.customer_code || '')
                         const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
@@ -500,8 +544,19 @@ export default function OrdersPage() {
                             <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-emerald-700 font-semibold">{order.recipient_name} ✓</td></tr>
                             <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{order.extra_data?.customer_code}{order.extra_data?.customer_tax_code ? ` / ${order.extra_data.customer_tax_code}` : ''}</td></tr>
                             {order.description && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{order.description}</td></tr>}
+                            <tr>
+                              <td className="text-slate-500 pr-3 py-0.5 font-medium">Liên hệ:</td>
+                              <td className="text-slate-700">
+                                {order.extra_data?.contact
+                                  ? <span><span className="font-semibold">{order.extra_data.contact}</span>{order.extra_data?.contact_code ? ` (${order.extra_data.contact_code})` : ''}{order.extra_data?.contact_phone ? ` · ${order.extra_data.contact_phone}` : ''}{order.extra_data?.contact_email ? ` · ${order.extra_data.contact_email}` : ''}</span>
+                                  : <span className="text-amber-600 font-medium">Chưa chọn liên hệ</span>}
+                              </td>
+                            </tr>
                           </tbody></table>
-                          <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Đổi KH</Button>
+                          <div className="flex gap-2 shrink-0">
+                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Đổi KH</Button>
+                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('contact'); setCustomerModalOpen(true) }}>{order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}</Button>
+                          </div>
                         </div>
                       )
                       const name = order.partner_name || order.recipient_name || ''
@@ -514,10 +569,10 @@ export default function OrdersPage() {
                             <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{sugg[0].customer.code}{sugg[0].customer.tax_code ? ` / ${sugg[0].customer.tax_code}` : ''}</td></tr>
                             {sugg[0].customer.invoice_address && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{sugg[0].customer.invoice_address}</td></tr>}
                           </tbody></table>
-                          <div className="flex gap-2 shrink-0"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
+                          <div className="flex gap-2 shrink-0"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
                         </div>
                       )
-                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button></div>
+                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('contact'); setCustomerModalOpen(true) }}>Chọn liên hệ</Button></div>
                     })()}
                   </div>
 
@@ -548,18 +603,18 @@ export default function OrdersPage() {
                       <span className="w-2.5" />
                       <span className="text-xs text-slate-500 flex-1 uppercase tracking-wide">Tổng chưa VAT</span>
                       <span className="w-20" />
-                      <span className="text-xs text-slate-700 w-20 text-right font-semibold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-slate-700 w-20 text-right font-semibold">{orderBeforeVat(order).toLocaleString('vi-VN')}</span>
                       <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
                     </div>
-                    {order.tax_amount ? <>
+                    {orderTaxAmount(order) ? <>
                     <div className="flex items-center gap-2 py-1.5 rounded px-2 bg-blue-50/50">
                       <span className="w-2.5" />
                       <span className="text-xs text-blue-600 flex-1 uppercase tracking-wide">Tiền thuế VAT</span>
                       <span className="w-20" />
-                      <span className="text-xs text-blue-600 w-20 text-right font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-blue-600 w-20 text-right font-semibold">{orderTaxAmount(order).toLocaleString('vi-VN')}</span>
                       <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
@@ -569,7 +624,7 @@ export default function OrdersPage() {
                       <span className="w-2.5" />
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng sau VAT</span>
                       <span className="w-20" />
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{(order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0) + Number(order.tax_amount)).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order).toLocaleString('vi-VN')}</span>
                       <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
@@ -579,7 +634,7 @@ export default function OrdersPage() {
                       <span className="w-2.5" />
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
                       <span className="w-20" />
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order).toLocaleString('vi-VN')}</span>
                       <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
@@ -651,6 +706,8 @@ export default function OrdersPage() {
         open={customerModalOpen}
         onSelect={result => { if (selectedOrderId) handleCustomerContactSelect(selectedOrderId, result) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }}
+        initialTab={customerPopupInitialTab}
+        initialSearch={(() => { const o = sessionDetail?.orders.find(x => x.id === selectedOrderId); return o?.partner_name || o?.recipient_name || '' })()}
       />
 
       {/* Detail Modal */}
@@ -664,18 +721,18 @@ export default function OrdersPage() {
           width={980}
           centered
           footer={null}
-          title={<span><TagsOutlined className="mr-2 text-purple-600" />{selectedVoucher.code} - {selectedVoucher.name}</span>}
+          title={<span className="text-slate-800"><TagsOutlined className="mr-2 text-slate-500" />{selectedVoucher.code} - {selectedVoucher.name}</span>}
           onCancel={() => setSelectedVoucher(null)}
           styles={{ body: { paddingTop: 12 } }}
         >
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs bg-purple-50 border border-purple-100 rounded px-3 py-2">
+            <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs border border-slate-200 rounded px-3 py-2 bg-white">
               <div><span className="text-slate-500 font-medium">Loại:</span> <span className="text-slate-800">{selectedVoucher.type || '—'}</span></div>
               <div><span className="text-slate-500 font-medium">Đối tượng:</span> <span className="text-slate-800">{selectedVoucher.target || '—'}</span></div>
               <div><span className="text-slate-500 font-medium">Căn cứ:</span> <span className="text-slate-800">{selectedVoucher.base_on || '—'}</span></div>
-              <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-purple-700 font-semibold">{selectedVoucher.from_date || '—'} → {selectedVoucher.to_date || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-slate-800 font-semibold">{selectedVoucher.from_date || '—'} → {selectedVoucher.to_date || '—'}</span></div>
               <div><span className="text-slate-500 font-medium">Khách hàng:</span> <span className="text-slate-800">{selectedVoucher.customers?.length ? selectedVoucher.customers.join(', ') : 'Tất cả'}</span></div>
-              <div><span className="text-slate-500 font-medium">Trạng thái:</span> <span className={selectedVoucher.is_active ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>{selectedVoucher.is_active ? 'Kích hoạt' : 'Không hoạt động'}</span></div>
+              <div><span className="text-slate-500 font-medium">Trạng thái:</span> <span className={selectedVoucher.is_active ? 'text-slate-800 font-semibold' : 'text-slate-500'}>{selectedVoucher.is_active ? 'Kích hoạt' : 'Không hoạt động'}</span></div>
               {selectedVoucher.description && <div className="col-span-3"><span className="text-slate-500 font-medium">Mô tả:</span> <span className="text-slate-800">{selectedVoucher.description}</span></div>}
             </div>
 
@@ -696,12 +753,12 @@ export default function OrdersPage() {
                 <tbody>
                   {selectedVoucher.items?.map((item, i) => (
                     <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-purple-600 font-semibold">{item.product_code}</span> · {item.product_name}</td>
+                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-slate-700 font-semibold">{item.product_code}</span> · {item.product_name}</td>
                       <td className="px-2 py-2 text-center text-slate-500">{item.uom || '—'}</td>
-                      <td className="px-2 py-2 text-right font-semibold text-purple-700">{item.quantity || '—'}</td>
-                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-emerald-600 font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-slate-800">{item.quantity || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-slate-700 font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
                       <td className="px-2 py-2 text-center text-slate-500">{item.gift_uom || '—'}</td>
-                      <td className="px-2 py-2 text-right font-semibold text-emerald-700">{item.gift_quantity || '—'}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-slate-800">{item.gift_quantity || '—'}</td>
                       <td className="px-2 py-2 text-right text-slate-500">{item.max_per_order || '∞'}</td>
                       <td className="px-2 py-2 text-right text-slate-500">{item.max_per_customer || '∞'}</td>
                     </tr>

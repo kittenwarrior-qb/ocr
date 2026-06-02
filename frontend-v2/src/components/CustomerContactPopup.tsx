@@ -23,6 +23,7 @@ interface Props {
   onSelect: (result: CustomerContactResult) => void
   onCancel: () => void
   initialSearch?: string
+  initialTab?: 'customer' | 'contact'
 }
 
 const PAGE_SIZE = 20
@@ -63,14 +64,34 @@ function useTableData<T>(
 }
 
 function matchContactToCustomer(contact: Contact): Customer | null {
-  if (!contact.organization) return null
   const all = getCustomers()
+  if (contact.customer_code || contact.customer_name) {
+    const cached = all.find(c => c.code === contact.customer_code || c.name === contact.customer_name)
+    if (cached) return cached
+    return {
+      code: contact.customer_code || '',
+      name: contact.customer_name || contact.organization || contact.name,
+      type: '',
+      tax_code: contact.customer_tax_code || '',
+      phone: contact.phone || contact.phone_work || '',
+      email: contact.email || contact.email_personal || '',
+      field: '',
+      owner: contact.owner || '',
+      description: '',
+      invoice_address: '',
+      invoice_city: '',
+      invoice_district: '',
+      invoice_ward: '',
+      delivery_address: contact.delivery_address || contact.address || '',
+    }
+  }
+  if (!contact.organization) return null
   const org = contact.organization.toLowerCase()
   return all.find(c => c.name.toLowerCase() === org || c.name.toLowerCase().includes(org.slice(0, 20))) || null
 }
 
-export default function CustomerContactPopup({ open, onSelect, onCancel, initialSearch = '' }: Props) {
-  const [activeTab, setActiveTab] = useState<'customer' | 'contact'>('customer')
+export default function CustomerContactPopup({ open, onSelect, onCancel, initialSearch = '', initialTab = 'customer' }: Props) {
+  const [activeTab, setActiveTab] = useState<'customer' | 'contact'>(initialTab)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
 
@@ -78,8 +99,9 @@ export default function CustomerContactPopup({ open, onSelect, onCancel, initial
   const cont = useTableData<Contact>(open && activeTab === 'contact', fetchContacts, initialSearch)
 
   useEffect(() => {
-    if (!open) { setSelectedCustomer(null); setSelectedContact(null); setActiveTab('customer') }
-  }, [open])
+    if (open) setActiveTab(initialTab)
+    else { setSelectedCustomer(null); setSelectedContact(null); setActiveTab(initialTab) }
+  }, [open, initialTab])
 
   const handleOk = () => {
     if (activeTab === 'customer' && selectedCustomer) {

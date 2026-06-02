@@ -46,6 +46,9 @@ export interface Contact {
   district: string
   ward: string
   owner: string
+  customer_code?: string
+  customer_name?: string
+  customer_tax_code?: string
 }
 
 export interface PaginatedResult<T> {

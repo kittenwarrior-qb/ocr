@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.partner import Partner, PartnerAddress
 from app.models.contact import Contact
 from app.schemas.partner import PartnerAddressUpdate, PartnerOut, PartnerUpdate
+from app.services import mapping_service
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
 
@@ -93,8 +94,11 @@ def list_contacts(
         )
     total = q.count()
     contacts = q.order_by(Contact.name).offset(skip).limit(limit).all()
-    return {
-        "items": [
+    customers = db.query(Partner).filter(Partner.is_active == True, Partner.partner_type == "customer").all()
+    items = []
+    for c in contacts:
+        customer = mapping_service.find_customer_for_contact(db, c, customers)
+        items.append(
             {
                 "code": c.code,
                 "title": c.title or "",
@@ -111,9 +115,13 @@ def list_contacts(
                 "district": c.district or "",
                 "ward": c.ward or "",
                 "owner": c.owner or "",
+                "customer_code": customer.code if customer else "",
+                "customer_name": customer.legal_name if customer else "",
+                "customer_tax_code": customer.tax_code if customer else "",
             }
-            for c in contacts
-        ],
+        )
+    return {
+        "items": items,
         "total": total,
     }
 

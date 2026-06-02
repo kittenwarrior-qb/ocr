@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.contact import Contact
 from app.models.document import BillLine, OrderLine, ProcessedBill, ProcessedOrder
 from app.models.mapping import MSTMapping, TempCodeMapping
 from app.models.partner import Partner, PartnerAddress
@@ -26,6 +27,13 @@ def _normalize_product_name(text: str) -> str:
     value = re.sub(r"\b1[\.,]5\s*l\b", "1500ml 1 5l", value)
     value = re.sub(r"\b1\s*500\s*ml\b", "1500ml 1 5l", value)
     value = re.sub(r"\b1\.500\s*ml\b", "1500ml 1 5l", value)
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _normalize_text(text: str | None) -> str:
+    value = unicodedata.normalize("NFD", (text or "").lower())
+    value = "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
     value = re.sub(r"[^a-z0-9\s]", " ", value)
     return re.sub(r"\s+", " ", value).strip()
 
@@ -99,6 +107,81 @@ def find_or_create_partner(
         db.flush()
 
     return partner
+
+
+def find_best_contact(
+    db: Session,
+    company_name: str | None,
+    address_text: str | None = None,
+    recipient_name: str | None = None,
+) -> Contact | None:
+    contacts = db.query(Contact).all()
+    if not contacts:
+        return None
+
+    company_norm = _normalize_text(company_name)
+    recipient_norm = _normalize_text(recipient_name)
+    best_contact: Contact | None = None
+    best_score = 0
+
+    for contact in contacts:
+        org = contact.organization or ""
+        contact_address = contact.delivery_address or contact.address or ""
+        org_norm = _normalize_text(org)
+
+        org_score = fuzzy_score(company_name or "", org) if company_name and org else 0
+        address_score = fuzzy_score(address_text or "", contact_address) if address_text and contact_address else 0
+        recipient_score = fuzzy_score(recipient_name or "", contact.name or "") if recipient_name and contact.name else 0
+
+        if company_norm and org_norm and (company_norm in org_norm or org_norm in company_norm):
+            org_score = max(org_score, 95)
+        if recipient_norm and _normalize_text(contact.name) and (
+            recipient_norm in _normalize_text(contact.name) or _normalize_text(contact.name) in recipient_norm
+        ):
+            recipient_score = max(recipient_score, 90)
+
+        score = org_score
+        if address_score >= 72:
+            score += min(18, address_score // 5)
+        if address_score >= 88:
+            score = max(score, 82)
+        if recipient_score >= 78:
+            score = max(score, recipient_score)
+
+        if score > best_score:
+            best_score = score
+            best_contact = contact
+
+    return best_contact if best_score >= 78 else None
+
+
+def find_customer_for_contact(
+    db: Session,
+    contact: Contact | None,
+    partners: list[Partner] | None = None,
+) -> Partner | None:
+    if not contact or not contact.organization:
+        return None
+
+    org = contact.organization
+    org_norm = _normalize_text(org)
+    if partners is None:
+        partners = db.query(Partner).filter(Partner.is_active == True, Partner.partner_type == "customer").all()
+    best_partner: Partner | None = None
+    best_score = 0
+
+    for partner in partners:
+        names = [partner.legal_name or "", partner.display_name or ""]
+        for name in names:
+            name_norm = _normalize_text(name)
+            score = fuzzy_score(org, name) if name else 0
+            if org_norm and name_norm and (org_norm in name_norm or name_norm in org_norm):
+                score = max(score, 95)
+            if score > best_score:
+                best_score = score
+                best_partner = partner
+
+    return best_partner if best_score >= 72 else None
 
 
 # ── Address ───────────────────────────────────────────────────────────────────

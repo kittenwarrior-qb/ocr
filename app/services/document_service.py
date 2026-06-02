@@ -16,7 +16,9 @@ from app.models.document import (
     ProcessedOrder,
     RawDocument,
 )
+from app.models.contact import Contact
 from app.models.mapping import DocumentCorrection
+from app.models.partner import Partner, PartnerAddress
 from app.models.product import Product
 from app.services import mapping_service, ocr_service, template_service
 from app.services.code_generator import generate_order_number
@@ -128,14 +130,36 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
         partner_type = "vendor"
 
     delivery_address_text = data.get("delivery_address")
+    matched_contact = None
 
-    partner = mapping_service.find_or_create_partner(db, partner_name, tax_code, partner_type)
+    if doc_type == "purchase_order":
+        matched_contact = mapping_service.find_best_contact(
+            db,
+            partner_name,
+            delivery_address_text,
+            data.get("recipient_name"),
+        )
+        contact_partner = mapping_service.find_customer_for_contact(db, matched_contact)
+        if contact_partner:
+            partner = contact_partner
+        else:
+            partner = mapping_service.find_or_create_partner(
+                db,
+                (matched_contact.organization if matched_contact and matched_contact.organization else partner_name),
+                tax_code,
+                partner_type,
+            )
+        if matched_contact:
+            delivery_address_text = matched_contact.delivery_address or matched_contact.address or delivery_address_text
+    else:
+        partner = mapping_service.find_or_create_partner(db, partner_name, tax_code, partner_type)
+
     address = mapping_service.find_or_create_address(db, partner.id, delivery_address_text)
 
     items = data.get("items") or []
 
     if doc_type == "purchase_order":
-        return _create_order(db, raw, partner, address, data, items)
+        return _create_order(db, raw, partner, address, data, items, matched_contact)
     else:
         return _create_bill(db, raw, partner, address, data, items)
 
@@ -151,8 +175,69 @@ def _parse_date(val) -> date | None:
         return None
 
 
-def _create_order(db: Session, raw, partner, address, data: dict, items: list) -> dict:
+def _first_partner_address(partner: Partner, address_type: str) -> PartnerAddress | None:
+    return next((a for a in partner.addresses if a.address_type == address_type), None)
+
+
+def _build_order_extra_data(partner: Partner, address: PartnerAddress | None, contact: Contact | None) -> dict[str, str]:
+    billing = _first_partner_address(partner, "billing")
+    branch = _first_partner_address(partner, "branch")
+    invoice_address = (billing.full_address if billing else None) or partner.address or ""
+    delivery_address = (
+        (contact.delivery_address if contact else None)
+        or (contact.address if contact else None)
+        or (address.full_address if address else None)
+        or (branch.full_address if branch else None)
+        or invoice_address
+    )
+    contact_phone = ""
+    contact_email = ""
+    if contact:
+        contact_phone = contact.phone or contact.phone_work or ""
+        contact_email = contact.email or contact.email_personal or ""
+
+    return {
+        "code": partner.code or "",
+        "type": partner.display_name or "",
+        "name": partner.legal_name or "",
+        "tax_code": partner.tax_code or "",
+        "phone": partner.phone or "",
+        "email": partner.email or "",
+        "field": partner.field or "",
+        "owner": partner.owner or "",
+        "description": partner.description or "",
+        "invoice_address": invoice_address,
+        "invoice_city": billing.mapping_key if billing else "",
+        "invoice_district": "",
+        "invoice_ward": "",
+        "delivery_address": delivery_address,
+        "customer_code": partner.code or "",
+        "customer_name": partner.legal_name or "",
+        "customer_tax_code": partner.tax_code or "",
+        "customer_phone": partner.phone or "",
+        "customer_owner": partner.owner or "",
+        "invoice_customer": partner.legal_name or "",
+        "invoice_buyer": partner.owner or "",
+        "invoice_street": invoice_address,
+        "delivery_receiver": (contact.name if contact else None) or partner.owner or "",
+        "delivery_phone": contact_phone or partner.phone or "",
+        "delivery_city": (contact.city if contact else "") or "",
+        "delivery_district": (contact.district if contact else "") or "",
+        "delivery_ward": (contact.ward if contact else "") or "",
+        "delivery_street": delivery_address,
+        "order_type": "Kênh MT",
+        "contact": (contact.name if contact else "") or "",
+        "contact_code": (contact.code if contact else "") or "",
+        "contact_phone": contact_phone,
+        "contact_email": contact_email,
+        "contact_organization": (contact.organization if contact else "") or "",
+        "contact_address": delivery_address if contact else "",
+    }
+
+
+def _create_order(db: Session, raw, partner, address, data: dict, items: list, contact: Contact | None = None) -> dict:
     missing = _check_missing_order_fields(data, partner, address, items)
+    extra_data = _build_order_extra_data(partner, address, contact)
     order = ProcessedOrder(
         raw_document_id=raw.id,
         partner_id=partner.id,
@@ -163,12 +248,13 @@ def _create_order(db: Session, raw, partner, address, data: dict, items: list) -
         delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
-        recipient_name=data.get("recipient_name"),
-        description=data.get("description"),
+        recipient_name=partner.legal_name,
+        description=data.get("description") or extra_data.get("invoice_address") or data.get("delivery_address"),
         total_amount=data.get("total_amount"),
         discount_amount=data.get("discount_amount"),
         tax_amount=data.get("tax_amount"),
         missing_fields=missing,
+        extra_data=extra_data,
         status="draft",
     )
     db.add(order)
