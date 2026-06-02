@@ -51,7 +51,7 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
       setPage(1)
       setData([])
     }
-  }, [open])
+  }, [open, initialSearch])
 
   useEffect(() => {
     if (!open) return

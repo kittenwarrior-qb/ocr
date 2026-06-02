@@ -67,7 +67,9 @@ function getProductSearchHint(line: SessionLine): string {
   const results = matchProduct(line.product_name_original, 1)
   if (results.length && results[0].score > 0.2) return results[0].product.code
   // 3. Fallback: product name (never barcode/ocr_product_code)
-  return line.product_name_original || ''
+  const hint = line.product_name_original || ''
+  console.debug('[SearchHint] no catalog match, using name:', hint, '| ocr_code:', line.ocr_product_code)
+  return hint
 }
 
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
