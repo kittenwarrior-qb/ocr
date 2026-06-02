@@ -113,6 +113,7 @@ export interface SessionOrder {
   order_date: string | null
   delivery_date: string | null
   total_amount: number | null
+  tax_amount: number | null
   recipient_name: string | null
   partner_name: string | null
   delivery_address: string | null

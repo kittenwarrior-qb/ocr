@@ -149,6 +149,12 @@ TONG_TIEN_PATTERNS = [
     re.compile(r'(?:T\u1ed4NG C\u1ed8NG|T\u1ed5ng c\u1ed9ng|Total Amount|TOTAL|Sub Total)\s*:?\s*([\d.,]+)', re.I),
 ]
 
+TIEN_THUE_PATTERNS = [
+    re.compile(r'(?:Thu\u1ebf GTGT|Ti\u1ec1n thu\u1ebf|TOTAL VAT|Total VAT|VAT amount|VAT AMT|Tot add tax)\s*:?\s*([\d.,]+)', re.I),
+    re.compile(r'Thu\u1ebf\s+\d+%\s*:?\s*([\d.,]+)', re.I),
+    re.compile(r'(?:VAT|Thu\u1ebf)\s*\(\d+%\)\s*:?\s*([\d.,]+)', re.I),
+]
+
 
 def extract_header(text: str) -> dict:
     """Extract header fields tu text"""
@@ -180,12 +186,20 @@ def extract_header(text: str) -> dict:
         if val:
             tong_tien = parse_number(val)
             break
-    
+
+    tien_thue = None
+    for p in TIEN_THUE_PATTERNS:
+        val = first_match(flat, p)
+        if val:
+            tien_thue = parse_number(val)
+            break
+
     return {
         "order_number": ma_po,
         "order_date": ngay_dat,
         "delivery_date": ngay_giao,
         "total_amount": tong_tien,
+        "tax_amount": tien_thue,
     }
 
 
@@ -293,6 +307,7 @@ def extract_from_text(text: str) -> dict:
         "order_date": header["order_date"],
         "delivery_date": header["delivery_date"],
         "total_amount": header["total_amount"],
+        "tax_amount": header["tax_amount"],
         "items": items,
         "_extraction_method": "rule-based",
     }

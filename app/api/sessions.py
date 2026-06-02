@@ -148,6 +148,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "order_date": str(order.order_date) if order.order_date else None,
             "delivery_date": str(order.delivery_date) if order.delivery_date else None,
             "total_amount": float(order.total_amount) if order.total_amount else None,
+            "tax_amount": float(order.tax_amount) if order.tax_amount else None,
             "recipient_name": order.recipient_name,
             "partner_name": display_name,
             "delivery_address": delivery_addr or (order.description if order.description and len(order.description) < 200 else None),

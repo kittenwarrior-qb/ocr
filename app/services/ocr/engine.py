@@ -97,7 +97,7 @@ def _merge_results(rule_result: dict | None, ai_result: dict | None, warnings: l
     confidence = {}
     
     # Doublecheck 3 field chinh
-    for field in ["order_date", "delivery_date", "total_amount", "order_number"]:
+    for field in ["order_date", "delivery_date", "total_amount", "tax_amount", "order_number"]:
         rule_val = rule_result.get(field)
         ai_val = ai_result.get(field)
         

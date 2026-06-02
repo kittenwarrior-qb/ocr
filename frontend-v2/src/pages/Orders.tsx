@@ -469,8 +469,9 @@ export default function OrdersPage() {
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.delivery_address || '\u2014'}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '\u2014'}</span></div>
-                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tổng tiền:</span><span className="text-emerald-700 font-bold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '\u2014'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Người nhận:</span><span className="text-slate-700">{order.recipient_name || '—'}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Trước VAT:</span><span className="text-slate-700 font-semibold">{order.total_amount ? Number(order.total_amount).toLocaleString('vi-VN') + ' đ' : '—'}</span></div>
+                      {order.tax_amount ? <><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tiền thuế:</span><span className="text-blue-600 font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN') + ' đ'}</span></div><div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Sau VAT:</span><span className="text-emerald-700 font-bold">{(Number(order.total_amount || 0) + Number(order.tax_amount)).toLocaleString('vi-VN') + ' đ'}</span></div></> : null}
                     </div>
                   </div>
 
@@ -528,15 +529,43 @@ export default function OrdersPage() {
                         </div>
                       </div>
                     ) })}
-                    <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-emerald-50/30">
+                    <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-slate-50/80">
                       <span className="w-2.5" />
-                      <span className="text-xs  text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
+                      <span className="text-xs text-slate-500 flex-1 uppercase tracking-wide">Tổng chưa VAT</span>
+                      <span className="w-20" />
+                      <span className="text-xs text-slate-700 w-20 text-right font-semibold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="w-12" />
+                      <span className="w-10" />
+                      <span className="w-20" />
+                    </div>
+                    {order.tax_amount ? <>
+                    <div className="flex items-center gap-2 py-1.5 rounded px-2 bg-blue-50/50">
+                      <span className="w-2.5" />
+                      <span className="text-xs text-blue-600 flex-1 uppercase tracking-wide">Tiền thuế VAT</span>
+                      <span className="w-20" />
+                      <span className="text-xs text-blue-600 w-20 text-right font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN')}</span>
+                      <span className="w-12" />
+                      <span className="w-10" />
+                      <span className="w-20" />
+                    </div>
+                    <div className="flex items-center gap-2 py-2 border-t-2 border-emerald-300 rounded px-2 bg-emerald-50/40">
+                      <span className="w-2.5" />
+                      <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng sau VAT</span>
+                      <span className="w-20" />
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{(order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0) + Number(order.tax_amount)).toLocaleString('vi-VN')}</span>
+                      <span className="w-12" />
+                      <span className="w-10" />
+                      <span className="w-20" />
+                    </div>
+                    </> : <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-emerald-50/30">
+                      <span className="w-2.5" />
+                      <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
                       <span className="w-20" />
                       <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
-                    </div>
+                    </div>}
                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); handleAddBlankLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm dòng thất bại')) }}>Thêm dòng</Button>
