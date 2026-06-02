@@ -1,4 +1,6 @@
 from datetime import datetime
+import re
+import unicodedata
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -14,6 +16,44 @@ from app.services.code_generator import (
 )
 from app.utils.fuzzy_match import fuzzy_match, fuzzy_score
 from app.utils.hash_utils import generate_temp_code
+
+
+def _normalize_product_name(text: str) -> str:
+    value = unicodedata.normalize("NFD", (text or "").lower())
+    value = "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
+    value = re.sub(r"\bntk\b", "nuoc tinh khiet", value)
+    value = re.sub(r"\bth\s*(\d+)\b", r"thung \1", value)
+    value = re.sub(r"\b1[\.,]5\s*l\b", "1500ml 1 5l", value)
+    value = re.sub(r"\b1\s*500\s*ml\b", "1500ml 1 5l", value)
+    value = re.sub(r"\b1\.500\s*ml\b", "1500ml 1 5l", value)
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _product_match_score(query: str, target: str) -> int:
+    from thefuzz import fuzz
+
+    q = _normalize_product_name(query)
+    t = _normalize_product_name(target)
+    if not q or not t:
+        return 0
+
+    score = fuzz.token_set_ratio(q, t)
+    if "nuoc tinh khiet" in q and "nuoc tinh khiet" in t:
+        score += 25
+    if "satori" in q and "satori" in t:
+        score += 18
+    if "1500ml" in q and "1500ml" in t:
+        score += 25
+    if "nuoc tinh khiet" in q and "nuoc tinh khiet" not in t:
+        score -= 45
+    if "1500ml" in q and "1500ml" not in t:
+        score -= 45
+    if "decal" not in q and "decal" in t:
+        score -= 60
+    if "vo binh" not in q and "vo binh" in t:
+        score -= 35
+    return max(0, min(score, 100))
 
 
 # ── Partner ──────────────────────────────────────────────────────────────────
@@ -114,10 +154,10 @@ def resolve_temp_code(db: Session, product_code: str | None, product_name: str) 
     product_id = None
     if product_name and product_name.strip():
         all_products = db.query(Product).filter(Product.is_active == True).all()
-        candidates = [{"id": str(p.id), "name": p.display_name or "", "obj": p} for p in all_products]
-        match = fuzzy_match(product_name, candidates, key="name", threshold=82)
-        if match:
-            product_id = match["obj"].id
+        scored = [(_product_match_score(product_name, p.display_name or ""), p) for p in all_products]
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if scored and scored[0][0] >= 82:
+            product_id = scored[0][1].id
 
     db.add(TempCodeMapping(
         temp_code=temp_code,
@@ -264,7 +304,7 @@ def suggest_product_matches(db: Session, temp_code: str, limit: int = 5) -> list
         return []
     all_products = db.query(Product).filter(Product.is_active == True).all()
     scored = [
-        (p, fuzzy_score(temp_code, p.display_name))
+        (p, _product_match_score(temp_code, p.display_name or ""))
         for p in all_products
     ]
     scored.sort(key=lambda x: x[1], reverse=True)

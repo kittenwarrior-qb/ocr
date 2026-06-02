@@ -8,9 +8,36 @@ function normalize(str: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\bntk\b/g, 'nuoc tinh khiet')
+    .replace(/\bth\s*(\d+)\b/g, 'thung $1')
+    .replace(/\b1[\.,]5\s*l\b/g, '1500ml 1 5l')
+    .replace(/\b1\s*500\s*ml\b/g, '1500ml 1 5l')
+    .replace(/\b1\.500\s*ml\b/g, '1500ml 1 5l')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function hasToken(text: string, token: string): boolean {
+  return normalize(text).split(' ').includes(token)
+}
+
+function productSpecificScore(query: string, target: string): number {
+  const q = normalize(query)
+  const t = normalize(target)
+  let score = 0
+
+  if (q.includes('nuoc tinh khiet') && t.includes('nuoc tinh khiet')) score += 0.35
+  if (q.includes('satori') && t.includes('satori')) score += 0.25
+  if (q.includes('1500ml') && t.includes('1500ml')) score += 0.35
+  if ((hasToken(q, 'thung') || /^thung\s+\d+/.test(q)) && hasToken(t, 'thung')) score += 0.1
+
+  if (q.includes('nuoc tinh khiet') && !t.includes('nuoc tinh khiet')) score -= 0.45
+  if (q.includes('1500ml') && !t.includes('1500ml')) score -= 0.45
+  if (!q.includes('decal') && t.includes('decal')) score -= 0.6
+  if (!q.includes('vo binh') && t.includes('vo binh')) score -= 0.35
+
+  return score
 }
 
 function wordOverlapScore(query: string, target: string): number {
@@ -45,7 +72,7 @@ export function matchProduct(ocrName: string, topN = 5): MatchResult[] {
     const sub = substringScore(ocrName, p.name)
     const overlap = wordOverlapScore(ocrName, p.name)
     const codeMatch = normalize(ocrName).includes(normalize(p.code)) ? 0.5 : 0
-    const score = Math.max(sub, overlap * 0.9, codeMatch)
+    const score = Math.max(sub, overlap * 0.9, codeMatch) + productSpecificScore(ocrName, p.name)
     return { product: p, score }
   })
   return results.filter(r => r.score > 0.2).sort((a, b) => b.score - a.score).slice(0, topN)

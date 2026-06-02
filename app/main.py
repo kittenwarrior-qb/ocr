@@ -81,12 +81,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+CORS_ORIGINS = [
+    "https://ocr-sandy-nu.vercel.app",
+    "https://quocbui.site",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 app.include_router(api_router)
