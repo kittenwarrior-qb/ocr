@@ -7,6 +7,7 @@ from app.models.mapping import TempCodeMapping, MSTMapping, DocumentCorrection
 from app.models.session import OcrSession
 from app.models.document import RawDocument, ProcessedOrder, OrderLine, ProcessedBill, BillLine
 from app.models.contact import Contact
+from app.models.sku_alias import SkuAlias
 
 __all__ = [
     "Base",
@@ -25,4 +26,5 @@ __all__ = [
     "ProcessedBill",
     "BillLine",
     "Contact",
+    "SkuAlias",
 ]

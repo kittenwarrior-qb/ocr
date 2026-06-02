@@ -9,6 +9,7 @@ from app.models.document import BillLine, OrderLine
 from app.models.mapping import TempCodeMapping
 from app.schemas.document import MapTempCodeRequest, TempCodeMappingOut
 from app.services import mapping_service
+from app.services.sku_alias_service import upsert_alias
 from app.models.product import Product
 
 router = APIRouter(prefix="/mappings", tags=["Mappings"])
@@ -130,6 +131,17 @@ def map_temp_code(
         )
 
     updated = mapping_service.map_temp_code_to_product(db, temp_code, product_id)
+
+    # Auto-learn: save alias from OCR name → product code
+    sample_name = body.new_product_name or temp_code
+    # Try to get the real OCR name from order lines
+    from app.models.document import OrderLine
+    line = db.query(OrderLine).filter(OrderLine.temp_code == temp_code).first()
+    if line and line.product_name_original:
+        sample_name = line.product_name_original
+    upsert_alias(db, external_key=sample_name, product_code=product.code,
+                 product_name=product.display_name or "", source="auto_learn")
+
     db.commit()
     return {
         "message": "Mapping saved. Retroactive update applied.",

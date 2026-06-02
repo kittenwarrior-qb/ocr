@@ -10,6 +10,7 @@ import {
   ShoppingOutlined,
   TagsOutlined,
   TeamOutlined,
+  SwapOutlined,
 } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
@@ -19,6 +20,7 @@ import CustomersPage from './pages/Customers'
 import ProductsPage from './pages/Products'
 import ContactsPage from './pages/Contacts'
 import VouchersPage from './pages/Vouchers'
+import ProductMappingPage from './pages/ProductMapping'
 import SettingsPage from './pages/Settings'
 
 const queryClient = new QueryClient({
@@ -35,6 +37,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
     { key: '/contacts', label: 'Liên hệ', icon: <ContactsOutlined /> },
     { key: '/vouchers', label: 'Voucher', icon: <TagsOutlined /> },
+    { key: '/mapping', label: 'Mapping HH', icon: <SwapOutlined /> },
     { key: '/settings', label: 'Cài đặt', icon: <SettingOutlined /> },
   ]
 
@@ -83,6 +86,7 @@ function AppLayout() {
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/vouchers" element={<VouchersPage />} />
+          <Route path="/mapping" element={<ProductMappingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/orders" replace />} />
         </Routes>

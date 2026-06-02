@@ -1,4 +1,4 @@
-import { getProducts, type Product } from './catalogStore'
+import { getProducts, getAliases, type Product } from './catalogStore'
 
 export type { Product }
 
@@ -65,8 +65,32 @@ export interface MatchResult {
   score: number
 }
 
+/** Check alias dictionary first — returns exact-match product if found */
+function checkAlias(ocrName: string): Product | null {
+  const aliases = getAliases()
+  if (!aliases.length) return null
+  const norm = normalize(ocrName)
+  // exact normalized match
+  const hit = aliases.find(a => a.external_normalized === norm)
+  if (!hit) return null
+  const products = getProducts()
+  return products.find(p => p.code === hit.product_code) || null
+}
+
 export function matchProduct(ocrName: string, topN = 5): MatchResult[] {
   if (!ocrName?.trim()) return []
+
+  // 1. Check alias dictionary — treat as score 1.0 if found
+  const aliasHit = checkAlias(ocrName)
+  if (aliasHit) {
+    const rest = matchProduct_fuzzy(ocrName, topN - 1).filter(r => r.product.code !== aliasHit.code)
+    return [{ product: aliasHit, score: 1.0 }, ...rest].slice(0, topN)
+  }
+
+  return matchProduct_fuzzy(ocrName, topN)
+}
+
+function matchProduct_fuzzy(ocrName: string, topN: number): MatchResult[] {
   const products = getProducts()
   const results: MatchResult[] = products.map(p => {
     const sub = substringScore(ocrName, p.name)
@@ -79,7 +103,10 @@ export function matchProduct(ocrName: string, topN = 5): MatchResult[] {
 }
 
 export function getBestMatch(ocrName: string, threshold = 0.5): Product | null {
-  const results = matchProduct(ocrName, 1)
+  // Alias hit always wins
+  const aliasHit = checkAlias(ocrName)
+  if (aliasHit) return aliasHit
+  const results = matchProduct_fuzzy(ocrName, 1)
   if (!results.length || results[0].score < threshold) return null
   return results[0].product
 }

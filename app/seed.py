@@ -48,6 +48,7 @@ def main():
     from app.models.partner import Partner, PartnerAddress
     from app.models.product import Product
     from app.models.contact import Contact
+    from app.models.sku_alias import SkuAlias
     from app.models.mapping import MSTMapping, TempCodeMapping
     from app.models.document import ProcessedOrder, ProcessedBill, OrderLine, BillLine, RawDocument
     from app.models.session import OcrSession
