@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, InputNumber, Radio } from 'antd'
+import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, InputNumber, Radio, Input, Pagination, Spin } from 'antd'
 import {
   InboxOutlined,
   CheckCircleOutlined,
@@ -19,6 +19,7 @@ import {
   GiftOutlined,
   PercentageOutlined,
   DeleteOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -31,7 +32,7 @@ import {
 } from '@/api/orders'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
-import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
+import { preloadCatalogs, fetchProducts, fetchContacts, type Contact } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
@@ -129,6 +130,23 @@ export default function OrdersPage() {
   const [uploadFiles, setUploadFiles] = useState<UploadFileItem[]>([])
   const [stagedFiles, setStagedFiles] = useState<File[]>([])
   const [activeTab, setActiveTab] = useState('current')
+
+  // Contacts tab state
+  const [contactSearch, setContactSearch] = useState('')
+  const [contactPage, setContactPage] = useState(1)
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [contactTotal, setContactTotal] = useState(0)
+  const [contactLoading, setContactLoading] = useState(false)
+  const CONTACT_PAGE_SIZE = 25
+
+  useEffect(() => {
+    if (activeTab !== 'contacts') return
+    setContactLoading(true)
+    fetchContacts(contactSearch, (contactPage - 1) * CONTACT_PAGE_SIZE, CONTACT_PAGE_SIZE)
+      .then(r => { setContacts(r.items); setContactTotal(r.total) })
+      .catch(() => { setContacts([]); setContactTotal(0) })
+      .finally(() => setContactLoading(false))
+  }, [activeTab, contactSearch, contactPage])
 
   // Modals
   const [productModalOpen, setProductModalOpen] = useState(false)
@@ -400,9 +418,10 @@ export default function OrdersPage() {
       </div>)}
 
       {/* Tabs */}
-      <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
+      <Tabs activeKey={activeTab} onChange={k => { setActiveTab(k); if (k === 'contacts') { setContactPage(1) } }} items={[
         { key: 'current', label: <span><PlusOutlined className="mr-1" />Phiên hiện tại</span> },
         { key: 'history', label: <span><HistoryOutlined className="mr-1" />Lịch sử ({sessions.length})</span> },
+        { key: 'contacts', label: <span><TeamOutlined className="mr-1" />Liên hệ</span> },
       ]} className="mb-3" />
 
       {/* Current Tab */}
@@ -629,6 +648,65 @@ export default function OrdersPage() {
         </div>))}
         {sessions.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">Chưa có lịch sử</div>}
       </div>)}
+
+      {/* Contacts Tab */}
+      {activeTab === 'contacts' && (
+        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700 flex items-center gap-2"><TeamOutlined />Danh sách liên hệ</span>
+            <Input
+              prefix={<SearchOutlined className="text-slate-400" />}
+              placeholder="Tìm theo tên, công ty, SĐT..."
+              value={contactSearch}
+              onChange={e => { setContactSearch(e.target.value); setContactPage(1) }}
+              allowClear
+              className="w-72"
+              size="small"
+            />
+          </div>
+          <Spin spinning={contactLoading}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Mã LH</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Họ và tên</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Công ty</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Chức danh</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">SĐT</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Email</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Địa chỉ giao hàng</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Tỉnh/TP</th>
+                    <th className="px-3 py-2 text-left whitespace-nowrap">Chủ sở hữu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map(c => (
+                    <tr key={c.code} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{c.code}</td>
+                      <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{c.name}</td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate">{c.organization || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.job_title || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{c.phone || c.phone_work || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500 max-w-[180px] truncate">{c.email || c.email_personal || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500 max-w-[220px] truncate">{c.delivery_address || c.address || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.city || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.owner || '—'}</td>
+                    </tr>
+                  ))}
+                  {!contactLoading && contacts.length === 0 && (
+                    <tr><td colSpan={9} className="text-center py-10 text-slate-400">Không tìm thấy liên hệ</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Spin>
+          <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs text-slate-400">{contactTotal} liên hệ</span>
+            <Pagination size="small" current={contactPage} pageSize={CONTACT_PAGE_SIZE} total={contactTotal} onChange={setContactPage} showSizeChanger={false} simple />
+          </div>
+        </div>
+      )}
 
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={selectedLine ? `Chọn hàng hóa — "${selectedLine.product_name_original || ''}"` : 'Chọn hàng hóa'}
