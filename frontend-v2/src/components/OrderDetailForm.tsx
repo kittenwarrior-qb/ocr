@@ -179,13 +179,12 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         contact: String(extra?.contact || ''),
       })
       setSelectedContactName(String(extra?.contact || ''))
-      // Auto-map
+      // Auto-map: kể cả mapped lines để đồng bộ price/tax từ catalog
       const mappedLines = (order.lines || []).map(line => {
-        if (line.mapping_status === 'mapped') return line
-        const match = getBestMatch(line.product_name_original || line.ocr_product_code || '')
-        if (match) {
-          return applyProductToLine(line, match)
-        }
+        // Tìm product theo code (ưu tiên) hoặc tên
+        const searchKey = line.ocr_product_code || line.product_name_original || ''
+        const match = getBestMatch(searchKey)
+        if (match) return applyProductToLine(line, match)
         return line
       })
       setLines(mappedLines)
