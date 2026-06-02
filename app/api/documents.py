@@ -366,14 +366,18 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
             partner = db.query(Partner).filter(Partner.code == customer_code, Partner.partner_type == "customer").first()
             if partner:
                 order.partner_id = partner.id
-                # Auto-learn: save company name + address → customer_code
+                # Auto-learn: lấy tên công ty GỐC từ OCR (không dùng recipient_name - có thể là tên người)
                 from app.services.company_alias_service import upsert as upsert_company
                 customer_name = body.extra_data.get("customer_name") or partner.legal_name or ""
-                ocr_company = order.recipient_name or (body.extra_data.get("name") or "")
-                ocr_address = order.description or (body.extra_data.get("invoice_address") or "")
-                if ocr_company:
+                # Ưu tiên: extracted_data từ raw PDF > partner_name được OCR nhận ra
+                raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
+                extracted = raw_doc.extracted_data or {} if raw_doc else {}
+                # Chỉ học tên công ty thực sự, không học tên người
+                ocr_company = (extracted.get("customer_name") or "").strip()
+                ocr_address = (extracted.get("delivery_address") or "").strip()
+                if ocr_company and len(ocr_company) > 3:
                     upsert_company(db, ocr_company, customer_code, customer_name, "name", "auto_learn")
-                if ocr_address and len(ocr_address) > 10:
+                if ocr_address and len(ocr_address) > 15:
                     upsert_company(db, ocr_address, customer_code, customer_name, "address", "auto_learn")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
