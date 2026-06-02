@@ -605,11 +605,11 @@ export default function OrdersPage() {
                         <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-500 w-10 text-center">{line.uom_mapped || line.uom_original || ''}</span>
-                        <span className="text-xs text-slate-400 w-8 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
+                        <span className="text-xs text-slate-400 w-8 text-center">{line.tax_rate ? `${line.tax_rate}%` : (conf.suggestion && (conf.suggestion as any).tax_rate ? `${(conf.suggestion as any).tax_rate}%` : '')}</span>
                         <span className="text-xs text-slate-700 w-20 text-right font-semibold">{line.line_total ? (line.tax_rate ? Math.round(Number(line.line_total) * (1 + Number(line.tax_rate) / 100)) : Number(line.line_total)).toLocaleString('vi-VN') : ''}</span>
                         <div className="w-20 flex-shrink-0 flex items-center justify-end gap-1">
                           {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && (
-                            <Tooltip title={`Xác nhận: ${conf.suggestion.code}`}>
+                            <Tooltip title={`Xác nhận: ${conf.suggestion.code}`} placement="left">
                               <button className="text-[11px] text-white bg-emerald-500 hover:bg-emerald-600 rounded px-2 py-0.5 font-semibold whitespace-nowrap leading-5" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓ XN</button>
                             </Tooltip>
                           )}

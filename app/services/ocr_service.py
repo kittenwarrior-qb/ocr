@@ -44,6 +44,20 @@ DOUBLECHECK RULES:
 - DO NOT confuse them. Read the label carefully.
 - If total_amount has both "before VAT" and "after VAT" versions, use the FINAL total (after VAT)
 
+PRICE DISAMBIGUATION (CRITICAL — avoid pre/post tax confusion):
+- items.unit_price = price PER UNIT, BEFORE TAX (ex-VAT). If document shows both "Đơn giá" and "Đơn giá sau VAT", use the BEFORE-tax one.
+- items.line_total = unit_price × quantity (subtotal BEFORE TAX). Must satisfy: line_total ≈ unit_price × quantity.
+- If line_total column is labeled "Thành tiền (sau VAT)" or "Amount incl. VAT", divide by (1 + tax_rate/100) to get the pre-tax line_total.
+- total_amount = FINAL amount the buyer pays = sum of line_totals + all taxes. Use the LARGEST total printed (after all VAT/tax).
+- VERIFY: unit_price × quantity ≈ line_total (within rounding). If not, recalculate: unit_price = line_total / quantity.
+
+QUANTITY UNIT (CRITICAL — avoid Pcs vs Box confusion):
+- When a document shows MULTIPLE quantity columns (e.g., "Ord/CS", "Ord/Pcs", "Qty Thùng", "Qty Pcs"):
+  → Use the quantity that matches the UNIT column (ĐVT).
+  → Example: if ĐVT="Thùng" and there is both "Qty/Thùng=9" and "Qty/Pcs=216" → quantity=9, unit="Thùng"
+  → Example: if ĐVT="Pcs" and Qty/Pcs=216 → quantity=216, unit="Pcs"
+- NEVER report Pcs quantity when the unit is Thùng/Box/Carton/CS.
+
 FIELD ALIASES — the same field may appear under many different labels:
 - order_number: "Số PO", "SỐ PO", "PO No.", "PO No", "P/O Number", "Order No.", "Order No", "Số chứng từ", "Số đơn hàng", "SỐ ĐƠN ĐẶT HÀNG", "Đơn đặt hàng số", "Số thứ tự đơn đặt hàng", "Số hiệu đơn hàng", "OUR REF NO", "Ord slip no", "Supplier Delivery ID"
 - order_date: "Ngày đặt hàng", "Ngày chứng từ", "Ngày đặt đơn", "NGÀY ĐẶT HÀNG", "Order Date", "Ord dt", "DATE", "Date", "Entry Date", "Ngày đặt hàng/Date", "PO Date"

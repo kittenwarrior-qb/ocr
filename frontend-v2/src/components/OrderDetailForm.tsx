@@ -201,7 +201,24 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   }, [lines, form, loading])
 
   const updateLine = (i: number, field: string, value: unknown) => {
-    setLines(prev => { const u = [...prev]; u[i] = { ...u[i], [field]: value }; return u })
+    setLines(prev => {
+      const u = [...prev]
+      const line = { ...u[i], [field]: value }
+      // Auto-recalculate line_total when unit_price or quantity changes
+      if (field === 'unit_price' || field === 'quantity') {
+        const price = Number(field === 'unit_price' ? value : line.unit_price) || 0
+        const qty = Number(field === 'quantity' ? value : line.quantity) || 0
+        if (price > 0 && qty > 0) line.line_total = price * qty
+      }
+      // Auto-recalculate unit_price when line_total or quantity changes
+      if (field === 'line_total') {
+        const total = Number(value) || 0
+        const qty = Number(line.quantity) || 0
+        if (total > 0 && qty > 0) line.unit_price = Math.round(total / qty)
+      }
+      u[i] = line
+      return u
+    })
   }
 
   const buildSavePayload = (nextLines: OrderLine[]) => {
@@ -254,12 +271,19 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       setSelectedContactName('')
       form.setFieldValue('partner_id', result.customer.code)
     } else {
+      // Contact selected: only update contact name, keep customer unchanged unless there's a match
       const matchedData = result.customer ? toCustomerData(result.customer as unknown as Record<string, unknown>) : null
-      const merged = contactToCustomerData(result.contact, matchedData)
-      setSelectedCustomer(matchedData?.name || result.contact.organization || result.contact.name)
-      setSelectedCustomerData({ ...merged, ...prevExtra })
+      if (matchedData) {
+        // Found matching company — update customer too
+        const merged = contactToCustomerData(result.contact, matchedData)
+        setSelectedCustomer(matchedData.name || '')
+        setSelectedCustomerData({ ...merged, ...prevExtra })
+        form.setFieldValue('partner_id', result.customer!.code)
+      } else {
+        // No company match — only set contact, keep current customer data
+        setSelectedCustomerData(prev => ({ ...prev, contact: result.contact.name }))
+      }
       setSelectedContactName(result.contact.name)
-      if (result.customer) form.setFieldValue('partner_id', result.customer.code)
     }
     setActivePopup(null)
   }
