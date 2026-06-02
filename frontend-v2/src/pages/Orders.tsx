@@ -60,6 +60,16 @@ function systemLineCode(line: Partial<SessionLine>): string {
   return line.ocr_product_code || line.temp_code || '✓'
 }
 
+function getProductSearchHint(line: SessionLine): string {
+  // 1. Confirmed product code
+  if (line.product_code_mapped) return line.product_code_mapped
+  // 2. Best match from catalog (low threshold so suggestion always found)
+  const results = matchProduct(line.product_name_original, 1)
+  if (results.length && results[0].score > 0.2) return results[0].product.code
+  // 3. Fallback: product name (never barcode/ocr_product_code)
+  return line.product_name_original || ''
+}
+
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
 interface UploadFileItem { name: string; size: number; status: FileStatus; file?: File }
 
@@ -713,7 +723,7 @@ export default function OrdersPage() {
           }
         }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
-        initialSearch={selectedLine ? (selectedLine.product_code_mapped || getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
+        initialSearch={selectedLine ? getProductSearchHint(selectedLine) : ''} />
 
       {/* Customer + Contact Popup */}
       <CustomerContactPopup
