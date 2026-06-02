@@ -510,7 +510,7 @@ export default function OrdersPage() {
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
-                      <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-20" />
+                      <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-20 text-right text-blue-600">Tiền thuế</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-20" />
                     </div>
                     {order.lines.map(line => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'high' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'low' || conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'medium' ? 'bg-amber-50/70' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
@@ -520,6 +520,7 @@ export default function OrdersPage() {
                         <span className="text-xs text-slate-700 w-14 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
                         <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
+                        <span className="text-xs text-blue-500 w-20 text-right">{(line.line_total && line.tax_rate) ? Math.round(Number(line.line_total) * Number(line.tax_rate) / 100).toLocaleString('vi-VN') : ''}</span>
                         <span className="text-xs text-slate-500 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
                         <span className="text-xs text-slate-500 w-10 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
                         <div className="w-20 flex-shrink-0 flex justify-end gap-1">
@@ -534,6 +535,7 @@ export default function OrdersPage() {
                       <span className="text-xs text-slate-500 flex-1 uppercase tracking-wide">Tổng chưa VAT</span>
                       <span className="w-20" />
                       <span className="text-xs text-slate-700 w-20 text-right font-semibold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
@@ -544,6 +546,7 @@ export default function OrdersPage() {
                       <span className="text-xs text-blue-600 flex-1 uppercase tracking-wide">Tiền thuế VAT</span>
                       <span className="w-20" />
                       <span className="text-xs text-blue-600 w-20 text-right font-semibold">{Number(order.tax_amount).toLocaleString('vi-VN')}</span>
+                      <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
@@ -553,6 +556,7 @@ export default function OrdersPage() {
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng sau VAT</span>
                       <span className="w-20" />
                       <span className="text-xs text-emerald-700 w-20 text-right font-bold">{(order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0) + Number(order.tax_amount)).toLocaleString('vi-VN')}</span>
+                      <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
@@ -562,6 +566,7 @@ export default function OrdersPage() {
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
                       <span className="w-20" />
                       <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="w-20" />
                       <span className="w-12" />
                       <span className="w-10" />
                       <span className="w-20" />
