@@ -64,6 +64,7 @@ export interface OrderUpdatePayload {
   recipient_name?: string | null
   description?: string | null
   extra_data?: Record<string, string | number | null>
+  lines?: OrderLine[]
 }
 
 export interface UploadResult {

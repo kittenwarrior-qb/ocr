@@ -211,6 +211,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         recipient_name: selectedCustomer || null,
         description: selectedCustomerData?.invoice_address || null,
         extra_data: meta,
+        lines,
       })
       message.success('Đã lưu')
       onSaved?.()

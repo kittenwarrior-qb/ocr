@@ -138,3 +138,4 @@ class OrderUpdateRequest(BaseModel):
     recipient_name: Optional[str] = None
     description: Optional[str] = None
     extra_data: Optional[dict] = None
+    lines: Optional[list[dict[str, Any]]] = None
