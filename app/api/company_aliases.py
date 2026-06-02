@@ -1,10 +1,72 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from uuid import UUID
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.company_alias import CompanyAlias
 from app.services.company_alias_service import upsert, normalize_company
 
 router = APIRouter(prefix="/company-aliases", tags=["CompanyAliases"])
+
+
+@router.get("/mst")
+def list_mst_mappings(search: str = "", skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Return MST (tax code) → customer mappings, enriched with partner info."""
+    from app.models.mapping import MSTMapping
+    from app.models.partner import Partner
+
+    q = db.query(MSTMapping, Partner).join(Partner, MSTMapping.partner_id == Partner.id)
+    if search:
+        q = q.filter(
+            MSTMapping.tax_code.ilike(f"%{search}%")
+            | Partner.legal_name.ilike(f"%{search}%")
+            | Partner.code.ilike(f"%{search}%")
+        )
+    total = q.count()
+    rows = q.order_by(Partner.legal_name).offset(skip).limit(limit).all()
+    return {
+        "items": [
+            {
+                "tax_code": m.tax_code,
+                "customer_code": p.code,
+                "customer_name": p.legal_name,
+                "customer_phone": p.phone or "",
+                "notes": m.notes or "",
+            }
+            for m, p in rows
+        ],
+        "total": total,
+    }
+
+
+@router.post("/mst")
+def upsert_mst(body: dict, db: Session = Depends(get_db)):
+    from app.models.mapping import MSTMapping
+    from app.models.partner import Partner
+    tax = (body.get("tax_code") or "").strip()
+    code = (body.get("customer_code") or "").strip()
+    if not tax or not code:
+        raise HTTPException(400, "tax_code and customer_code required")
+    partner = db.query(Partner).filter(Partner.code == code).first()
+    if not partner:
+        raise HTTPException(404, f"Customer '{code}' not found")
+    existing = db.query(MSTMapping).filter(MSTMapping.tax_code == tax).first()
+    if existing:
+        existing.partner_id = partner.id
+        existing.notes = body.get("notes", existing.notes)
+    else:
+        db.add(MSTMapping(tax_code=tax, partner_id=partner.id, notes=body.get("notes", "")))
+    db.commit()
+    return {"tax_code": tax, "customer_code": code}
+
+
+@router.delete("/mst/{tax_code}")
+def delete_mst(tax_code: str, db: Session = Depends(get_db)):
+    from app.models.mapping import MSTMapping
+    m = db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first()
+    if m:
+        db.delete(m)
+        db.commit()
+    return {"deleted": tax_code}
 
 
 @router.get("/preload")
