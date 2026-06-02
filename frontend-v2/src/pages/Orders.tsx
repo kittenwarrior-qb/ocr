@@ -37,17 +37,17 @@ import OrderDetailForm from '@/components/OrderDetailForm'
 import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import client from '@/api/client'
 
-type Confidence = 'high' | 'medium' | 'low' | 'none'
+type Confidence = 'confirmed' | 'suggest' | 'medium' | 'low' | 'none'
 function getConfidence(line: SessionLine): { level: Confidence; suggestion: Product | null } {
-  if (line.mapping_status === 'mapped') return { level: 'high', suggestion: null }
+  if (line.mapping_status === 'mapped') return { level: 'confirmed', suggestion: null }
   const results = matchProduct(line.product_name_original, 3)
   if (!results.length) return { level: 'none', suggestion: null }
-  if (results[0].score >= 0.85) return { level: 'high', suggestion: results[0].product }
+  if (results[0].score >= 0.85) return { level: 'suggest', suggestion: results[0].product }
   if (results[0].score >= 0.5) return { level: 'medium', suggestion: results[0].product }
   return { level: 'low', suggestion: results[0].product }
 }
-const DOT_COLORS = { high: 'bg-green-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
-const DOT_TIPS = { high: 'Đã map chính xác', medium: 'AI gợi ý - cần xác nhận', low: 'Không tìm thấy - chọn thủ công', none: 'Không có gợi ý' }
+const DOT_COLORS: Record<Confidence, string> = { confirmed: 'bg-emerald-500', suggest: 'bg-blue-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
+const DOT_TIPS: Record<Confidence, string> = { confirmed: 'Đã xác nhận', suggest: 'Khớp tốt — bấm ✓ để xác nhận', medium: 'Gợi ý cần xem lại', low: 'Không tìm thấy — chọn thủ công', none: 'Không có gợi ý' }
 
 function isSystemLine(line: Partial<SessionLine>): boolean {
   return line.mapping_status === 'overridden'
