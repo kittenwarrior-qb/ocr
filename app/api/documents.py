@@ -442,10 +442,17 @@ def _enrich_order(order: ProcessedOrder, db: Session | None = None) -> dict:
         raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
         if raw_doc:
             file_name = raw_doc.file_name
+    line_dicts = [
+        {
+            **{c.name: getattr(l, c.name) for c in l.__table__.columns},
+            "product_code": l.product.code if l.product else None,
+        }
+        for l in lines
+    ]
     return {
         **{c.name: getattr(order, c.name) for c in order.__table__.columns},
         "file_name": file_name,
-        "lines": lines,
+        "lines": line_dicts,
         "pending_count": sum(1 for l in lines if l.mapping_status == "pending"),
         "mapped_count": sum(1 for l in lines if l.mapping_status != "pending"),
         "missing_fields": order.missing_fields or [],

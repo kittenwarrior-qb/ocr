@@ -5,6 +5,7 @@ import { getOrder, updateOrder } from '@/api/orders'
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { getBestMatch, matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
+import { getProducts } from '@/utils/catalogStore'
 import dayjs from 'dayjs'
 
 function EditableCell({ value, type = 'text', onChange, placeholder }: { value: string | number | null | undefined; type?: 'text' | 'number'; onChange: (val: unknown) => void; placeholder?: string }) {
@@ -179,9 +180,16 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         contact: String(extra?.contact || ''),
       })
       setSelectedContactName(String(extra?.contact || ''))
-      // Auto-map: kể cả mapped lines để đồng bộ price/tax từ catalog
+      // Auto-map: dùng product_code từ DB relationship trước (chính xác nhất)
+      const allProducts = getProducts()
       const mappedLines = (order.lines || []).map(line => {
-        // Tìm product theo code (ưu tiên) hoặc tên
+        // 1. product_code từ DB (khi đã map, có relationship với Product)
+        const dbCode = (line as any).product_code as string | null
+        if (dbCode) {
+          const exactMatch = allProducts.find(p => p.code === dbCode)
+          if (exactMatch) return applyProductToLine(line, exactMatch)
+        }
+        // 2. Fuzzy match theo ocr_product_code hoặc tên
         const searchKey = line.ocr_product_code || line.product_name_original || ''
         const match = getBestMatch(searchKey)
         if (match) return applyProductToLine(line, match)
@@ -346,7 +354,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                 <th className="px-2 py-2 text-right w-12">SL</th>
                 <th className="px-2 py-2 text-right w-22">Đơn giá</th>
                 <th className="px-2 py-2 text-right w-22">Thành tiền</th>
-                <th className="px-2 py-2 text-center w-16">Thuế suất</th>
+                <th className="px-2 py-2 text-center w-16">Thuế</th>
                 <th className="px-2 py-2 text-right w-22">Tiền thuế</th>
                 <th className="px-2 py-2 text-right w-22">Tổng tiền</th>
                 <th className="px-2 py-2 text-center w-10"></th>

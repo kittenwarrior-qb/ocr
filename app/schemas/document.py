@@ -24,9 +24,30 @@ class LineOut(BaseModel):
     tax_rate: Optional[Decimal]
     line_total: Optional[Decimal]
     uom_original: Optional[str]
+    ocr_product_code: Optional[str] = None
+    product_code: Optional[str] = None   # populated from product relationship below
     mapping_status: str
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_line(cls, line) -> "LineOut":
+        return cls(
+            id=line.id,
+            temp_code=line.temp_code,
+            product_id=line.product_id,
+            product_name_original=line.product_name_original,
+            quantity=line.quantity,
+            unit_price=line.unit_price,
+            discount_rate=line.discount_rate,
+            discount_amount=line.discount_amount,
+            tax_rate=line.tax_rate,
+            line_total=line.line_total,
+            uom_original=line.uom_original,
+            ocr_product_code=line.ocr_product_code,
+            product_code=line.product.code if line.product else None,
+            mapping_status=line.mapping_status,
+        )
 
 
 class BillLineOut(LineOut):
