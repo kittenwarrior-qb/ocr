@@ -582,7 +582,7 @@ export default function OrdersPage() {
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
-                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-32">Mã hàng</span><span className="w-12 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-10 text-center">ĐVT</span><span className="w-8 text-center">VAT</span><span className="w-20 text-right">Tổng</span><span className="w-16" />
+                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-32">Mã hàng</span><span className="w-12 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-10 text-center">ĐVT</span><span className="w-8 text-center">VAT</span><span className="w-20 text-right">Tổng</span><span className="w-20" />
                     </div>
                     {order.lines.map((line, lineIdx) => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'confirmed' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'low' ? 'bg-orange-50/60' : conf.level === 'medium' ? 'bg-amber-50/70' : conf.level === 'suggest' ? 'bg-emerald-50/50' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
@@ -607,10 +607,22 @@ export default function OrdersPage() {
                         <span className="text-xs text-slate-500 w-10 text-center">{line.uom_mapped || line.uom_original || ''}</span>
                         <span className="text-xs text-slate-400 w-8 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
                         <span className="text-xs text-slate-700 w-20 text-right font-semibold">{line.line_total ? (line.tax_rate ? Math.round(Number(line.line_total) * (1 + Number(line.tax_rate) / 100)) : Number(line.line_total)).toLocaleString('vi-VN') : ''}</span>
-                        <div className="w-16 flex-shrink-0 flex justify-end gap-1">
-                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && <button className="text-xs text-white bg-emerald-500 hover:bg-emerald-600 rounded px-2 py-0.5 font-semibold shadow-sm" title={`Xác nhận: ${conf.suggestion.code}`} onClick={() => handleMapProduct(line, conf.suggestion!)}>✓ Xác nhận</button>}
-                          {!systemLine && line.mapping_status === 'mapped' && <button className="text-xs text-slate-400 hover:text-blue-600 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-blue-50" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }} title="Đổi hàng hóa">Đổi</button>}
-                          <button className="text-xs text-red-500 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 font-medium" onClick={(e) => { e.stopPropagation(); handleDeleteLine(order, line).catch(err => message.error(err?.response?.data?.detail || 'Xóa dòng thất bại')) }} title="Xóa dòng"><DeleteOutlined /></button>
+                        <div className="w-20 flex-shrink-0 flex items-center justify-end gap-1">
+                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && (
+                            <Tooltip title={`Xác nhận: ${conf.suggestion.code}`}>
+                              <button className="text-[11px] text-white bg-emerald-500 hover:bg-emerald-600 rounded px-2 py-0.5 font-semibold whitespace-nowrap leading-5" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓ XN</button>
+                            </Tooltip>
+                          )}
+                          {!systemLine && (
+                            <Tooltip title={line.mapping_status === 'mapped' ? 'Đổi hàng hóa' : 'Chọn hàng hóa'}>
+                              <button className="text-[11px] text-slate-500 hover:text-blue-600 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-blue-50 hover:border-blue-300 whitespace-nowrap leading-5" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>
+                                {line.mapping_status === 'mapped' ? 'Đổi' : 'Chọn'}
+                              </button>
+                            </Tooltip>
+                          )}
+                          <Tooltip title="Xóa dòng">
+                            <button className="text-[11px] text-red-400 hover:text-red-600 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 leading-5" onClick={(e) => { e.stopPropagation(); handleDeleteLine(order, line).catch(err => message.error(err?.response?.data?.detail || 'Xóa dòng thất bại')) }}><DeleteOutlined /></button>
+                          </Tooltip>
                         </div>
                       </div>
                     ) })}
