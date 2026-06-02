@@ -61,15 +61,13 @@ function systemLineCode(line: Partial<SessionLine>): string {
 }
 
 function getProductSearchHint(line: SessionLine): string {
-  // 1. Confirmed product code
-  if (line.product_code_mapped) return line.product_code_mapped
-  // 2. Best match from catalog (low threshold so suggestion always found)
+  // 1. Chỉ dùng product_code_mapped nếu đã xác nhận thật (không dùng cho pending)
+  if (line.mapping_status === 'mapped' && line.product_code_mapped) return line.product_code_mapped
+  // 2. Fuzzy match theo tên SP (bỏ qua product_code_mapped của pending lines)
   const results = matchProduct(line.product_name_original, 1)
   if (results.length && results[0].score > 0.2) return results[0].product.code
-  // 3. Fallback: product name (never barcode/ocr_product_code)
-  const hint = line.product_name_original || ''
-  console.debug('[SearchHint] no catalog match, using name:', hint, '| ocr_code:', line.ocr_product_code)
-  return hint
+  // 3. Fallback: tên SP
+  return line.product_name_original || ''
 }
 
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
