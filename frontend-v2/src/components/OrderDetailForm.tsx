@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable } from 'antd'
-import { SearchOutlined, PlusOutlined, GiftOutlined, PercentageOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { SearchOutlined, PlusOutlined, GiftOutlined, PercentageOutlined, ExclamationCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import SelectPopup from '@/components/SelectPopup'
 import type { OrderLine } from '@/types/order'
@@ -67,6 +67,10 @@ function applyProductToLine(line: OrderLine, product: Product): OrderLine {
     line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
     mapping_status: 'mapped',
   }
+}
+
+function isSystemLine(line: Partial<OrderLine>): boolean {
+  return line.mapping_status === 'overridden'
 }
 
 const POPUP_CONFIGS = {
@@ -156,6 +160,9 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
+  const [discountValue, setDiscountValue] = useState<number | null>(null)
+  const [discountModalOpen, setDiscountModalOpen] = useState(false)
 
   useEffect(() => {
     if (!orderId) return
@@ -172,8 +179,8 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       })
       const customerData = toCustomerData(order.extra_data as Record<string, unknown> | null)
       if (customerData) {
-        setSelectedCustomerData(customerData)
         setSelectedCustomer(customerData.name || order.recipient_name || '')
+        setSelectedCustomerData(customerData)
       } else if (order.recipient_name) {
         setSelectedCustomer(order.recipient_name)
         setSelectedCustomerData(null)
@@ -195,8 +202,19 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
     }).catch(() => { setLoading(false) })
   }, [orderId, form])
 
+  // Tự động đồng bộ tổng tiền khi đổi dòng hàng
+  useEffect(() => {
+    if (loading) return
+    const subtotal = lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0)
+    form.setFieldValue('total_amount', subtotal)
+  }, [lines, form, loading])
+
   const updateLine = (i: number, field: string, value: unknown) => {
     setLines(prev => { const u = [...prev]; u[i] = { ...u[i], [field]: value }; return u })
+  }
+
+  const deleteLine = (i: number) => {
+    setLines(prev => prev.filter((_, idx) => idx !== i))
   }
 
   const handleSave = async () => {
@@ -275,6 +293,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                 <th className="px-2 py-2 text-right w-22">Thành tiền</th>
                 <th className="px-2 py-2 text-right w-12">Thuế</th>
                 <th className="px-2 py-2 text-right w-20">Tổng</th>
+                <th className="px-2 py-2 text-center w-12"></th>
               </tr>
             </thead>
             <tbody>
@@ -284,13 +303,14 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                 const txAmt = Math.round(amt * txRate / 100)
                 const totalLine = amt + txAmt
                 const isPending = line.mapping_status === 'pending'
+                const systemLine = isSystemLine(line)
                 return (
                   <tr key={line.id || idx} className={`border-b border-gray-100 hover:bg-blue-50/30 ${isPending ? 'bg-orange-50/50' : ''}`}>
                     <td className="px-1 py-1 text-center">{isPending && <span className="text-orange-400">⚠</span>}</td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1 flex items-center gap-1">
                       <EditableCell value={line.ocr_product_code} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
-                      <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>
+                      {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>}
                     </td>
                     <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
                     <td className="px-2 py-1"><EditableCell value={line.uom_original} onChange={v => updateLine(idx, 'uom_original', v)} placeholder="ĐVT" /></td>
@@ -299,6 +319,9 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                     <td className="px-2 py-1 text-right"><EditableCell value={line.line_total} type="number" onChange={v => updateLine(idx, 'line_total', v)} /></td>
                     <td className="px-2 py-1 text-right"><EditableCell value={line.tax_rate} type="number" onChange={v => updateLine(idx, 'tax_rate', v)} /></td>
                     <td className="px-2 py-1 text-right font-medium">{totalLine ? totalLine.toLocaleString('vi-VN') : '0'}</td>
+                    <td className="px-2 py-1 text-center">
+                      <button className="text-red-500 hover:text-red-700 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50" onClick={() => deleteLine(idx)} title="Xóa dòng"><DeleteOutlined /></button>
+                    </td>
                   </tr>
                 )
               })}
@@ -307,7 +330,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
               <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
                 <td colSpan={7} className="px-2 py-2 text-right">Tổng cộng</td>
                 <td className="px-2 py-2 text-right">{total.toLocaleString('vi-VN')}</td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           </table>
@@ -316,7 +339,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           <Button size="small" icon={<PlusOutlined />} className="text-blue-600 border-blue-300" onClick={() => setProductModalIdx(-1)}>Chọn hàng hóa</Button>
           <Button size="small" icon={<PlusOutlined />} className="text-blue-600 border-blue-300" onClick={() => setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: '', product_name_original: '', quantity: 1, unit_price: 0, line_total: 0, uom_original: '', discount_rate: 0, discount_amount: 0, tax_rate: 0, mapping_status: 'pending' } as unknown as OrderLine])}>Thêm dòng</Button>
           <Button size="small" icon={<GiftOutlined />}>Khuyến mại</Button>
-          <Button size="small" icon={<PercentageOutlined />}>Chiết khấu</Button>
+          <Button size="small" icon={<PercentageOutlined />} onClick={() => { setDiscountMode('amount'); setDiscountValue(null); setDiscountModalOpen(true); }}>Chiết khấu</Button>
         </div>
       </div>
 
@@ -382,6 +405,63 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           rowKey="code"
         />
       )}
+
+      {/* Discount modal */}
+      {discountModalOpen && (
+        <Modal
+          open
+          width={500}
+          centered
+          title="Chiết khấu đơn hàng"
+          footer={null}
+          onCancel={() => setDiscountModalOpen(false)}
+        >
+          <div className="pt-4">
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4 mb-4">
+              <span className="text-sm font-medium">Chiết khấu theo:</span>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={discountMode === 'amount'} onChange={() => setDiscountMode('amount')} /> Số tiền</label>
+                <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={discountMode === 'percent'} onChange={() => setDiscountMode('percent')} /> Phần trăm (%)</label>
+              </div>
+            </div>
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4 mb-6">
+              <span className="text-sm font-medium">Giá trị:</span>
+              <InputNumber
+                autoFocus
+                className="w-full"
+                min={0}
+                max={discountMode === 'percent' ? 100 : undefined}
+                value={discountValue}
+                onChange={v => setDiscountValue(Number(v))}
+                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t pt-4">
+              <Button onClick={() => setDiscountModalOpen(false)}>Hủy</Button>
+              <Button type="primary" onClick={() => {
+                if (!discountValue || discountValue <= 0) return message.warning('Nhập giá trị chiết khấu');
+                const amt = discountMode === 'percent' ? Math.round(total * discountValue / 100) : discountValue;
+                setLines(prev => [...prev, {
+                  id: `new-${Date.now()}`,
+                  ocr_product_code: 'CKĐH',
+                  product_name_original: 'Chiết khấu đơn hàng',
+                  quantity: 1,
+                  unit_price: -amt,
+                  line_total: -amt,
+                  uom_original: '',
+                  discount_rate: 0,
+                  discount_amount: 0,
+                  tax_rate: 0,
+                  mapping_status: 'overridden'
+                } as unknown as OrderLine]);
+                setDiscountModalOpen(false);
+                message.success('Đã áp dụng chiết khấu');
+              }}>Áp dụng</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
+

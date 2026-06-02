@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tag, Button, message, Modal, Tooltip, Progress, Tabs } from 'antd'
+import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, InputNumber, Radio } from 'antd'
 import {
   InboxOutlined,
   CheckCircleOutlined,
@@ -16,6 +16,9 @@ import {
   PlusOutlined,
   SearchOutlined,
   ArrowsAltOutlined,
+  GiftOutlined,
+  PercentageOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -44,6 +47,17 @@ function getConfidence(line: SessionLine): { level: Confidence; suggestion: Prod
 }
 const DOT_COLORS = { high: 'bg-green-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
 const DOT_TIPS = { high: 'Đã map chính xác', medium: 'AI gợi ý - cần xác nhận', low: 'Không tìm thấy - chọn thủ công', none: 'Không có gợi ý' }
+
+function isSystemLine(line: Partial<SessionLine>): boolean {
+  return line.mapping_status === 'overridden'
+}
+
+function systemLineCode(line: Partial<SessionLine>): string {
+  const name = String(line.product_name_original || '').toLowerCase()
+  if (name.includes('chiết khấu') || name.includes('chiết')) return 'CKĐH'
+  if (name.includes('khuyến mại') || name.includes('khuyến')) return 'KM'
+  return line.ocr_product_code || line.temp_code || '✓'
+}
 
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
 interface UploadFileItem { name: string; size: number; status: FileStatus; file?: File }
@@ -117,12 +131,16 @@ export default function OrdersPage() {
   // Modals
   const [productModalOpen, setProductModalOpen] = useState(false)
   const [selectedLine, setSelectedLine] = useState<SessionLine | null>(null)
+  const [productTargetOrderId, setProductTargetOrderId] = useState<string | null>(null)
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
+  const [discountOrder, setDiscountOrder] = useState<SessionOrder | null>(null)
+  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
+  const [discountValue, setDiscountValue] = useState<number | null>(null)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 
@@ -205,6 +223,121 @@ export default function OrdersPage() {
   const getPdfPreviewUrl = (order: SessionOrder) => (
     order.raw_document_id ? getRawFileUrl(order.raw_document_id) : getOrderFileUrl(order.id)
   )
+
+  const toLinePayload = (line: Partial<SessionLine>) => ({
+    id: line.id,
+    temp_code: line.temp_code || line.ocr_product_code || `manual-${Date.now()}`,
+    product_name_original: line.product_name_original || '',
+    ocr_product_code: line.ocr_product_code || line.product_code_mapped || '',
+    uom_original: line.uom_original || line.uom_mapped || '',
+    quantity: line.quantity ?? 1,
+    unit_price: line.unit_price ?? 0,
+    line_total: line.line_total ?? 0,
+    tax_rate: line.tax_rate ?? 0,
+    mapping_status: line.mapping_status || 'pending',
+  })
+
+  const saveOrderLines = async (order: SessionOrder, nextLines: Partial<SessionLine>[]) => {
+    const subtotal = nextLines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
+    await client.patch(`/documents/orders/${order.id}`, { lines: nextLines.map(toLinePayload), total_amount: subtotal })
+    queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
+      if (!old) return old
+      return {
+        ...old,
+        orders: old.orders.map((o: any) => o.id === order.id ? {
+          ...o,
+          lines: nextLines,
+          total_amount: subtotal,
+          pending_count: nextLines.filter(l => l.mapping_status === 'pending').length,
+          mapped_count: nextLines.filter(l => l.mapping_status !== 'pending').length,
+        } : o),
+      }
+    })
+    queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+  }
+
+  const handleAddProductLine = async (order: SessionOrder, product: Product) => {
+    const line: Partial<SessionLine> = {
+      id: `new-${Date.now()}`,
+      temp_code: product.code,
+      product_name_original: product.name,
+      ocr_product_code: product.code,
+      product_code_mapped: product.code,
+      product_name_mapped: product.name,
+      quantity: 1,
+      unit_price: Number(product.price) || 0,
+      line_total: Number(product.price) || 0,
+      uom_original: product.uom,
+      uom_mapped: product.uom,
+      tax_rate: productTaxRate(product),
+      mapping_status: 'mapped',
+    }
+    await saveOrderLines(order, [...order.lines, line])
+    message.success('Đã thêm hàng hóa')
+  }
+
+  const handleAddBlankLine = async (order: SessionOrder) => {
+    const line: Partial<SessionLine> = {
+      id: `new-${Date.now()}`,
+      temp_code: `manual-${Date.now()}`,
+      product_name_original: 'Dòng mới',
+      quantity: 1,
+      unit_price: 0,
+      line_total: 0,
+      uom_original: '',
+      tax_rate: 0,
+      mapping_status: 'pending',
+    }
+    await saveOrderLines(order, [...order.lines, line])
+    message.success('Đã thêm dòng')
+  }
+
+  const handleAddPromotionLine = async (order: SessionOrder) => {
+    const line: Partial<SessionLine> = {
+      id: `promo-${Date.now()}`,
+      temp_code: `PROMO-${Date.now()}`,
+      product_name_original: 'Khuyến mại',
+      quantity: 1,
+      unit_price: 0,
+      line_total: 0,
+      uom_original: '',
+      tax_rate: 0,
+      mapping_status: 'overridden',
+    }
+    await saveOrderLines(order, [...order.lines, line])
+    message.success('Đã thêm dòng khuyến mại')
+  }
+
+  const handleApplyDiscount = async () => {
+    if (!discountOrder || !discountValue || discountValue <= 0) {
+      message.warning('Nhập giá trị chiết khấu')
+      return
+    }
+    const subtotal = discountOrder.lines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
+    const amount = discountMode === 'percent' ? Math.round(subtotal * discountValue / 100) : discountValue
+    const line: Partial<SessionLine> = {
+      id: `discount-${Date.now()}`,
+      temp_code: 'CKĐH',
+      ocr_product_code: 'CKĐH',
+      product_name_original: 'Chiết khấu đơn hàng',
+      quantity: 1,
+      unit_price: -amount,
+      line_total: -amount,
+      uom_original: '',
+      tax_rate: 0,
+      mapping_status: 'overridden',
+    }
+    await saveOrderLines(discountOrder, [...discountOrder.lines, line])
+    setDiscountOrder(null)
+    setDiscountValue(null)
+    setDiscountMode('amount')
+    message.success('Đã áp dụng chiết khấu')
+  }
+
+  const handleDeleteLine = async (order: SessionOrder, line: SessionLine) => {
+    await saveOrderLines(order, order.lines.filter(l => l.id !== line.id))
+    message.success('Đã xóa dòng')
+  }
 
   const doneCount = uploadFiles.filter(f => f.status === 'done').length
   const progressPercent = uploadFiles.length > 0 ? Math.round((doneCount / uploadFiles.length) * 100) : 0
@@ -378,22 +511,38 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
                       <span className="w-2.5" /><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-14 text-right">SL</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-12 text-center">ĐVT</span><span className="w-10 text-center">VAT</span><span className="w-20" />
                     </div>
-                    {order.lines.map(line => { const conf = getConfidence(line); const bg = conf.level === 'low' || conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'medium' ? 'bg-amber-50/70' : 'hover:bg-slate-50'; return (
+                    {order.lines.map(line => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'high' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'low' || conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'medium' ? 'bg-amber-50/70' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
                         <Tooltip title={DOT_TIPS[conf.level]}><span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLORS[conf.level]}`} /></Tooltip>
                         <span className="text-xs text-slate-800 flex-1 truncate font-medium">{line.product_name_original}</span>
-                        <span className="text-xs w-28 truncate">{line.mapping_status === 'mapped' ? <span className="text-emerald-600 font-mono font-bold">{line.product_code_mapped || '✓'}</span> : conf.suggestion ? <span className="text-blue-600 font-medium">→ {conf.suggestion.code}</span> : <span className="text-red-400 font-medium">?</span>}</span>
+                        <span className="text-xs w-28 truncate">{systemLine ? <span className="text-slate-500 font-mono font-bold">{systemLineCode(line)}</span> : line.mapping_status === 'mapped' ? <span className="text-emerald-600 font-mono font-bold">{line.product_code_mapped || '✓'}</span> : conf.suggestion ? <span className="text-blue-600 font-medium">→ {conf.suggestion.code}</span> : <span className="text-red-400 font-medium">?</span>}</span>
                         <span className="text-xs text-slate-700 w-14 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
                         <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
                         <span className="text-xs text-slate-500 w-12 text-center">{line.uom_mapped || line.uom_original || ''}</span>
                         <span className="text-xs text-slate-500 w-10 text-center">{line.tax_rate ? `${line.tax_rate}%` : ''}</span>
                         <div className="w-20 flex-shrink-0 flex justify-end gap-1">
-                          {line.mapping_status !== 'mapped' && conf.level === 'high' && conf.suggestion && <button className="text-xs text-emerald-600 border border-emerald-300 rounded px-1.5 py-0.5 hover:bg-emerald-50 font-medium" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
-                          <button className="text-xs text-blue-600 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50 font-medium" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>
+                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'high' && conf.suggestion && <button className="text-xs text-emerald-600 border border-emerald-300 rounded px-1.5 py-0.5 hover:bg-emerald-50 font-medium" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓</button>}
+                          {!systemLine && <button className="text-xs text-blue-600 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50 font-medium" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>{line.mapping_status === 'mapped' ? 'Đổi' : conf.level === 'medium' ? 'Xác nhận' : 'Chọn'}</button>}
+                          <button className="text-xs text-red-500 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 font-medium" onClick={(e) => { e.stopPropagation(); handleDeleteLine(order, line).catch(err => message.error(err?.response?.data?.detail || 'Xóa dòng thất bại')) }} title="Xóa dòng"><DeleteOutlined /></button>
                         </div>
                       </div>
                     ) })}
+                    <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-emerald-50/30">
+                      <span className="w-2.5" />
+                      <span className="text-xs  text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền thanh toán</span>
+                      <span className="w-20" />
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0).toLocaleString('vi-VN')}</span>
+                      <span className="w-12" />
+                      <span className="w-10" />
+                      <span className="w-20" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
+                      <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
+                      <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); handleAddBlankLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm dòng thất bại')) }}>Thêm dòng</Button>
+                      <Button size="small" icon={<GiftOutlined />} onClick={(e) => { e.stopPropagation(); handleAddPromotionLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm khuyến mại thất bại')) }}>Khuyến mại</Button>
+                      <Button size="small" icon={<PercentageOutlined />} onClick={(e) => { e.stopPropagation(); setDiscountOrder(order); setDiscountMode('amount'); setDiscountValue(null) }}>Chiết khấu</Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -432,11 +581,23 @@ export default function OrdersPage() {
       </div>)}
 
       {/* Product SelectPopup */}
-      <SelectPopup open={productModalOpen} title={`Chọn hàng hóa — "${selectedLine?.product_name_original || ''}"`}
+      <SelectPopup open={productModalOpen} title={selectedLine ? `Chọn hàng hóa — "${selectedLine.product_name_original || ''}"` : 'Chọn hàng hóa'}
         columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 110, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name' }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }]}
         fetchData={async (s, skip, limit) => { const r = await fetchProducts(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
-        onSelect={r => { if (selectedLine) handleMapProduct(selectedLine, r as unknown as Product) }}
-        onCancel={() => { setProductModalOpen(false); setSelectedLine(null) }} rowKey="code"
+        onSelect={r => {
+          const product = r as unknown as Product
+          if (selectedLine) {
+            handleMapProduct(selectedLine, product)
+            return
+          }
+          const order = sessionDetail?.orders.find(o => o.id === productTargetOrderId)
+          if (order) {
+            handleAddProductLine(order, product)
+              .then(() => { setProductModalOpen(false); setProductTargetOrderId(null) })
+              .catch(err => message.error(err?.response?.data?.detail || 'Thêm hàng hóa thất bại'))
+          }
+        }}
+        onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
         initialSearch={selectedLine ? (getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
 
       {/* Customer SelectPopup */}
@@ -450,6 +611,51 @@ export default function OrdersPage() {
       {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
         <OrderDetailForm orderId={editingOrder.id} onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }} />
       </Modal>}
+
+      {discountOrder && (
+        <Modal
+          open
+          width={680}
+          centered
+          title="Chiết khấu đơn hàng - Thêm dòng chiết khấu"
+          footer={null}
+          onCancel={() => {
+            setDiscountOrder(null)
+            setDiscountValue(null)
+            setDiscountMode('amount')
+          }}
+          styles={{ body: { padding: '18px 0 0' } }}
+        >
+          <div>
+            <div className="px-1 pb-5 space-y-5">
+              <div className="grid grid-cols-[180px_1fr] items-center gap-x-5">
+                <span className="text-sm text-slate-700">Phương pháp chiết khấu</span>
+                <Radio.Group value={discountMode} onChange={e => setDiscountMode(e.target.value)} className="flex gap-12">
+                  <Radio value="amount">Chiết khấu số tiền</Radio>
+                  <Radio value="percent">Chiết khấu %</Radio>
+                </Radio.Group>
+              </div>
+              <div className="grid grid-cols-[180px_1fr] items-center gap-x-5">
+                <span className="text-sm text-slate-700">{discountMode === 'amount' ? 'Tiền chiết khấu' : 'Tỷ lệ chiết khấu'} <span className="text-red-500">*</span></span>
+                <InputNumber
+                  autoFocus
+                  min={0}
+                  max={discountMode === 'percent' ? 100 : undefined}
+                  value={discountValue}
+                  className="w-64"
+                  formatter={value => value ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
+                  parser={value => Number((value || '').replace(/\./g, '').replace(',', '.'))}
+                  onChange={value => setDiscountValue(typeof value === 'number' ? value : null)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <Button onClick={() => { setDiscountOrder(null); setDiscountValue(null); setDiscountMode('amount') }}>Hủy</Button>
+              <Button type="primary" onClick={() => handleApplyDiscount().catch(err => message.error(err?.response?.data?.detail || 'Áp dụng chiết khấu thất bại'))}>Áp dụng</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {previewOrder && (
         <Modal
@@ -475,3 +681,4 @@ export default function OrdersPage() {
     </div>
   )
 }
+

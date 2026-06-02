@@ -9,6 +9,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import get_db
 from app.models.document import OrderLine, ProcessedBill, ProcessedOrder, RawDocument
+from app.models.product import Product
 from app.schemas.document import (
     CorrectionCreate,
     DocumentTypeOverride,
@@ -338,11 +339,14 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
         order.recipient_name = body.recipient_name
     if body.description is not None:
         order.description = body.description
+    if body.discount_amount is not None:
+        order.discount_amount = body.discount_amount
     if body.extra_data is not None:
         order.extra_data = body.extra_data
         flag_modified(order, "extra_data")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
+        kept_line_ids: set[str] = set()
         for line_data in body.lines:
             line_id = str(line_data.get("id") or "")
             line = existing_lines.get(line_id)
@@ -371,6 +375,19 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
                 if field in line_data:
                     setattr(line, field, line_data[field])
 
+            product_code = str(line_data.get("product_code_mapped") or line_data.get("ocr_product_code") or "").strip()
+            if product_code:
+                product = db.query(Product).filter(Product.code == product_code).first()
+                if product:
+                    line.product_id = product.id
+            
+            kept_line_ids.add(str(line.id))
+
+        for line_id, line in existing_lines.items():
+            if line_id not in kept_line_ids:
+                db.delete(line)
+
+        db.flush()
         pending = sum(1 for line in order.lines if line.mapping_status == "pending")
         if pending == 0:
             order.status = "completed"

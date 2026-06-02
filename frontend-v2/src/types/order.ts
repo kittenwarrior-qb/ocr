@@ -39,6 +39,7 @@ export interface Order {
   lines: OrderLine[]
   pending_count: number
   mapped_count: number
+  discount_amount?: number | null
 }
 
 export interface RawDocument {
@@ -63,6 +64,7 @@ export interface OrderUpdatePayload {
   payment_method?: string | null
   recipient_name?: string | null
   description?: string | null
+  discount_amount?: number | null
   extra_data?: Record<string, string | number | null>
   lines?: OrderLine[]
 }

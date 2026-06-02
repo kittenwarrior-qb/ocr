@@ -137,5 +137,6 @@ class OrderUpdateRequest(BaseModel):
     payment_method: Optional[str] = None
     recipient_name: Optional[str] = None
     description: Optional[str] = None
+    discount_amount: Optional[Decimal] = None
     extra_data: Optional[dict] = None
     lines: Optional[list[dict[str, Any]]] = None

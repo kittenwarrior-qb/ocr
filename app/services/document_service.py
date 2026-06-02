@@ -17,6 +17,7 @@ from app.models.document import (
     RawDocument,
 )
 from app.models.mapping import DocumentCorrection
+from app.models.product import Product
 from app.services import mapping_service, ocr_service, template_service
 from app.services.code_generator import generate_order_number
 from app.services.pattern_extraction import extract_by_pattern_rules
@@ -222,18 +223,30 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
         temp_code, product_id = mapping_service.resolve_temp_code(
             db, item.get("product_code"), product_name
         )
+        product = db.query(Product).filter(Product.id == product_id).first() if product_id else None
+        unit_price = item.get("unit_price")
+        line_total = item.get("line_total")
+        tax_rate = item.get("tax_rate")
+        quantity = item.get("quantity")
+        if product:
+            if unit_price is None and product.price is not None:
+                unit_price = product.price
+            if line_total is None and unit_price is not None and quantity is not None:
+                line_total = unit_price * quantity
+            if tax_rate is None and product.tax_rate is not None:
+                tax_rate = product.tax_rate
         line = OrderLine(
             processed_order_id=order_id,
             temp_code=temp_code,
             product_id=product_id,
             product_name_original=product_name,
             ocr_product_code=item.get("product_code"),
-            quantity=item.get("quantity"),
-            unit_price=item.get("unit_price"),
+            quantity=quantity,
+            unit_price=unit_price,
             discount_rate=item.get("discount_rate"),
             discount_amount=item.get("discount_amount"),
-            tax_rate=item.get("tax_rate"),
-            line_total=item.get("line_total"),
+            tax_rate=tax_rate,
+            line_total=line_total,
             uom_original=item.get("unit"),
             mapping_status="mapped" if product_id else "pending",
         )
@@ -250,18 +263,30 @@ def _build_bill_lines(db: Session, bill_id: UUID, items: list) -> list[BillLine]
         temp_code, product_id = mapping_service.resolve_temp_code(
             db, item.get("product_code"), product_name
         )
+        product = db.query(Product).filter(Product.id == product_id).first() if product_id else None
+        unit_price = item.get("unit_price")
+        line_total = item.get("line_total")
+        tax_rate = item.get("tax_rate")
+        quantity = item.get("quantity")
+        if product:
+            if unit_price is None and product.price is not None:
+                unit_price = product.price
+            if line_total is None and unit_price is not None and quantity is not None:
+                line_total = unit_price * quantity
+            if tax_rate is None and product.tax_rate is not None:
+                tax_rate = product.tax_rate
         line = BillLine(
             processed_bill_id=bill_id,
             temp_code=temp_code,
             product_id=product_id,
             product_name_original=product_name,
             ocr_product_code=item.get("product_code"),
-            quantity=item.get("quantity"),
-            unit_price=item.get("unit_price"),
+            quantity=quantity,
+            unit_price=unit_price,
             discount_rate=item.get("discount_rate"),
             discount_amount=item.get("discount_amount"),
-            tax_rate=item.get("tax_rate"),
-            line_total=item.get("line_total"),
+            tax_rate=tax_rate,
+            line_total=line_total,
             uom_original=item.get("unit"),
             mapping_status="mapped" if product_id else "pending",
         )
