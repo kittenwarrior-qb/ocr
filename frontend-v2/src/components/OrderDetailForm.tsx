@@ -338,14 +338,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                 <th className="px-1 py-2 w-6"></th>
                 <th className="px-2 py-2 text-left w-8">STT</th>
                 <th className="px-2 py-2 text-left w-28">Mã hàng hóa</th>
-                <th className="px-2 py-2 text-left min-w-[150px]">Diễn giải</th>
-                <th className="px-2 py-2 text-left w-14">ĐVT</th>
-                <th className="px-2 py-2 text-right w-14">SL</th>
-                <th className="px-2 py-2 text-right w-20">Đơn giá</th>
+                <th className="px-2 py-2 text-left min-w-[140px]">Diễn giải</th>
+                <th className="px-2 py-2 text-left w-12">ĐVT</th>
+                <th className="px-2 py-2 text-right w-12">SL</th>
+                <th className="px-2 py-2 text-right w-22">Đơn giá</th>
                 <th className="px-2 py-2 text-right w-22">Thành tiền</th>
-                <th className="px-2 py-2 text-right w-12">Thuế</th>
-                <th className="px-2 py-2 text-right w-20">Tổng</th>
-                <th className="px-2 py-2 text-center w-12"></th>
+                <th className="px-2 py-2 text-center w-16">Thuế suất</th>
+                <th className="px-2 py-2 text-right w-22">Tiền thuế</th>
+                <th className="px-2 py-2 text-right w-22">Tổng tiền</th>
+                <th className="px-2 py-2 text-center w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -369,8 +370,9 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                     <td className="px-2 py-1 text-right"><EditableCell value={line.quantity} type="number" onChange={v => updateLine(idx, 'quantity', v)} /></td>
                     <td className="px-2 py-1 text-right"><EditableCell value={line.unit_price} type="number" onChange={v => updateLine(idx, 'unit_price', v)} /></td>
                     <td className="px-2 py-1 text-right"><EditableCell value={line.line_total} type="number" onChange={v => updateLine(idx, 'line_total', v)} /></td>
-                    <td className="px-2 py-1 text-right"><EditableCell value={line.tax_rate} type="number" onChange={v => updateLine(idx, 'tax_rate', v)} /></td>
-                    <td className="px-2 py-1 text-right font-medium">{totalLine ? totalLine.toLocaleString('vi-VN') : '0'}</td>
+                    <td className="px-2 py-1 text-center"><EditableCell value={line.tax_rate} type="number" onChange={v => updateLine(idx, 'tax_rate', v)} placeholder="%" /></td>
+                    <td className="px-2 py-1 text-right text-slate-600">{txAmt ? txAmt.toLocaleString('vi-VN') : '—'}</td>
+                    <td className="px-2 py-1 text-right font-semibold">{totalLine ? totalLine.toLocaleString('vi-VN') : '—'}</td>
                     <td className="px-2 py-1 text-center">
                       <button className="text-red-500 hover:text-red-700 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50" onClick={() => deleteLine(idx)} title="Xóa dòng"><DeleteOutlined /></button>
                     </td>
@@ -379,10 +381,13 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
               })}
             </tbody>
             <tfoot>
-              <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
-                <td colSpan={7} className="px-2 py-2 text-right">Tổng cộng</td>
+              <tr className="bg-gray-50 border-t border-gray-200 font-semibold text-xs">
+                <td colSpan={7} className="px-2 py-2 text-right text-slate-600">Tổng cộng</td>
                 <td className="px-2 py-2 text-right">{total.toLocaleString('vi-VN')}</td>
-                <td colSpan={3}></td>
+                <td className="px-2 py-2 text-center text-slate-400">—</td>
+                <td className="px-2 py-2 text-right text-slate-600">{lines.reduce((s,l)=>{const r=Number(l.tax_rate)||0;return s+Math.round((Number(l.line_total)||0)*r/100)},0).toLocaleString('vi-VN')}</td>
+                <td className="px-2 py-2 text-right text-emerald-700">{lines.reduce((s,l)=>{const amt=Number(l.line_total)||0;const tx=Math.round(amt*(Number(l.tax_rate)||0)/100);return s+amt+tx},0).toLocaleString('vi-VN')}</td>
+                <td colSpan={1}></td>
               </tr>
             </tfoot>
           </table>

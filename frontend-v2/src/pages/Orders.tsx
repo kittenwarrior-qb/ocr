@@ -83,7 +83,7 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
     uom_original: product.uom,
     uom_mapped: product.uom,
     unit_price: unitPrice,
-    tax_rate: line.tax_rate,
+    tax_rate: line.tax_rate ?? productTaxRate(product),  // prefer OCR tax_rate, fallback to catalog
     line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
   }
 }
@@ -582,7 +582,7 @@ export default function OrdersPage() {
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
-                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-32">Mã hàng</span><span className="w-12 text-right">SL</span><span className="w-24 text-right">Thành tiền</span><span className="w-10 text-center">ĐVT</span><span className="w-8 text-center">VAT</span><span className="w-28" />
+                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-28">Mã hàng</span><span className="w-10 text-right">SL</span><span className="w-8 text-center">ĐVT</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-16 text-center">Thuế suất</span><span className="w-18 text-right">Tiền thuế</span><span className="w-20 text-right">Tổng tiền</span><span className="w-20" />
                     </div>
                     {order.lines.map((line, lineIdx) => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'confirmed' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'low' ? 'bg-orange-50/60' : conf.level === 'medium' ? 'bg-amber-50/70' : conf.level === 'suggest' ? 'bg-emerald-50/50' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
@@ -601,11 +601,16 @@ export default function OrdersPage() {
                             </button>
                           )}
                         </div>
-                        <span className="text-xs text-slate-700 w-12 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
-                        <span className="text-xs text-slate-800 w-24 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
-                        <span className="text-xs text-slate-500 w-10 text-center">{line.uom_mapped || line.uom_original || ''}</span>
-                        <span className="text-xs text-slate-400 w-8 text-center">{line.tax_rate ? `${line.tax_rate}%` : (conf.suggestion && (conf.suggestion as any).tax_rate ? `${(conf.suggestion as any).tax_rate}%` : '')}</span>
-                        <div className="w-28 flex-shrink-0 flex items-center justify-end gap-1">
+                        <span className="text-xs text-slate-700 w-10 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
+                        <span className="text-xs text-slate-500 w-8 text-center">{line.uom_mapped || line.uom_original || ''}</span>
+                        <span className="text-xs text-slate-600 w-20 text-right">{line.unit_price ? Number(line.unit_price).toLocaleString('vi-VN') : '\u2014'}</span>
+                        <span className="text-xs text-slate-800 w-20 text-right font-semibold">{line.line_total ? Number(line.line_total).toLocaleString('vi-VN') : '\u2014'}</span>
+                        {(() => { const txRate = line.tax_rate ?? (conf.suggestion ? productTaxRate(conf.suggestion) : 0); const txAmt = txRate && line.line_total ? Math.round(Number(line.line_total) * txRate / 100) : 0; const tong = (Number(line.line_total) || 0) + txAmt; return (<>
+                          <span className="text-xs text-slate-500 w-16 text-center">{txRate ? `${txRate}%` : ''}</span>
+                          <span className="text-xs text-slate-600 w-[72px] text-right">{txAmt ? txAmt.toLocaleString('vi-VN') : ''}</span>
+                          <span className="text-xs text-slate-800 w-20 text-right font-semibold">{tong ? tong.toLocaleString('vi-VN') : ''}</span>
+                        </>)})()}
+                        <div className="w-20 flex-shrink-0 flex items-center justify-end gap-1">
                           {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && (
                             <Tooltip title={`Xác nhận: ${conf.suggestion.code}`} placement="left">
                               <button className="text-[11px] text-white bg-emerald-500 hover:bg-emerald-600 rounded px-2 py-0.5 font-semibold whitespace-nowrap leading-5" onClick={() => handleMapProduct(line, conf.suggestion!)}>✓ XN</button>
@@ -628,9 +633,13 @@ export default function OrdersPage() {
                       <span className="w-2.5" />
                       <span className="w-5" />
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền theo PDF</span>
-                      <span className="w-12" />
-                      <span className="text-xs text-emerald-700 w-24 text-right font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN')}</span>
-                      <span className="w-10" /><span className="w-8" /><span className="w-28" />
+                      <span className="w-10" /><span className="w-8" />
+                      <span className="w-20" />
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0).toLocaleString('vi-VN')}</span>
+                      <span className="w-16" />
+                      <span className="text-xs text-slate-600 w-[72px] text-right">{order.lines.reduce((s,l)=>{const r=Number(l.tax_rate)||0;return s+Math.round((Number(l.line_total)||0)*r/100)},0).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{orderAfterVat(order, true).toLocaleString('vi-VN')}</span>
+                      <span className="w-20" />
                     </div>
                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
