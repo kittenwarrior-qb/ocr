@@ -600,7 +600,7 @@ export default function OrdersPage() {
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
-                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-32">Mã hàng</span><span className="w-10 text-right">SL</span><span className="w-8 text-center">ĐVT</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-16 text-center">Thuế suất</span><span className="w-18 text-right">Tiền thuế</span><span className="w-20 text-right">Tổng tiền</span><span className="w-16" />
+                      <span className="w-2.5" /><span className="w-5 text-center">#</span><span className="flex-1">Sản phẩm</span><span className="w-32">Mã hàng</span><span className="w-10 text-right">SL</span><span className="w-8 text-center">ĐVT</span><span className="w-20 text-right">Đơn giá</span><span className="w-20 text-right">Thành tiền</span><span className="w-16 text-center">Thuế</span><span className="w-18 text-right">Tiền thuế</span><span className="w-20 text-right">Tổng tiền</span><span className="w-16" />
                     </div>
                     {order.lines.map((line, lineIdx) => { const systemLine = isSystemLine(line); const conf = systemLine ? { level: 'confirmed' as Confidence, suggestion: null } : getConfidence(line); const bg = systemLine ? 'bg-slate-50' : conf.level === 'none' ? 'bg-red-50/70' : conf.level === 'low' ? 'bg-orange-50/60' : conf.level === 'medium' ? 'bg-amber-50/70' : conf.level === 'suggest' ? 'bg-emerald-50/50' : 'hover:bg-slate-50'; return (
                       <div key={line.id} className={`flex items-start gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
@@ -713,7 +713,7 @@ export default function OrdersPage() {
           }
         }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
-        initialSearch={selectedLine ? (selectedLine.product_code_mapped || getConfidence(selectedLine).suggestion?.code || selectedLine.ocr_product_code || selectedLine.product_name_original) : ''} />
+        initialSearch={selectedLine ? (selectedLine.product_code_mapped || getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
 
       {/* Customer + Contact Popup */}
       <CustomerContactPopup

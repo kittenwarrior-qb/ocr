@@ -4,7 +4,7 @@ import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined
 import { getOrder, updateOrder } from '@/api/orders'
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
-import { getBestMatch, matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
+import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { getProducts } from '@/utils/catalogStore'
 import dayjs from 'dayjs'
 
@@ -180,19 +180,16 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         contact: String(extra?.contact || ''),
       })
       setSelectedContactName(String(extra?.contact || ''))
-      // Auto-map: dùng product_code từ DB relationship trước (chính xác nhất)
+      // Chỉ fill thông tin cho MAPPED lines từ catalog. Pending lines giữ nguyên.
       const allProducts = getProducts()
       const mappedLines = (order.lines || []).map(line => {
-        // 1. product_code từ DB (khi đã map, có relationship với Product)
-        const dbCode = (line as any).product_code as string | null
+        if (line.mapping_status !== 'mapped') return line  // pending = giữ nguyên, không auto-map
+        // Mapped: tìm product từ DB relationship code
+        const dbCode = line.product_code as string | null
         if (dbCode) {
           const exactMatch = allProducts.find(p => p.code === dbCode)
           if (exactMatch) return applyProductToLine(line, exactMatch)
         }
-        // 2. Fuzzy match theo ocr_product_code hoặc tên
-        const searchKey = line.ocr_product_code || line.product_name_original || ''
-        const match = getBestMatch(searchKey)
-        if (match) return applyProductToLine(line, match)
         return line
       })
       setLines(mappedLines)
