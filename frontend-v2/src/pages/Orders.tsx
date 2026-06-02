@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, InputNumber, Radio, Input, Pagination, Spin } from 'antd'
+import { Tag, Button, message, Modal, Tooltip, Progress, Tabs, Input, Pagination, Spin } from 'antd'
 import {
   InboxOutlined,
   CheckCircleOutlined,
@@ -16,8 +16,6 @@ import {
   PlusOutlined,
   SearchOutlined,
   ArrowsAltOutlined,
-  GiftOutlined,
-  PercentageOutlined,
   DeleteOutlined,
   TeamOutlined,
 } from '@ant-design/icons'
@@ -36,6 +34,7 @@ import { preloadCatalogs, fetchProducts, fetchContacts, type Contact } from '@/u
 import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
+import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import client from '@/api/client'
 
 type Confidence = 'high' | 'medium' | 'low' | 'none'
@@ -158,11 +157,10 @@ export default function OrdersPage() {
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
-  const [discountOrder, setDiscountOrder] = useState<SessionOrder | null>(null)
-  const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount')
-  const [discountValue, setDiscountValue] = useState<number | null>(null)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [vouchersByCustomer, setVouchersByCustomer] = useState<Record<string, Voucher[]>>({})
+  const [expandedVouchers, setExpandedVouchers] = useState<Record<string, boolean>>({})
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({ queryKey: ['sessions'], queryFn: getSessions, refetchInterval: uploading ? 3000 : false })
   const { data: sessionDetail, refetch: refetchDetail } = useQuery({
@@ -177,6 +175,18 @@ export default function OrdersPage() {
   useEffect(() => { if (sessions.length > 0 && !activeSessionId) setActiveSessionId(sessions[0].id) }, [sessions, activeSessionId])
   const [catalogReady, setCatalogReady] = useState(false)
   useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
+
+  // Fetch vouchers whenever session orders change
+  useEffect(() => {
+    if (!sessionDetail?.orders?.length) return
+    const codes = [...new Set(
+      sessionDetail.orders
+        .map(o => String(o.extra_data?.customer_code || ''))
+        .filter(Boolean)
+    )]
+    if (!codes.length) return
+    fetchVouchersForCustomers(codes).then(setVouchersByCustomer).catch(() => {})
+  }, [sessionDetail])
 
   const handleStageFiles = useCallback((files: File[]) => {
     const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'))
@@ -324,48 +334,6 @@ export default function OrdersPage() {
     }
     await saveOrderLines(order, [...order.lines, line])
     message.success('Đã thêm dòng')
-  }
-
-  const handleAddPromotionLine = async (order: SessionOrder) => {
-    const line: Partial<SessionLine> = {
-      id: `promo-${Date.now()}`,
-      temp_code: `PROMO-${Date.now()}`,
-      product_name_original: 'Khuyến mại',
-      quantity: 1,
-      unit_price: 0,
-      line_total: 0,
-      uom_original: '',
-      tax_rate: 0,
-      mapping_status: 'overridden',
-    }
-    await saveOrderLines(order, [...order.lines, line])
-    message.success('Đã thêm dòng khuyến mại')
-  }
-
-  const handleApplyDiscount = async () => {
-    if (!discountOrder || !discountValue || discountValue <= 0) {
-      message.warning('Nhập giá trị chiết khấu')
-      return
-    }
-    const subtotal = discountOrder.lines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
-    const amount = discountMode === 'percent' ? Math.round(subtotal * discountValue / 100) : discountValue
-    const line: Partial<SessionLine> = {
-      id: `discount-${Date.now()}`,
-      temp_code: 'CKĐH',
-      ocr_product_code: 'CKĐH',
-      product_name_original: 'Chiết khấu đơn hàng',
-      quantity: 1,
-      unit_price: -amount,
-      line_total: -amount,
-      uom_original: '',
-      tax_rate: 0,
-      mapping_status: 'overridden',
-    }
-    await saveOrderLines(discountOrder, [...discountOrder.lines, line])
-    setDiscountOrder(null)
-    setDiscountValue(null)
-    setDiscountMode('amount')
-    message.success('Đã áp dụng chiết khấu')
   }
 
   const handleDeleteLine = async (order: SessionOrder, line: SessionLine) => {
@@ -542,6 +510,71 @@ export default function OrdersPage() {
                     })()}
                   </div>
 
+                  {/* Vouchers — applicable promotions */}
+                  {(() => {
+                    const custCode = String(order.extra_data?.customer_code || '')
+                    const vouchers = custCode ? (vouchersByCustomer[custCode] || []) : []
+                    if (!vouchers.length) return null
+                    const key = order.id
+                    const expanded = expandedVouchers[key]
+                    return (
+                      <div className="px-4 py-2 border-b border-slate-100 bg-purple-50/40">
+                        <button
+                          className="flex items-center gap-2 w-full text-left"
+                          onClick={e => { e.stopPropagation(); setExpandedVouchers(prev => ({ ...prev, [key]: !prev[key] })) }}
+                        >
+                          <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Khuyến mại áp dụng</span>
+                          <span className="ml-1 inline-flex items-center justify-center rounded-full bg-purple-600 text-white text-[10px] font-bold w-4 h-4">{vouchers.length}</span>
+                          <span className="ml-auto text-xs text-purple-400">{expanded ? '▲ Thu gọn' : '▼ Xem'}</span>
+                        </button>
+                        {expanded && (
+                          <div className="mt-2 space-y-2">
+                            {vouchers.map(v => (
+                              <div key={v.code} className="border border-purple-200 rounded-lg bg-white overflow-hidden">
+                                <div className="px-3 py-2 bg-purple-100 flex items-start justify-between gap-2">
+                                  <div>
+                                    <span className="text-xs font-bold text-purple-800 font-mono">{v.code}</span>
+                                    <span className="mx-2 text-purple-400">·</span>
+                                    <span className="text-xs font-semibold text-purple-900">{v.name}</span>
+                                  </div>
+                                  <span className="text-[10px] text-purple-600 whitespace-nowrap shrink-0">{v.from_date} → {v.to_date}</span>
+                                </div>
+                                <div className="px-3 py-1.5 border-b border-purple-100">
+                                  <div className="flex gap-4 text-[11px] text-slate-600">
+                                    <span><span className="font-medium text-slate-500">Loại:</span> {v.type}</span>
+                                    <span><span className="font-medium text-slate-500">Mô tả:</span> {v.description}</span>
+                                  </div>
+                                </div>
+                                <table className="w-full text-[11px]">
+                                  <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                                      <th className="px-3 py-1 text-left font-medium">Hàng hóa mua</th>
+                                      <th className="px-2 py-1 text-center font-medium w-12">ĐVT</th>
+                                      <th className="px-2 py-1 text-center font-medium w-10">SL</th>
+                                      <th className="px-3 py-1 text-left font-medium">Tặng hàng hóa</th>
+                                      <th className="px-2 py-1 text-center font-medium w-10">SL</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {v.items.map((item, i) => (
+                                      <tr key={i} className="border-b border-slate-50 last:border-0">
+                                        <td className="px-3 py-1 text-slate-700"><span className="font-mono text-purple-600">{item.product_code}</span> · {item.product_name}</td>
+                                        <td className="px-2 py-1 text-center text-slate-500">{item.uom}</td>
+                                        <td className="px-2 py-1 text-center font-semibold text-purple-700">{item.quantity}</td>
+                                        <td className="px-3 py-1 text-slate-700"><span className="font-mono text-emerald-600">{item.gift_product_code}</span> · {item.gift_product_name}</td>
+                                        <td className="px-2 py-1 text-center font-semibold text-emerald-700">{item.gift_quantity}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
                   {/* Product lines — clean table */}
                   <div className="px-3 py-2">
                     <div className="flex items-center gap-2 py-1.5 px-2 text-xs text-slate-500 font-semibold border-b-2 border-slate-200 mb-1 uppercase tracking-wide">
@@ -609,8 +642,6 @@ export default function OrdersPage() {
                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
                       <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); handleAddBlankLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm dòng thất bại')) }}>Thêm dòng</Button>
-                      <Button size="small" icon={<GiftOutlined />} onClick={(e) => { e.stopPropagation(); handleAddPromotionLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm khuyến mại thất bại')) }}>Khuyến mại</Button>
-                      <Button size="small" icon={<PercentageOutlined />} onClick={(e) => { e.stopPropagation(); setDiscountOrder(order); setDiscountMode('amount'); setDiscountValue(null) }}>Chiết khấu</Button>
                     </div>
                   </div>
                 </div>
@@ -739,51 +770,6 @@ export default function OrdersPage() {
       {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
         <OrderDetailForm orderId={editingOrder.id} onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }} />
       </Modal>}
-
-      {discountOrder && (
-        <Modal
-          open
-          width={680}
-          centered
-          title="Chiết khấu đơn hàng - Thêm dòng chiết khấu"
-          footer={null}
-          onCancel={() => {
-            setDiscountOrder(null)
-            setDiscountValue(null)
-            setDiscountMode('amount')
-          }}
-          styles={{ body: { padding: '18px 0 0' } }}
-        >
-          <div>
-            <div className="px-1 pb-5 space-y-5">
-              <div className="grid grid-cols-[180px_1fr] items-center gap-x-5">
-                <span className="text-sm text-slate-700">Phương pháp chiết khấu</span>
-                <Radio.Group value={discountMode} onChange={e => setDiscountMode(e.target.value)} className="flex gap-12">
-                  <Radio value="amount">Chiết khấu số tiền</Radio>
-                  <Radio value="percent">Chiết khấu %</Radio>
-                </Radio.Group>
-              </div>
-              <div className="grid grid-cols-[180px_1fr] items-center gap-x-5">
-                <span className="text-sm text-slate-700">{discountMode === 'amount' ? 'Tiền chiết khấu' : 'Tỷ lệ chiết khấu'} <span className="text-red-500">*</span></span>
-                <InputNumber
-                  autoFocus
-                  min={0}
-                  max={discountMode === 'percent' ? 100 : undefined}
-                  value={discountValue}
-                  className="w-64"
-                  formatter={value => value ? String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
-                  parser={value => Number((value || '').replace(/\./g, '').replace(',', '.'))}
-                  onChange={value => setDiscountValue(typeof value === 'number' ? value : null)}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-              <Button onClick={() => { setDiscountOrder(null); setDiscountValue(null); setDiscountMode('amount') }}>Hủy</Button>
-              <Button type="primary" onClick={() => handleApplyDiscount().catch(err => message.error(err?.response?.data?.detail || 'Áp dụng chiết khấu thất bại'))}>Áp dụng</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {previewOrder && (
         <Modal
