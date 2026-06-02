@@ -607,17 +607,12 @@ export default function OrdersPage() {
                         <Tooltip title={DOT_TIPS[conf.level]}><span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLORS[conf.level]}`} /></Tooltip>
                         <span className="text-xs text-slate-400 w-5 text-center shrink-0 mt-0.5">{lineIdx + 1}</span>
                         <span className="text-xs text-slate-800 flex-1 font-medium break-words leading-snug">{line.product_name_original}</span>
-                        <div className="flex items-start gap-0.5 w-32 shrink-0">
+                        <div className="w-32 shrink-0">
                           {systemLine
                             ? <span className="text-xs text-slate-500 font-mono font-bold">{systemLineCode(line)}</span>
                             : line.mapping_status === 'mapped'
                               ? <span className="text-xs text-slate-800 font-mono font-semibold">{line.product_code_mapped || '✓'}</span>
                               : <span className="text-xs text-slate-500 font-mono">{conf.suggestion ? conf.suggestion.code : '—'}</span>}
-                          {!systemLine && line.mapping_status !== 'mapped' && (
-                            <button className="shrink-0 text-slate-400 hover:text-blue-600 p-0.5 rounded hover:bg-blue-50" title="Chọn hàng hóa" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>
-                              <SearchOutlined style={{fontSize: 10}} />
-                            </button>
-                          )}
                         </div>
                         <span className="text-xs text-slate-700 w-10 text-right font-semibold">{line.quantity ?? '\u2014'}</span>
                         <span className="text-xs text-slate-500 w-8 text-center">{line.uom_mapped || line.uom_original || ''}</span>
@@ -718,7 +713,7 @@ export default function OrdersPage() {
           }
         }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
-        initialSearch={selectedLine ? (getConfidence(selectedLine).suggestion?.code || selectedLine.product_name_original) : ''} />
+        initialSearch={selectedLine ? (selectedLine.product_code_mapped || getConfidence(selectedLine).suggestion?.code || selectedLine.ocr_product_code || selectedLine.product_name_original) : ''} />
 
       {/* Customer + Contact Popup */}
       <CustomerContactPopup
