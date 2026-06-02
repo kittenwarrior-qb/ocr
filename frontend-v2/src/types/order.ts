@@ -1,8 +1,8 @@
 export interface OrderLine {
   id: string
   product_name_original: string
-  product_code?: string | null   // mapped product code from DB relationship
-  ocr_product_code?: string | null
+  product_code?: string | null
+  ocr_product_code: string | null
   quantity: number | null
   unit_price: number | null
   line_total: number | null
@@ -13,7 +13,6 @@ export interface OrderLine {
   temp_code: string
   product_id: string | null
   mapping_status: 'pending' | 'mapped' | 'overridden'
-  ocr_product_code: string | null
 }
 
 export interface Order {
