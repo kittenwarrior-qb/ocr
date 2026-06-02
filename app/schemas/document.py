@@ -49,6 +49,7 @@ class ProcessedOrderOut(BaseModel):
     total_amount: Optional[Decimal]
     discount_amount: Optional[Decimal]
     tax_amount: Optional[Decimal]
+    extra_data: Optional[dict[str, Any]] = None
     status: str
     processed_at: datetime
     file_name: Optional[str] = None

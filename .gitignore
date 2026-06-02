@@ -21,6 +21,7 @@ build/
 frontend-v2/node_modules/
 frontend-v2/dist/
 frontend-v2/.vite/
+*.tsbuildinfo
 
 # ── Uploads & user data ───────────────────────────────────────────────────────
 uploads/

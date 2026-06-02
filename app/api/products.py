@@ -1,5 +1,6 @@
 import csv
 import io
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -11,6 +12,27 @@ from app.schemas.product import ProductCreate, ProductImportRow, ProductOut, Pro
 from app.services.code_generator import generate_product_code
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+
+def _parse_tax_rate(value) -> Decimal | None:
+    if value is None:
+        return None
+    text = str(value).strip().replace("%", "").replace(",", ".")
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except Exception:
+        return None
+
+
+def _format_tax_rate(value) -> str:
+    if value is None:
+        return ""
+    num = Decimal(str(value))
+    if num == num.to_integral_value():
+        return f"{int(num)}%"
+    return f"{num.normalize()}%"
 
 
 @router.get("", response_model=list[ProductOut])
@@ -47,7 +69,14 @@ def list_all_products(
     rows = q.order_by(Product.code).offset(skip).limit(limit).all()
     return {
         "items": [
-            {"code": p.code, "name": p.display_name, "uom": p.uom, "price": 0, "tax_rate": "", "property": ""}
+            {
+                "code": p.code,
+                "name": p.display_name,
+                "uom": p.uom,
+                "price": float(p.price or 0),
+                "tax_rate": _format_tax_rate(p.tax_rate),
+                "property": p.property or "",
+            }
             for p in rows
         ],
         "total": total,
@@ -61,6 +90,10 @@ def create_product(body: ProductCreate, db: Session = Depends(get_db)):
         code=code,
         display_name=body.display_name,
         uom=body.uom,
+        price=body.price,
+        tax_rate=body.tax_rate,
+        property=body.property,
+        product_type=body.product_type,
         conversion_factor=body.conversion_factor,
         account_code=body.account_code,
     )
@@ -118,6 +151,10 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
             code=code,
             display_name=display_name,
             uom=uom,
+            price=Decimal(str(row.get("price") or 0)),
+            tax_rate=_parse_tax_rate(row.get("tax_rate")),
+            property=(row.get("property") or "").strip() or None,
+            product_type=(row.get("product_type") or "").strip() or None,
             account_code=(row.get("account_code") or row.get("Tài khoản") or "").strip() or None,
         )
         db.add(product)

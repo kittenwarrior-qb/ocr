@@ -45,6 +45,63 @@ const DOT_TIPS = { high: 'Đã map chính xác', medium: 'AI gợi ý - cần x�
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'done' | 'error'
 interface UploadFileItem { name: string; size: number; status: FileStatus; file?: File }
 
+function productTaxRate(product: Product): number {
+  return parseFloat(String(product.tax_rate || '').replace('%', '')) || 0
+}
+
+function applyProductToSessionLine(line: SessionLine, product: Product): SessionLine {
+  const quantity = Number(line.quantity) || 1
+  const unitPrice = Number(product.price) || 0
+  return {
+    ...line,
+    mapping_status: 'mapped',
+    product_code_mapped: product.code,
+    product_name_mapped: product.name,
+    ocr_product_code: product.code,
+    uom_original: product.uom,
+    uom_mapped: product.uom,
+    unit_price: unitPrice,
+    tax_rate: productTaxRate(product),
+    line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
+  }
+}
+
+function buildCustomerExtraData(customer: Customer): Record<string, string> {
+  const invoiceAddress = customer.invoice_address || ''
+  const deliveryAddress = customer.delivery_address || invoiceAddress
+  return {
+    code: customer.code || '',
+    type: customer.type || '',
+    name: customer.name || '',
+    tax_code: customer.tax_code || '',
+    phone: customer.phone || '',
+    email: customer.email || '',
+    field: customer.field || '',
+    owner: customer.owner || '',
+    description: customer.description || '',
+    invoice_address: invoiceAddress,
+    invoice_city: customer.invoice_city || '',
+    invoice_district: customer.invoice_district || '',
+    invoice_ward: customer.invoice_ward || '',
+    delivery_address: deliveryAddress,
+    customer_code: customer.code || '',
+    customer_name: customer.name || '',
+    customer_tax_code: customer.tax_code || '',
+    customer_phone: customer.phone || '',
+    customer_owner: customer.owner || '',
+    invoice_customer: customer.name || '',
+    invoice_buyer: customer.owner || '',
+    invoice_street: invoiceAddress,
+    delivery_receiver: customer.owner || '',
+    delivery_phone: customer.phone || '',
+    delivery_city: customer.invoice_city || '',
+    delivery_district: customer.invoice_district || '',
+    delivery_ward: customer.invoice_ward || '',
+    delivery_street: deliveryAddress,
+    order_type: 'Kênh MT',
+  }
+}
+
 export default function OrdersPage() {
   const queryClient = useQueryClient()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -109,7 +166,15 @@ export default function OrdersPage() {
       // Optimistic update: mark line as mapped in local cache
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
-        return { ...old, total_unmapped: Math.max(0, (old.total_unmapped || 0) - 1), orders: old.orders.map((o: any) => ({ ...o, pending_count: o.lines.filter((l: any) => l.id !== line.id && l.mapping_status === 'pending').length, lines: o.lines.map((l: any) => l.id === line.id ? { ...l, mapping_status: 'mapped', product_code_mapped: product.code, product_name_mapped: product.name, uom_mapped: product.uom } : l) })) }
+        return {
+          ...old,
+          total_unmapped: Math.max(0, (old.total_unmapped || 0) - 1),
+          orders: old.orders.map((o: any) => ({
+            ...o,
+            pending_count: o.lines.filter((l: any) => l.id !== line.id && l.mapping_status === 'pending').length,
+            lines: o.lines.map((l: any) => l.id === line.id ? applyProductToSessionLine(l, product) : l),
+          })),
+        }
       })
       message.success(`Đã map "${product.name}"`); setProductModalOpen(false); setSelectedLine(null)
     }
@@ -117,12 +182,12 @@ export default function OrdersPage() {
   }
   const handleSelectCustomer = async (orderId: string, customer: Customer) => {
     try {
-      const extraData = { customer_code: customer.code, customer_name: customer.name, customer_tax_code: customer.tax_code || '', customer_phone: customer.phone || '', customer_owner: customer.owner || '', invoice_customer: customer.name, invoice_buyer: customer.owner || '', invoice_city: customer.invoice_city || '', invoice_district: customer.invoice_district || '', invoice_ward: customer.invoice_ward || '', invoice_street: customer.invoice_address || '', invoice_address: customer.invoice_address || '', delivery_receiver: customer.owner || '', delivery_phone: customer.phone || '', delivery_city: customer.invoice_city || '', delivery_district: customer.invoice_district || '', delivery_ward: customer.invoice_ward || '', delivery_street: customer.delivery_address || customer.invoice_address || '', delivery_address: customer.delivery_address || customer.invoice_address || '' }
-      await client.patch(`/documents/orders/${orderId}`, { recipient_name: customer.name, description: customer.invoice_address, extra_data: extraData })
+      const extraData = buildCustomerExtraData(customer)
+      await client.patch(`/documents/orders/${orderId}`, { recipient_name: customer.name, description: extraData.invoice_address, extra_data: extraData })
       // Optimistic update: patch the local cache immediately
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
-        return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, recipient_name: customer.name, extra_data: extraData } : o) }
+        return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, recipient_name: customer.name, description: extraData.invoice_address, delivery_address: extraData.delivery_address || extraData.invoice_address, extra_data: extraData } : o) }
       })
       message.success(`KH: ${customer.name}`); setCustomerModalOpen(false); setSelectedOrderId(null)
     } catch { message.error('Cập nhật thất bại') }

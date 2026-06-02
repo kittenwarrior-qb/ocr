@@ -50,6 +50,25 @@ function ProductModal({ open, suggestName, onSelect, onCancel }: { open: boolean
   )
 }
 
+function productTaxRate(product: Product): number {
+  return parseFloat(String(product.tax_rate || '').replace('%', '')) || 0
+}
+
+function applyProductToLine(line: OrderLine, product: Product): OrderLine {
+  const quantity = Number(line.quantity) || 1
+  const unitPrice = Number(product.price) || 0
+  return {
+    ...line,
+    ocr_product_code: product.code,
+    product_name_original: product.name,
+    uom_original: product.uom,
+    unit_price: unitPrice,
+    tax_rate: productTaxRate(product),
+    line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
+    mapping_status: 'mapped',
+  }
+}
+
 const POPUP_CONFIGS = {
   customer: {
     title: 'Chọn khách hàng',
@@ -73,10 +92,60 @@ const POPUP_CONFIGS = {
 } as const
 
 type PopupType = 'customer' | null
+type CustomerData = Record<string, string>
 
 interface Props {
   orderId: string
   onSaved?: () => void
+}
+
+function toCustomerData(record?: Record<string, unknown> | null): CustomerData | null {
+  if (!record) return null
+  const value = (key: string) => String(record[key] ?? '')
+  const invoiceAddress = value('invoice_address') || value('invoice_street')
+  const deliveryAddress = value('delivery_address') || value('delivery_street') || invoiceAddress
+  const name = value('name') || value('customer_name') || value('invoice_customer')
+  const owner = value('owner') || value('customer_owner') || value('invoice_buyer')
+  const phone = value('phone') || value('customer_phone') || value('delivery_phone')
+  return {
+    code: value('code') || value('customer_code'),
+    type: value('type') || value('customer_type'),
+    name,
+    tax_code: value('tax_code') || value('customer_tax_code'),
+    phone,
+    email: value('email'),
+    field: value('field'),
+    owner,
+    description: value('description'),
+    invoice_address: invoiceAddress,
+    invoice_city: value('invoice_city'),
+    invoice_district: value('invoice_district'),
+    invoice_ward: value('invoice_ward'),
+    delivery_address: deliveryAddress,
+    delivery_receiver: value('delivery_receiver') || owner,
+    delivery_phone: value('delivery_phone') || phone,
+    delivery_city: value('delivery_city'),
+    delivery_district: value('delivery_district'),
+    delivery_ward: value('delivery_ward'),
+  }
+}
+
+function buildExtraData(customer: CustomerData): Record<string, string> {
+  return {
+    ...customer,
+    customer_code: customer.code || '',
+    customer_type: customer.type || '',
+    customer_name: customer.name || '',
+    customer_tax_code: customer.tax_code || '',
+    customer_phone: customer.phone || '',
+    customer_owner: customer.owner || '',
+    invoice_customer: customer.name || '',
+    invoice_buyer: customer.owner || '',
+    invoice_street: customer.invoice_address || '',
+    delivery_receiver: customer.delivery_receiver || customer.owner || '',
+    delivery_phone: customer.delivery_phone || customer.phone || '',
+    delivery_street: customer.delivery_address || customer.invoice_address || '',
+  }
 }
 
 export default function OrderDetailForm({ orderId, onSaved }: Props) {
@@ -85,7 +154,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const [productModalIdx, setProductModalIdx] = useState<number | null>(null)
   const [activePopup, setActivePopup] = useState<PopupType>(null)
   const [selectedCustomer, setSelectedCustomer] = useState('')
-  const [selectedCustomerData, setSelectedCustomerData] = useState<Record<string, string> | null>(null)
+  const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -98,15 +167,26 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         delivery_date: order.delivery_date ? dayjs(order.delivery_date) : null,
         total_amount: order.total_amount,
         po_number: order.po_number,
+        order_type: String(order.extra_data?.order_type || 'Kênh MT'),
         payment_due: order.order_date ? dayjs(order.order_date).add(1, 'month') : null,
       })
-      if (order.recipient_name) setSelectedCustomer(order.recipient_name)
+      const customerData = toCustomerData(order.extra_data as Record<string, unknown> | null)
+      if (customerData) {
+        setSelectedCustomerData(customerData)
+        setSelectedCustomer(customerData.name || order.recipient_name || '')
+      } else if (order.recipient_name) {
+        setSelectedCustomer(order.recipient_name)
+        setSelectedCustomerData(null)
+      } else {
+        setSelectedCustomer('')
+        setSelectedCustomerData(null)
+      }
       // Auto-map
       const mappedLines = (order.lines || []).map(line => {
         if (line.mapping_status === 'mapped') return line
         const match = getBestMatch(line.product_name_original || line.ocr_product_code || '')
         if (match) {
-          return { ...line, ocr_product_code: line.ocr_product_code || match.code, uom_original: line.uom_original || match.uom, tax_rate: line.tax_rate ?? (parseFloat(match.tax_rate) || null), mapping_status: 'mapped' as const }
+          return applyProductToLine(line, match)
         }
         return line
       })
@@ -121,25 +201,8 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
 
   const handleSave = async () => {
     const values = form.getFieldsValue()
-    const meta: Record<string, string | number | null> = {}
-    if (selectedCustomerData) {
-      meta.customer_code = selectedCustomerData.code || ''
-      meta.customer_type = selectedCustomerData.type || ''
-      meta.invoice_customer = selectedCustomerData.name || ''
-      meta.tax_code = selectedCustomerData.tax_code || ''
-      meta.invoice_buyer = selectedCustomerData.owner || ''
-      meta.phone = selectedCustomerData.phone || ''
-      meta.email = selectedCustomerData.email || ''
-      meta.field = selectedCustomerData.field || ''
-      meta.description = selectedCustomerData.description || ''
-      meta.invoice_address = selectedCustomerData.invoice_address || ''
-      meta.invoice_city = selectedCustomerData.invoice_city || ''
-      meta.invoice_district = selectedCustomerData.invoice_district || ''
-      meta.invoice_ward = selectedCustomerData.invoice_ward || ''
-      meta.delivery_receiver = selectedCustomerData.owner || ''
-      meta.delivery_phone = selectedCustomerData.phone || ''
-      meta.delivery_address = selectedCustomerData.delivery_address || selectedCustomerData.invoice_address || ''
-    }
+    const meta = selectedCustomerData ? buildExtraData(selectedCustomerData) : {}
+    meta.order_type = values.order_type || 'Kênh MT'
     try {
       await updateOrder(orderId, {
         ...values,
@@ -155,8 +218,9 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   }
 
   const handlePopupSelect = (record: Record<string, unknown>) => {
-    setSelectedCustomer((record.name || record.code || '') as string)
-    setSelectedCustomerData(record as unknown as Record<string, string>)
+    const customerData = toCustomerData(record)
+    setSelectedCustomer(customerData?.name || customerData?.code || '')
+    setSelectedCustomerData(customerData)
     form.setFieldValue('partner_id', record.code)
     setActivePopup(null)
   }
@@ -180,7 +244,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           <Form.Item label="Khách hàng"><InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
           <Form.Item label={<>Hạn thanh toán <span className="text-red-500">*</span></>} name="payment_due"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
-          <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>}><Select placeholder="- Chọn -" options={[{ value: 'mt', label: 'Kênh MT' }, { value: 'retail', label: 'Khách lẻ' }, { value: 'b2b', label: 'B2B' }, { value: 'gt', label: 'Kênh GT' }]} /></Form.Item>
+          <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
           <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}><Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} /></Form.Item>
         </div>
       </Form>
@@ -296,14 +360,9 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
         suggestName={productModalIdx !== null && productModalIdx >= 0 ? lines[productModalIdx]?.product_name_original || '' : ''}
         onSelect={p => {
           if (productModalIdx !== null && productModalIdx >= 0) {
-            updateLine(productModalIdx, 'ocr_product_code', p.code)
-            updateLine(productModalIdx, 'product_name_original', p.name)
-            updateLine(productModalIdx, 'uom_original', p.uom)
-            updateLine(productModalIdx, 'tax_rate', parseFloat(p.tax_rate) || 0)
-            updateLine(productModalIdx, 'unit_price', p.price || 0)
-            updateLine(productModalIdx, 'mapping_status', 'mapped')
+            setLines(prev => prev.map((line, idx) => idx === productModalIdx ? applyProductToLine(line, p) : line))
           } else {
-            setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: p.code, product_name_original: p.name, quantity: 1, unit_price: p.price || 0, line_total: p.price || 0, uom_original: p.uom, tax_rate: parseFloat(p.tax_rate) || 0, mapping_status: 'mapped' } as unknown as OrderLine])
+            setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: p.code, product_name_original: p.name, quantity: 1, unit_price: p.price || 0, line_total: p.price || 0, uom_original: p.uom, tax_rate: productTaxRate(p), mapping_status: 'mapped' } as unknown as OrderLine])
           }
           setProductModalIdx(null)
         }}

@@ -136,6 +136,7 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
     Retroactively updates all non-exported order_lines and bill_lines.
     Returns total lines updated.
     """
+    product = db.query(Product).filter(Product.id == product_id).first()
     mapping = db.query(TempCodeMapping).filter(TempCodeMapping.temp_code == temp_code).first()
     if mapping is None:
         # Create the mapping if it doesn't exist
@@ -165,6 +166,15 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
     )
     for line in order_lines:
         line.product_id = product_id
+        if product:
+            line.product_name_original = product.display_name or line.product_name_original
+            line.uom_original = product.uom or line.uom_original
+            if product.price is not None:
+                line.unit_price = product.price
+                if line.quantity is not None:
+                    line.line_total = line.quantity * product.price
+            if product.tax_rate is not None:
+                line.tax_rate = product.tax_rate
         line.mapping_status = "mapped"
     db.flush()
 
@@ -179,6 +189,15 @@ def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> i
     )
     for line in bill_lines:
         line.product_id = product_id
+        if product:
+            line.product_name_original = product.display_name or line.product_name_original
+            line.uom_original = product.uom or line.uom_original
+            if product.price is not None:
+                line.unit_price = product.price
+                if line.quantity is not None:
+                    line.line_total = line.quantity * product.price
+            if product.tax_rate is not None:
+                line.tax_rate = product.tax_rate
         line.mapping_status = "mapped"
     db.flush()
 
@@ -232,7 +251,7 @@ def create_product_and_map(
     account_code: str | None = None,
 ) -> Product:
     code = generate_product_code(db)
-    product = Product(code=code, display_name=display_name, uom=uom, account_code=account_code)
+    product = Product(code=code, display_name=display_name, uom=uom, price=0, account_code=account_code)
     db.add(product)
     db.flush()
     map_temp_code_to_product(db, temp_code, product.id)

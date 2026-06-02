@@ -13,6 +13,7 @@ Data files required in: app/data/products.json, app/data/customers.json
 """
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -28,6 +29,15 @@ for p in (customers_path, products_path):
 customers = json.loads(customers_path.read_text(encoding="utf-8"))
 products = json.loads(products_path.read_text(encoding="utf-8"))
 print(f"Loaded {len(customers)} customers, {len(products)} products")
+
+
+def _parse_decimal(value, default="0"):
+    if value is None or value == "":
+        return Decimal(default)
+    text = str(value).strip().replace(",", ".").replace("%", "")
+    if not text:
+        return Decimal(default)
+    return Decimal(text)
 
 
 def main():
@@ -61,6 +71,10 @@ def main():
         "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(18,2)",
         "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5,2)",
         "ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS ocr_product_code VARCHAR(200)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS price NUMERIC(18,2) NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5,2)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS property VARCHAR(100)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type VARCHAR(100)",
         "ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS session_id UUID",
         "ALTER TABLE partners ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
         "ALTER TABLE partners ADD COLUMN IF NOT EXISTS email VARCHAR(300)",
@@ -110,7 +124,19 @@ def main():
         uom = (p.get("uom") or "Cái").strip()
         if not code or not name:
             continue
-        db.add(Product(code=code, display_name=name, uom=uom, is_active=True))
+        tax_rate = None
+        if p.get("tax_rate") not in (None, ""):
+            tax_rate = _parse_decimal(p.get("tax_rate"))
+        db.add(Product(
+            code=code,
+            display_name=name,
+            uom=uom,
+            price=_parse_decimal(p.get("price")),
+            tax_rate=tax_rate,
+            property=(p.get("property") or "").strip() or None,
+            product_type=(p.get("type") or "").strip() or None,
+            is_active=True,
+        ))
         prod_count += 1
     db.commit()
     print(f"  {prod_count} products created")

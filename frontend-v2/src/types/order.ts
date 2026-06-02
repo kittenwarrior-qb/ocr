@@ -31,6 +31,7 @@ export interface Order {
   total_amount: number | null
   discount_amount: number | null
   tax_amount: number | null
+  extra_data: Record<string, string | number | null> | null
   missing_fields: string[]
   status: string
   processed_at: string
