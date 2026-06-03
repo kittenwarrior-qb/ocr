@@ -807,6 +807,8 @@ export default function OrdersPage() {
         onCancel={() => setMisaConfirmOpen(false)}
         confirmLoading={misaLoading}
         width={420}
+        zIndex={1100}
+        centered
       >
         <p className="text-sm text-gray-700">
           Đơn hàng <strong>{editingOrder?.file_name}</strong> sẽ được đẩy lên MISA CRM với số đơn hàng tự động (DH tiếp theo).
