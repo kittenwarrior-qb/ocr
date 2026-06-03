@@ -163,7 +163,7 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
     invoice_customer: customer.name || '',
     invoice_buyer: customer.owner || '',
     invoice_street: invoiceAddress,
-    delivery_receiver: contactName || customer.owner || '',
+    delivery_receiver: contactName || customer.name || '',
     delivery_phone: contactPhone || customer.phone || '',
     delivery_city: (typeof contact === 'string' ? '' : contact?.city) || customer.invoice_city || '',
     delivery_district: (typeof contact === 'string' ? '' : contact?.district) || customer.invoice_district || '',
