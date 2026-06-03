@@ -138,6 +138,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         partner_name = order.partner.legal_name if order.partner else None
         extracted = raw_doc.extracted_data or {} if raw_doc else {}
         ocr_company_name = extracted.get("customer_name") or extracted.get("recipient_name") or order.recipient_name
+        ocr_company_address = extracted.get("company_address") or None
         ocr_delivery_address = extracted.get("delivery_address") or order.description
         ocr_recipient_name = extracted.get("recipient_name") or order.recipient_name
         ocr_total_amount = extracted.get("total_amount") if extracted.get("total_amount") is not None else order.total_amount
@@ -159,6 +160,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "partner_id": str(order.partner_id) if order.partner_id else None,
             "extra_data": order.extra_data,
             "ocr_company_name": ocr_company_name,
+            "ocr_company_address": ocr_company_address,
             "ocr_delivery_address": ocr_delivery_address,
             "ocr_recipient_name": ocr_recipient_name,
             "ocr_total_amount": float(ocr_total_amount) if ocr_total_amount else None,

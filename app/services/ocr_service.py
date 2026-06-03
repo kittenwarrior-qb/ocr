@@ -62,6 +62,7 @@ FIELD ALIASES — the same field may appear under many different labels:
 - order_number: "Số PO", "SỐ PO", "PO No.", "PO No", "P/O Number", "Order No.", "Order No", "Số chứng từ", "Số đơn hàng", "SỐ ĐƠN ĐẶT HÀNG", "Đơn đặt hàng số", "Số thứ tự đơn đặt hàng", "Số hiệu đơn hàng", "OUR REF NO", "Ord slip no", "Supplier Delivery ID"
 - order_date: "Ngày đặt hàng", "Ngày chứng từ", "Ngày đặt đơn", "NGÀY ĐẶT HÀNG", "Order Date", "Ord dt", "DATE", "Date", "Entry Date", "Ngày đặt hàng/Date", "PO Date"
 - delivery_date: "Ngày giao hàng", "Ngày nhận hàng", "Delivery Date", "Ngày giao", "NGÀY GIAO HÀNG", "Expected Delivery", "Ngày dự kiến giao", "Ngày xác nhận", "Confirmation Date"
+- company_address: "Bill To", "Bill to", "Địa chỉ người mua", "Địa chỉ (HĐ)", "Địa chỉ công ty", "ĐỊA CHỈ CÔNG TY", "Địa chỉ đặt hàng", "Buyer address", "Invoice address", "Địa chỉ thanh toán"
 - delivery_address: "Ship to", "Ship To", "GIAO TỚI", "Địa chỉ giao hàng", "ĐỊA CHỈ GIAO HÀNG", "Nơi giao hàng", "Giao hàng tại kho", "ĐỊA ĐIỂM GIAO HÀNG", "SHIP ADDRESS", "Delivered To", "Delivery to", "Delivery Address", "Delivery to / Giao hàng tới"
 - payment_method: "Phương thức thanh toán", "HÌNH THỨC THANH TOÁN", "Thanh toán", "Terms", "TERMS", "Payment Terms"
 - recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT". This can be a person name. NEVER use a person/contact name as customer_name.
@@ -96,6 +97,7 @@ Extract all information and return valid JSON only (no markdown, no explanation)
   "customer_tax_code": "string or null",
   "vendor_name": "string or null",
   "vendor_tax_code": "string or null",
+  "company_address": "string or null",
   "delivery_address": "string or null",
   "total_amount": "number (REQUIRED)",
   "discount_amount": number_or_null,
