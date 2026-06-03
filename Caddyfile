@@ -1,12 +1,5 @@
-# ── quocbui.site → main stack (misa-api_default network) ─────────────────────
-quocbui.site {
-    reverse_proxy misa-api-backend-1:8000
-}
+quocbui.site, ocr2.quocbui.dev {
 
-# ── ocr2.quocbui.dev → mainapi stack (misa2 network) ─────────────────────────
-ocr2.quocbui.dev {
-
-    # CORS preflight
     @preflight method OPTIONS
     handle @preflight {
         header Access-Control-Allow-Origin *
@@ -16,12 +9,10 @@ ocr2.quocbui.dev {
         respond 204
     }
 
-    # CORS headers cho mọi response
     header Access-Control-Allow-Origin *
     header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
     header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
     header Access-Control-Expose-Headers "*"
 
-    # Route tới frontend (nginx bên trong đã proxy /api → backend)
     reverse_proxy frontend:80
 }

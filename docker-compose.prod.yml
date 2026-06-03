@@ -5,19 +5,17 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ocr_risk2}
+      POSTGRES_DB: ${POSTGRES_DB:-ocr_risk}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - pgdata2:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - misa2
 
   backend:
     build:
@@ -26,15 +24,13 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ocr_risk2}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ocr_risk}
       UPLOAD_DIR: /app/uploads
     volumes:
-      - uploads2:/app/uploads
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - misa2
 
   frontend:
     build:
@@ -43,8 +39,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    networks:
-      - misa2
 
   caddy:
     image: caddy:2-alpine
@@ -55,22 +49,13 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data2:/data
-      - caddy_config2:/config
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - frontend
-      - backend
-    networks:
-      - misa2
-      - misa-api_default  # kết nối sang stack main để proxy quocbui.site
-
-networks:
-  misa2:
-  misa-api_default:
-    external: true  # network của main stack (đã chạy sẵn)
 
 volumes:
-  pgdata2:
-  uploads2:
-  caddy_data2:
-  caddy_config2:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
