@@ -338,7 +338,9 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
     payload = {
         "sale_order_no": next_no,
         "form_layout": "Mẫu tiêu chuẩn",
-        "sale_order_name": meta.get("note_description") or f"Đơn hàng {next_no}",
+        "sale_order_name": meta.get("note_description") or (
+            f"Đơn hàng bán cho {meta.get('customer_name') or meta.get('name') or meta.get('invoice_customer') or ''}"
+        ).strip() or f"Đơn hàng {next_no}",
         "sale_order_date": date_fmt(order.order_date),
         "book_date": date_fmt(order.order_date),
         "due_date": meta.get("payment_due") or date_fmt(order.order_date),
@@ -346,7 +348,7 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
         "sale_order_type": meta.get("order_type") or "Kênh MT",
         "account_name": meta.get("customer_code") or (partner.code if partner else "") or "",
         "contact_name": meta.get("contact_code") or meta.get("contact") or "",
-        "owner_name": meta.get("salesperson") or "",
+        "owner_name": meta.get("owner") or meta.get("customer_owner") or None,
         "phone": meta.get("delivery_phone") or (partner.phone if partner else "") or "",
         "billing_country": meta.get("invoice_country") or "Việt Nam",
         "billing_address": meta.get("invoice_address") or "",

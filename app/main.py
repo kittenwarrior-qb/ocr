@@ -75,13 +75,18 @@ async def lifespan(app: FastAPI):
     import threading, logging
     def _misa_startup_sync():
         import time
-        time.sleep(8)
+        time.sleep(10)
         try:
             if not _settings.APP_ID or not _settings.MISA_CLIENT_SECRET:
                 return
-            from app.services.misa_sync import sync_customers, sync_products, sync_contacts
+            from app.models.partner import Partner
             db2 = SessionLocal()
             try:
+                count = db2.query(Partner).count()
+                if count > 0:
+                    logging.info(f"MISA startup sync skipped — {count} partners already in DB")
+                    return
+                from app.services.misa_sync import sync_customers, sync_products, sync_contacts
                 sync_customers(db2)
                 sync_products(db2)
                 sync_contacts(db2)

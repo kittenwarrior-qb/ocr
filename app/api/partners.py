@@ -40,10 +40,8 @@ def list_all_customers(
     db: Session = Depends(get_db),
 ):
     """Return customers with addresses, paginated for frontend."""
-    q = (
-        db.query(Partner)
-        .options(joinedload(Partner.addresses))
-        .filter(Partner.is_active == True, Partner.partner_type == "customer")
+    q = db.query(Partner).filter(
+        Partner.is_active == True, Partner.partner_type == "customer"
     )
     if search:
         q = q.filter(
@@ -53,10 +51,22 @@ def list_all_customers(
         )
     total = q.count()
     customers = q.order_by(Partner.code).offset(skip).limit(limit).all()
+
+    # Batch-load addresses chỉ cho N partner hiện tại (không joinedload toàn bộ)
+    if customers:
+        ids = [c.id for c in customers]
+        addrs = db.query(PartnerAddress).filter(PartnerAddress.partner_id.in_(ids)).all()
+        addr_map: dict = {}
+        for a in addrs:
+            addr_map.setdefault(a.partner_id, []).append(a)
+    else:
+        addr_map = {}
+
     result = []
     for c in customers:
-        billing = next((a for a in c.addresses if a.address_type == "billing"), None)
-        delivery = next((a for a in c.addresses if a.address_type == "branch"), None)
+        addrs = addr_map.get(c.id, [])
+        billing = next((a for a in addrs if a.address_type == "billing"), None)
+        delivery = next((a for a in addrs if a.address_type == "branch"), None)
         result.append({
             "code": c.code,
             "type": c.display_name or "",

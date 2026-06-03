@@ -4,9 +4,11 @@ import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
 
-const DEFAULT_SALESPERSON = 'KM1989-Nguyễn Văn Ân'
-const SALESPERSON_OPTIONS = [
-  { value: 'KM1989-Nguyễn Văn Ân', label: 'KM1989-Nguyễn Văn Ân' },
+// Điền đúng tên hiển thị trong MISA CRM (format: "Tên (MãNV)")
+// Kiểm tra tại: MISA CRM → Nhân viên → xem cột Tên
+const DEFAULT_SALESPERSON = ''  // để trống — điền sau khi xác nhận format đúng
+const SALESPERSON_OPTIONS: { value: string; label: string }[] = [
+  // Thêm nhân viên theo format MISA: { value: 'Nguyễn Văn Ân (KM1989)', label: '...' }
 ]
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
