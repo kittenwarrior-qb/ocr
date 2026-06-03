@@ -43,7 +43,6 @@ export default function CustomersPage() {
         message.success('Tạo khách hàng thành công!')
         form.resetFields()
         setModalOpen(false)
-        invalidateMisaCache('customers')
         load()
       } else {
         message.error(firstError(res))

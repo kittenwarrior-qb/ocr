@@ -51,7 +51,6 @@ export default function ProductsPage() {
         message.success('Tạo hàng hóa thành công!')
         form.resetFields()
         setModalOpen(false)
-        invalidateMisaCache('products')
         load()
       } else {
         message.error(firstError(res))

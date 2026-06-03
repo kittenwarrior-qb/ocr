@@ -50,7 +50,6 @@ export default function ContactsPage() {
         message.success('Tạo liên hệ thành công!')
         form.resetFields()
         setModalOpen(false)
-        invalidateMisaCache('contacts')
         load()
       } else {
         message.error(firstError(res))
