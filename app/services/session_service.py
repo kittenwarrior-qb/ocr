@@ -284,6 +284,8 @@ def export_session_excel(db: Session, session_id: UUID) -> bytes:
             qty = float(line.quantity) if line.quantity is not None else None
             price = float(line.unit_price) if line.unit_price is not None else None
             amount = float(line.line_total) if line.line_total is not None else None
+            if not price and amount and qty:
+                price = round(amount / qty, 2)
             dk_rate = float(line.discount_rate) if getattr(line, 'discount_rate', None) is not None else 0
             dk_amt = float(line.discount_amount) if getattr(line, 'discount_amount', None) is not None else None
             if dk_amt is None:

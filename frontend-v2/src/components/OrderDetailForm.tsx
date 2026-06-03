@@ -370,7 +370,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
                     <td className="px-1 py-1 text-center">{isPending && <span className="text-orange-400">⚠</span>}</td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1 flex items-center gap-1">
-                      <EditableCell value={line.ocr_product_code} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
+                      <EditableCell value={isPending ? '' : (line.ocr_product_code || '')} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
                       {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>}
                     </td>
                     <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
