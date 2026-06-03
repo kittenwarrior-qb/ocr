@@ -90,11 +90,12 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
     mapping_status: 'mapped',
     product_code_mapped: product.code,
     product_name_mapped: product.name,
+    product_name_original: product.name,   // cập nhật tên hiển thị theo sản phẩm được chọn
     ocr_product_code: product.code,
     uom_original: product.uom,
     uom_mapped: product.uom,
     unit_price: unitPrice,
-    tax_rate: line.tax_rate ?? productTaxRate(product),  // prefer OCR tax_rate, fallback to catalog
+    tax_rate: line.tax_rate ?? productTaxRate(product),
     line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
   }
 }
@@ -287,9 +288,10 @@ export default function OrdersPage() {
       // Optimistic update: mark line as mapped in local cache
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
+        const wasPending = line.mapping_status === 'pending'
         return {
           ...old,
-          total_unmapped: Math.max(0, (old.total_unmapped || 0) - 1),
+          total_unmapped: wasPending ? Math.max(0, (old.total_unmapped || 0) - 1) : (old.total_unmapped || 0),
           orders: old.orders.map((o: any) => {
             const newLines = o.lines.map((l: any) => l.id === line.id ? applyProductToSessionLine(l, product) : l)
             const totalWithTax = newLines.reduce((s: number, l: any) => {
