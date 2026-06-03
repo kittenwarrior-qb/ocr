@@ -7,6 +7,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   OrderedListOutlined,
+  PercentageOutlined,
   SettingOutlined,
   ShoppingOutlined,
   TagsOutlined,
@@ -24,6 +25,7 @@ import CustomersPage from './pages/Customers'
 import ProductsPage from './pages/Products'
 import ContactsPage from './pages/Contacts'
 import VouchersPage from './pages/Vouchers'
+import ChietKhauPage from './pages/ChietKhau'
 import ProductMappingPage from './pages/ProductMapping'
 import CustomerMappingPage from './pages/CustomerMapping'
 import SettingsPage from './pages/Settings'
@@ -43,6 +45,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
     { key: '/contacts', label: 'Liên hệ', icon: <ContactsOutlined /> },
     { key: '/vouchers', label: 'Voucher', icon: <TagsOutlined /> },
+    { key: '/chiet-khau', label: 'Chiết khấu', icon: <PercentageOutlined /> },
     { key: '/mapping', label: 'Mapping HH', icon: <SwapOutlined /> },
     { key: '/mapping-customer', label: 'Mapping KH', icon: <UserSwitchOutlined /> },
     { key: '/settings', label: 'Cài đặt', icon: <SettingOutlined /> },
@@ -94,6 +97,7 @@ function AppLayout() {
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/vouchers" element={<VouchersPage />} />
+          <Route path="/chiet-khau" element={<ChietKhauPage />} />
           <Route path="/mapping" element={<ProductMappingPage />} />
           <Route path="/mapping-customer" element={<CustomerMappingPage />} />
           <Route path="/settings" element={<SettingsPage />} />

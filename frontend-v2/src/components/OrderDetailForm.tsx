@@ -64,15 +64,18 @@ function productTaxRate(product: Product): number {
 
 function applyProductToLine(line: OrderLine, product: Product): OrderLine {
   const quantity = Number(line.quantity) || 1
-  const unitPrice = Number(product.price) || 0
+  // Ưu tiên giá đã lưu (từ OCR/user edit), chỉ dùng giá catalog khi chưa có
+  const savedPrice = Number(line.unit_price) || 0
+  const catalogPrice = Number(product.price) || 0
+  const unitPrice = savedPrice || catalogPrice
   return {
     ...line,
-    ocr_product_code: product.code,
-    product_name_original: product.name,
-    uom_original: product.uom,
+    ocr_product_code: line.ocr_product_code || product.code,
+    product_name_original: line.product_name_original || product.name,
+    uom_original: line.uom_original || product.uom,
     unit_price: unitPrice,
-    tax_rate: productTaxRate(product),
-    line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
+    tax_rate: line.tax_rate ?? productTaxRate(product),
+    line_total: line.line_total || (unitPrice && quantity ? unitPrice * quantity : 0),
     mapping_status: 'mapped',
   }
 }

@@ -793,7 +793,10 @@ export default function OrdersPage() {
         >
           <OrderDetailForm
             orderId={editingOrder.id}
-            onLocalSaved={() => setMisaSaved(true)}
+            onLocalSaved={() => {
+              setMisaSaved(true)
+              queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+            }}
             onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }}
           />
         </Modal>

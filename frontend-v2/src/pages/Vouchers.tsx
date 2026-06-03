@@ -1,73 +1,127 @@
-import { useEffect, useState } from 'react'
-import { Input, Table, Tag } from 'antd'
+import { useEffect, useState, useRef } from 'react'
+import { Input, Table, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { fetchVouchers, type Voucher, type VoucherItem } from '@/api/vouchers'
+import client from '@/api/client'
+
+interface PromoItem {
+  id: number
+  promo_id: number
+  bought_code: string
+  bought_name: string
+  bought_qty: number
+  bought_uom: string
+  offer_code: string
+  offer_name: string
+  offer_qty: number
+  offer_uom: string
+}
+
+function parseCode(text: string): [string, string] {
+  // "TP-00051  - Nước tinh khiết..." → ["TP-00051", "Nước tinh khiết..."]
+  const idx = text.indexOf(' - ')
+  if (idx > 0) return [text.slice(0, idx).trim(), text.slice(idx + 3).trim()]
+  return [text.trim(), '']
+}
+
+function flattenItems(allData: Record<string, any>): PromoItem[] {
+  const result: PromoItem[] = []
+  for (const [pid, entry] of Object.entries(allData)) {
+    if (!entry?.Success) continue
+    for (const item of entry?.Data || []) {
+      const [bCode, bName] = parseCode(item.BoughtProductIDText || '')
+      const offers: any[] = item.OfferProductIDDataSelected || []
+      const offer = offers[0] || {}
+      result.push({
+        id: item.ID,
+        promo_id: parseInt(pid),
+        bought_code: bCode,
+        bought_name: bName || item.BoughtProductIDText || '',
+        bought_qty: item.Quantity ?? 0,
+        bought_uom: item.ProductUnitIDText || '',
+        offer_code: offer.ProductIDText || '',
+        offer_name: offer.ProductName || '',
+        offer_qty: offer.Amount ?? 0,
+        offer_uom: offer.UnitIDText || '',
+      })
+    }
+  }
+  return result
+}
 
 export default function VouchersPage() {
+  const [all, setAll] = useState<PromoItem[]>([])
   const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [data, setData] = useState<Voucher[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const pageSize = 100
+  const cacheRef = useRef<PromoItem[] | null>(null)
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 400)
-    return () => clearTimeout(t)
-  }, [search])
-
-  const load = async () => {
+  const load = async (force = false) => {
+    if (cacheRef.current && !force) { setAll(cacheRef.current); return }
     setLoading(true)
     try {
-      const r = await fetchVouchers(debouncedSearch, '', (page - 1) * pageSize, pageSize)
-      setData(r.items)
-      setTotal(r.total)
+      const res = await client.get('/misa/promotions/all')
+      const items = flattenItems(res.data || {})
+      cacheRef.current = items
+      setAll(items)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [debouncedSearch, page, pageSize])
+  useEffect(() => { load() }, [])
 
-  const columns: ColumnsType<Voucher> = [
-    { title: 'Mã CTKM', dataIndex: 'code', width: 130, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
-    { title: 'Tên chương trình', dataIndex: 'name', ellipsis: true },
-    { title: 'Loại', dataIndex: 'type', width: 140 },
-    { title: 'Đối tượng', dataIndex: 'target', width: 130 },
-    { title: 'Khách hàng', dataIndex: 'customers', width: 180, ellipsis: true, render: (v: string[]) => v?.length ? v.join(', ') : 'Tất cả' },
-    { title: 'Từ ngày', dataIndex: 'from_date', width: 110 },
-    { title: 'Đến ngày', dataIndex: 'to_date', width: 110 },
-    { title: 'Trạng thái', dataIndex: 'is_active', width: 110, render: (v: boolean) => v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Không hoạt động</Tag> },
-    { title: 'Mô tả', dataIndex: 'description', width: 240, ellipsis: true },
-  ]
+  const filtered = (() => {
+    const s = search.trim().toLowerCase()
+    if (!s) return all
+    return all.filter(p =>
+      p.bought_code.toLowerCase().includes(s) ||
+      p.bought_name.toLowerCase().includes(s) ||
+      p.offer_code.toLowerCase().includes(s) ||
+      p.offer_name.toLowerCase().includes(s)
+    )
+  })()
 
-  const itemColumns: ColumnsType<VoucherItem> = [
-    { title: 'Mã hàng mua', dataIndex: 'product_code', width: 130 },
-    { title: 'Tên hàng mua', dataIndex: 'product_name', ellipsis: true },
-    { title: 'ĐVT', dataIndex: 'uom', width: 80 },
-    { title: 'SL', dataIndex: 'quantity', width: 70, align: 'right' },
-    { title: 'Mã hàng tặng', dataIndex: 'gift_product_code', width: 130 },
-    { title: 'Tên hàng tặng', dataIndex: 'gift_product_name', ellipsis: true },
-    { title: 'SL tặng', dataIndex: 'gift_quantity', width: 90, align: 'right' },
+  const columns: ColumnsType<PromoItem> = [
+    { title: 'CTKM ID', dataIndex: 'promo_id', width: 90, render: v => <span className="text-gray-400 text-xs">#{v}</span> },
+    { title: 'Mã hàng mua', dataIndex: 'bought_code', width: 130, render: v => <span className="text-blue-600 font-medium">{v}</span> },
+    { title: 'Tên hàng mua', dataIndex: 'bought_name', ellipsis: true },
+    { title: 'SL mua', dataIndex: 'bought_qty', width: 80, align: 'right' },
+    { title: 'ĐVT', dataIndex: 'bought_uom', width: 80 },
+    { title: 'Mã hàng tặng', dataIndex: 'offer_code', width: 130, render: v => <span className="text-emerald-600 font-medium">{v}</span> },
+    { title: 'Tên hàng tặng', dataIndex: 'offer_name', ellipsis: true },
+    { title: 'SL tặng', dataIndex: 'offer_qty', width: 80, align: 'right' },
+    { title: 'ĐVT tặng', dataIndex: 'offer_uom', width: 80 },
   ]
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <Input.Search placeholder="Tìm mã, tên, mô tả..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="w-72" allowClear />
-        <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={load}><ReloadOutlined /></button>
+      <div className="flex items-center gap-2 mb-4">
+        <Input.Search
+          placeholder="Tìm mã hàng mua, hàng tặng..."
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1) }}
+          className="w-72"
+          allowClear
+        />
+        <div className="flex-1" />
+        <Tooltip title="Tải lại">
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={() => { cacheRef.current = null; load(true) }}>
+            <ReloadOutlined />
+          </button>
+        </Tooltip>
       </div>
-      <Table<Voucher> columns={columns} dataSource={data} rowKey="code" size="small" loading={loading}
-        expandable={{
-          expandedRowRender: record => (
-            <Table<VoucherItem> columns={itemColumns} dataSource={record.items || []} rowKey={(_, i) => `${record.code}-${i}`} size="small" pagination={false} />
-          ),
-          rowExpandable: record => !!record.items?.length,
-        }}
-        pagination={{ current: page, pageSize, total, onChange: (p, s) => { setPage(p); setPageSize(s) }, showTotal: t => `${t} voucher`, size: 'small' }}
-        scroll={{ x: 1400, y: 'calc(100vh - 200px)' }} className="border border-gray-200 rounded-lg" />
+      <Table<PromoItem>
+        columns={columns}
+        dataSource={filtered}
+        rowKey="id"
+        size="small"
+        loading={loading}
+        scroll={{ x: 900, y: 'calc(100vh - 210px)' }}
+        className="border border-gray-200 rounded-lg"
+        pagination={{ current: page, pageSize, total: filtered.length, onChange: p => setPage(p), showTotal: t => `${t} dòng khuyến mãi`, size: 'small' }}
+      />
     </div>
   )
 }

@@ -31,6 +31,8 @@ services:
       UPLOAD_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
+      - ./chietkhau.json:/app/chietkhau.json:ro
+      - ./giamgia.json:/app/giamgia.json:ro
     depends_on:
       db:
         condition: service_healthy
