@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { Input, Table, Tag, Button, Modal, Form, Row, Col, Select, message, Tooltip } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { fetchProducts, invalidateMisaCache, type Product } from '@/utils/catalogStore'
-import { createMisaProduct, isOk, firstError } from '@/api/misa'
+import { fetchProducts, type Product } from '@/utils/catalogStore'
+import { createMisaProduct, syncMisa, isOk, firstError } from '@/api/misa'
 
 const TAX_OPTIONS = [
   { label: '10%', value: '10%' },
@@ -86,8 +86,11 @@ export default function ProductsPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
           Thêm mới
         </Button>
-        <Tooltip title="Tải lại từ MISA">
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={() => { invalidateMisaCache('products'); load() }}>
+        <Tooltip title="Đồng bộ & tải lại từ MISA">
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={async () => {
+            try { await syncMisa('products') } catch {}
+            load()
+          }}>
             <ReloadOutlined />
           </button>
         </Tooltip>

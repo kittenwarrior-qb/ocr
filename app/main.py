@@ -71,6 +71,27 @@ async def lifespan(app: FastAPI):
         db.close()
     from app.config import settings as _settings
     start_ocr_queue(_settings.OCR_CONCURRENCY)
+
+    import threading, logging
+    def _misa_startup_sync():
+        import time
+        time.sleep(8)
+        try:
+            if not _settings.APP_ID or not _settings.MISA_CLIENT_SECRET:
+                return
+            from app.services.misa_sync import sync_customers, sync_products, sync_contacts
+            db2 = SessionLocal()
+            try:
+                sync_customers(db2)
+                sync_products(db2)
+                sync_contacts(db2)
+                logging.info("MISA startup sync done")
+            finally:
+                db2.close()
+        except Exception as e:
+            logging.warning(f"MISA startup sync failed: {e}")
+
+    threading.Thread(target=_misa_startup_sync, daemon=True).start()
     yield
 
 

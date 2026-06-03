@@ -116,83 +116,23 @@ function mapContact(r: any): Contact {
   }
 }
 
-// ── In-memory cache (load tất cả từ MISA, filter client-side) ─────────────────
+// ── Fetch từ local DB (nhanh, có search, dữ liệu từ MISA sync về) ─────────────
 
-interface MisaCache<T> {
-  data: T[] | null
-  promise: Promise<T[]> | null
-}
-
-const _cache = {
-  customers: { data: null, promise: null } as MisaCache<Customer>,
-  products:  { data: null, promise: null } as MisaCache<Product>,
-  contacts:  { data: null, promise: null } as MisaCache<Contact>,
-}
-
-async function loadAll<T>(endpoint: string, mapper: (r: any) => T): Promise<T[]> {
-  // Backend cache: 1 request duy nhất, backend tự loop MISA và cache 10 phút
-  const { data } = await client.get(endpoint)
-  const arr = Array.isArray(data) ? data : misaItems({ data })
-  return arr.map(mapper)
-}
-
-async function ensure<T>(cache: MisaCache<T>, endpoint: string, mapper: (r: any) => T): Promise<T[]> {
-  if (cache.data) return cache.data
-  if (!cache.promise) {
-    cache.promise = loadAll(endpoint, mapper).then(d => {
-      cache.data = d
-      return d
-    })
-  }
-  return cache.promise
-}
-
-function filterAndPage<T>(all: T[], search: string, matchFn: (item: T, s: string) => boolean, skip: number, limit: number): PaginatedResult<T> {
-  const s = search.trim().toLowerCase()
-  const filtered = s ? all.filter(item => matchFn(item, s)) : all
-  return { items: filtered.slice(skip, skip + limit), total: filtered.length }
-}
-
-/** Xoá cache để reload từ MISA lần kế tiếp */
-export function invalidateMisaCache(type?: 'customers' | 'products' | 'contacts') {
-  const reset = (c: MisaCache<any>) => { c.data = null; c.promise = null }
-  if (!type || type === 'customers') reset(_cache.customers)
-  if (!type || type === 'products')  reset(_cache.products)
-  if (!type || type === 'contacts')  reset(_cache.contacts)
-}
-
-// ── Fetch functions (load 1 lần, search + phân trang client-side) ─────────────
+export function invalidateMisaCache(_type?: string) { /* no-op — dùng sync button */ }
 
 export async function fetchCustomers(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Customer>> {
-  const all = await ensure(_cache.customers, '/misa/customers/all', mapCustomer)
-  return filterAndPage(all, search, (c, s) =>
-    c.name.toLowerCase().includes(s) ||
-    c.code.toLowerCase().includes(s) ||
-    (c.tax_code || '').toLowerCase().includes(s) ||
-    (c.invoice_address || '').toLowerCase().includes(s),
-    skip, limit
-  )
+  const { data } = await client.get('/partners/catalog', { params: { search, skip, limit } })
+  return data
 }
 
 export async function fetchProducts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Product>> {
-  const all = await ensure(_cache.products, '/misa/products/all', mapProduct)
-  return filterAndPage(all, search, (p, s) =>
-    p.name.toLowerCase().includes(s) ||
-    p.code.toLowerCase().includes(s) ||
-    (p.uom || '').toLowerCase().includes(s),
-    skip, limit
-  )
+  const { data } = await client.get('/products/catalog', { params: { search, skip, limit } })
+  return data
 }
 
 export async function fetchContacts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Contact>> {
-  const all = await ensure(_cache.contacts, '/misa/contacts/all', mapContact)
-  return filterAndPage(all, search, (c, s) =>
-    c.name.toLowerCase().includes(s) ||
-    c.code.toLowerCase().includes(s) ||
-    (c.organization || '').toLowerCase().includes(s) ||
-    (c.phone || '').toLowerCase().includes(s),
-    skip, limit
-  )
+  const { data } = await client.get('/partners/contacts', { params: { search, skip, limit } })
+  return data
 }
 
 // ── Lightweight cache for matching (loads first 500 for OCR suggestions) ──

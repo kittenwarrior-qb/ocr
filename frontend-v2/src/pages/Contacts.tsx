@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Input, Table, Button, Modal, Form, Row, Col, Select, message, Tooltip } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { fetchContacts, invalidateMisaCache, type Contact } from '@/utils/catalogStore'
-import { createMisaContact, isOk, firstError } from '@/api/misa'
+import { fetchContacts, type Contact } from '@/utils/catalogStore'
+import { createMisaContact, syncMisa, isOk, firstError } from '@/api/misa'
 
 const SALUTATION_OPTIONS = [
   { label: 'Anh', value: 'Anh' },
@@ -88,8 +88,11 @@ export default function ContactsPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
           Thêm mới
         </Button>
-        <Tooltip title="Tải lại từ MISA">
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={() => { invalidateMisaCache('contacts'); load() }}>
+        <Tooltip title="Đồng bộ & tải lại từ MISA">
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={async () => {
+            try { await syncMisa('contacts') } catch {}
+            load()
+          }}>
             <ReloadOutlined />
           </button>
         </Tooltip>

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { Input, Table, Button, Modal, Form, Row, Col, message, Tooltip } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { fetchCustomers, invalidateMisaCache, type Customer } from '@/utils/catalogStore'
-import { createMisaCustomer, isOk, firstError } from '@/api/misa'
+import { fetchCustomers, type Customer } from '@/utils/catalogStore'
+import { createMisaCustomer, syncMisa, isOk, firstError } from '@/api/misa'
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('')
@@ -78,8 +78,11 @@ export default function CustomersPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
           Thêm mới
         </Button>
-        <Tooltip title="Tải lại từ MISA">
-          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={() => { invalidateMisaCache('customers'); load() }}>
+        <Tooltip title="Đồng bộ & tải lại từ MISA">
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={async () => {
+            try { await syncMisa('customers') } catch {}
+            load()
+          }}>
             <ReloadOutlined />
           </button>
         </Tooltip>

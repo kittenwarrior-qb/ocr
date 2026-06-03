@@ -68,9 +68,13 @@ FIELD ALIASES — the same field may appear under many different labels:
 - recipient_name: "Người nhận hàng", "NNH", "Người liên hệ", "Attn", "Contact", "CONTACT". This can be a person name. NEVER use a person/contact name as customer_name.
 - customer_name: The BUYER ORGANIZATION/COMPANY who placed the order (Đơn vị mua hàng, Ordered By, Bill To, Bên mua, Công ty, Company, Store/Branch owner, CUSTOMER). This is the legal company or retail chain that ORDERS goods.
   CRITICAL: customer_name must be an organization/company/store chain name, NOT a person's name. If the document shows a personal contact such as "Lai Quang Mien", put it in recipient_name and keep searching for the buyer organization.
+  FORBIDDEN: NEVER set customer_name to any name containing "SATORI" (e.g. "CÔNG TY CỔ PHẦN THƯƠNG MẠI SATORI", "Satori Vietnam"). SATORI is ALWAYS the vendor/supplier, never the customer. If the only company name visible is SATORI, set customer_name = null and look for another party.
   For E-mart/Emart/THISO documents: prefer the legal buyer/company name such as "THISO RETAIL COMPANY LIMITED" / "CÔNG TY TNHH THISO RETAIL" from Bill To/Company/Buyer header. Do NOT use store manager/contact/person names as customer_name.
   Delivery/store names like "E-mart Phan Huy Ích", "GO! BAC GIANG", "Circle K", "GS25" can help identify the branch/delivery_address, but customer_name should still be the buyer organization if printed.
 - vendor_name: The SELLER/SUPPLIER who fulfills the order (NHÀ CUNG CẤP, VENDOR, Supplier, Đơn vị bán hàng, By Supplier). On purchase orders sent TO Satori, vendor_name = "Satori" — DO NOT use this as customer_name.
+  ABSOLUTE RULE — NEVER use any of these as customer_name (they are always the VENDOR/SUPPLIER side):
+  "SATORI", "CÔNG TY CỔ PHẦN THƯƠNG MẠI SATORI", "SATORI VIỆT NAM", "Satori Viet Nam", "Satori Vietnam", "SATORICRM", or any name containing "SATORI".
+  If you see SATORI anywhere on the document, it is always the seller/vendor. The customer_name must be the OTHER party (the buyer).
 - customer_tax_code: MST of the BUYER (not the vendor/supplier)
 - items.product_code: "Item No.", "Item Code", "Mã hàng", "PLU CODE", "SKU Number", "Article", "Prod cd", "Mã sản phẩm", "Mã SP của NCC", "MÃ GỢI NHỚ", "CK Item Code"
 - items.product_name: "Description", "Tên hàng", "TÊN HÀNG HÓA", "Tên mặt hàng", "Article Desc", "Article Description", "Prod nm", "Tên sản phẩm", "Unit Barcode Description"
