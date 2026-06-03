@@ -56,19 +56,143 @@ export interface PaginatedResult<T> {
   total: number
 }
 
-export async function fetchProducts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Product>> {
-  const { data } = await client.get('/products/catalog', { params: { search, skip, limit } })
-  return data
+// ── MISA helpers ──────────────────────────────────────────────────────────────
+
+function misaItems(resp: any): any[] {
+  const d = resp?.data
+  if (Array.isArray(d)) return d
+  if (d && Array.isArray(d.data)) return d.data
+  if (d && Array.isArray(d.items)) return d.items
+  return []
 }
 
+function mapCustomer(r: any): Customer {
+  return {
+    code: r.account_number || '',
+    name: r.account_name || '',
+    type: r.account_type || '',
+    tax_code: r.tax_code || '',
+    phone: r.office_tel || '',
+    email: r.office_email || '',
+    field: r.industry || '',
+    owner: r.owner_name || '',
+    description: r.description || '',
+    invoice_address: r.billing_address || '',
+    invoice_city: r.billing_province || '',
+    invoice_district: r.billing_district || '',
+    invoice_ward: r.billing_ward || '',
+    delivery_address: r.shipping_address || '',
+  }
+}
+
+function mapProduct(r: any): Product {
+  return {
+    code: r.product_code || '',
+    name: r.product_name || '',
+    uom: r.usage_unit || '',
+    price: parseFloat(r.unit_price || '0') || 0,
+    tax_rate: r.tax || '',
+    property: r.product_properties || '',
+  }
+}
+
+function mapContact(r: any): Contact {
+  return {
+    code: r.contact_code || '',
+    title: r.salutation || '',
+    name: r.contact_name || '',
+    job_title: r.title || '',
+    phone: r.mobile || '',
+    phone_work: r.office_tel || '',
+    email: r.office_email || '',
+    email_personal: r.email || '',
+    organization: r.account_name || '',
+    delivery_address: r.shipping_address || '',
+    address: r.mailing_address || '',
+    city: r.mailing_province || '',
+    district: r.mailing_district || '',
+    ward: r.mailing_ward || '',
+    owner: r.owner_name || '',
+  }
+}
+
+// ── In-memory cache (load tất cả từ MISA, filter client-side) ─────────────────
+
+interface MisaCache<T> {
+  data: T[] | null
+  promise: Promise<T[]> | null
+}
+
+const _cache = {
+  customers: { data: null, promise: null } as MisaCache<Customer>,
+  products:  { data: null, promise: null } as MisaCache<Product>,
+  contacts:  { data: null, promise: null } as MisaCache<Contact>,
+}
+
+async function loadAll<T>(endpoint: string, mapper: (r: any) => T): Promise<T[]> {
+  // Backend cache: 1 request duy nhất, backend tự loop MISA và cache 10 phút
+  const { data } = await client.get(endpoint)
+  const arr = Array.isArray(data) ? data : misaItems({ data })
+  return arr.map(mapper)
+}
+
+async function ensure<T>(cache: MisaCache<T>, endpoint: string, mapper: (r: any) => T): Promise<T[]> {
+  if (cache.data) return cache.data
+  if (!cache.promise) {
+    cache.promise = loadAll(endpoint, mapper).then(d => {
+      cache.data = d
+      return d
+    })
+  }
+  return cache.promise
+}
+
+function filterAndPage<T>(all: T[], search: string, matchFn: (item: T, s: string) => boolean, skip: number, limit: number): PaginatedResult<T> {
+  const s = search.trim().toLowerCase()
+  const filtered = s ? all.filter(item => matchFn(item, s)) : all
+  return { items: filtered.slice(skip, skip + limit), total: filtered.length }
+}
+
+/** Xoá cache để reload từ MISA lần kế tiếp */
+export function invalidateMisaCache(type?: 'customers' | 'products' | 'contacts') {
+  const reset = (c: MisaCache<any>) => { c.data = null; c.promise = null }
+  if (!type || type === 'customers') reset(_cache.customers)
+  if (!type || type === 'products')  reset(_cache.products)
+  if (!type || type === 'contacts')  reset(_cache.contacts)
+}
+
+// ── Fetch functions (load 1 lần, search + phân trang client-side) ─────────────
+
 export async function fetchCustomers(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Customer>> {
-  const { data } = await client.get('/partners/catalog', { params: { search, skip, limit } })
-  return data
+  const all = await ensure(_cache.customers, '/misa/customers/all', mapCustomer)
+  return filterAndPage(all, search, (c, s) =>
+    c.name.toLowerCase().includes(s) ||
+    c.code.toLowerCase().includes(s) ||
+    (c.tax_code || '').toLowerCase().includes(s) ||
+    (c.invoice_address || '').toLowerCase().includes(s),
+    skip, limit
+  )
+}
+
+export async function fetchProducts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Product>> {
+  const all = await ensure(_cache.products, '/misa/products/all', mapProduct)
+  return filterAndPage(all, search, (p, s) =>
+    p.name.toLowerCase().includes(s) ||
+    p.code.toLowerCase().includes(s) ||
+    (p.uom || '').toLowerCase().includes(s),
+    skip, limit
+  )
 }
 
 export async function fetchContacts(search = '', skip = 0, limit = 50): Promise<PaginatedResult<Contact>> {
-  const { data } = await client.get('/partners/contacts', { params: { search, skip, limit } })
-  return data
+  const all = await ensure(_cache.contacts, '/misa/contacts/all', mapContact)
+  return filterAndPage(all, search, (c, s) =>
+    c.name.toLowerCase().includes(s) ||
+    c.code.toLowerCase().includes(s) ||
+    (c.organization || '').toLowerCase().includes(s) ||
+    (c.phone || '').toLowerCase().includes(s),
+    skip, limit
+  )
 }
 
 // ── Lightweight cache for matching (loads first 500 for OCR suggestions) ──

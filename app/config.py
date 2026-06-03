@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
 
+    # MISA CRM Open API
+    APP_ID: str = ""              # AppID do MISA cấp — dùng cả body login lẫn header Clientid
+    MISA_CLIENT_SECRET: str = ""  # Mã bảo mật do MISA cấp
+
     UPLOAD_DIR: str = "./uploads"
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

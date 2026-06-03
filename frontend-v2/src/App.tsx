@@ -6,17 +6,20 @@ import {
   FileTextOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  OrderedListOutlined,
   SettingOutlined,
   ShoppingOutlined,
   TagsOutlined,
   TeamOutlined,
   SwapOutlined,
+  UploadOutlined,
   UserSwitchOutlined,
 } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
 
 import OrdersPage from './pages/Orders'
+import SaleOrdersPage from './pages/SaleOrders'
 import CustomersPage from './pages/Customers'
 import ProductsPage from './pages/Products'
 import ContactsPage from './pages/Contacts'
@@ -34,8 +37,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const location = useLocation()
 
   const items = [
-    { key: '/orders', label: 'Đơn hàng', icon: <FileTextOutlined /> },
+    { key: '/orders', label: 'Tải File', icon: <UploadOutlined /> },
     { key: '/products', label: 'Hàng hóa', icon: <ShoppingOutlined /> },
+    { key: '/sale-orders', label: 'Đơn hàng', icon: <OrderedListOutlined /> },
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
     { key: '/contacts', label: 'Liên hệ', icon: <ContactsOutlined /> },
     { key: '/vouchers', label: 'Voucher', icon: <TagsOutlined /> },
@@ -85,6 +89,7 @@ function AppLayout() {
       <main className={`transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/sale-orders" element={<SaleOrdersPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/contacts" element={<ContactsPage />} />

@@ -1,7 +1,13 @@
 ﻿import { useEffect, useState } from 'react'
-import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable } from 'antd'
+import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin } from 'antd'
 import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
+import client from '@/api/client'
+
+const DEFAULT_SALESPERSON = 'KM1989-Nguyễn Văn Ân'
+const SALESPERSON_OPTIONS = [
+  { value: 'KM1989-Nguyễn Văn Ân', label: 'KM1989-Nguyễn Văn Ân' },
+]
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
@@ -92,6 +98,7 @@ function contactToCustomerData(contact: Contact, matchedCustomer: CustomerData |
 interface Props {
   orderId: string
   onSaved?: () => void
+  onLocalSaved?: () => void
 }
 
 function toCustomerData(record?: Record<string, unknown> | null): CustomerData | null {
@@ -143,7 +150,7 @@ function buildExtraData(customer: CustomerData): Record<string, string> {
   }
 }
 
-export default function OrderDetailForm({ orderId, onSaved }: Props) {
+export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Props) {
   const [form] = Form.useForm()
   const [lines, setLines] = useState<OrderLine[]>([])
   const [productModalIdx, setProductModalIdx] = useState<number | null>(null)
@@ -152,9 +159,14 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData>({})
   const [selectedContactName, setSelectedContactName] = useState('')
   const [loading, setLoading] = useState(true)
+  const [nextNo, setNextNo] = useState('')
 
   const setCustField = (key: string, val: string) =>
     setSelectedCustomerData(prev => ({ ...prev, [key]: val }))
+
+  useEffect(() => {
+    client.get('/misa/sale-orders/next-no').then(r => setNextNo(r.data.next_no)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!orderId) return
@@ -175,7 +187,7 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       setSelectedCustomer(baseData.name || order.recipient_name || '')
       setSelectedCustomerData({
         ...baseData,
-        salesperson: String(extra?.salesperson || ''),
+        salesperson: String(extra?.salesperson || DEFAULT_SALESPERSON),
         credit_days: String(extra?.credit_days || ''),
         contact: String(extra?.contact || ''),
       })
@@ -234,12 +246,13 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
     const meta: Record<string, string> = {
       ...buildExtraData(selectedCustomerData),
       order_type: values.order_type || 'Kênh MT',
-      salesperson: selectedCustomerData.salesperson || '',
+      salesperson: selectedCustomerData.salesperson || DEFAULT_SALESPERSON,
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
     }
     return {
       ...values,
+      order_number: nextNo || values.order_number,
       order_date: values.order_date ? (values.order_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
       delivery_date: values.delivery_date ? (values.delivery_date as dayjs.Dayjs).format('YYYY-MM-DD') : null,
       recipient_name: selectedCustomer || null,
@@ -264,8 +277,8 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
   const handleSave = async () => {
     try {
       await updateOrder(orderId, buildSavePayload(lines))
-      message.success('Đã lưu')
-      onSaved?.()
+      message.success('Đã lưu — bạn có thể Lưu với MISA')
+      onLocalSaved?.()
     } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
   }
 
@@ -308,7 +321,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
       <h2 className="text-sm font-semibold text-gray-700 mb-4">Thông tin chung</h2>
       <Form form={form} layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
         <div className="grid grid-cols-2 gap-x-6">
-          <Form.Item label={<>Số đơn hàng <span className="text-red-500">*</span></>} name="order_number" rules={[{ required: true, message: 'Nhập số đơn hàng' }]}><Input /></Form.Item>
+          <Form.Item label={<>Số đơn hàng <span className="text-red-500">*</span></>} name="order_number">
+            <Input
+              disabled
+              value={nextNo}
+              placeholder={nextNo ? nextNo : 'Đang tải...'}
+              suffix={!nextNo ? <Spin size="small" /> : undefined}
+              className="bg-gray-50 text-gray-700 font-medium"
+            />
+          </Form.Item>
           <Form.Item label={<>Ngày đặt hàng <span className="text-red-500">*</span></>} name="order_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
@@ -323,7 +344,15 @@ export default function OrderDetailForm({ orderId, onSaved }: Props) {
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
           <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
           <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}><Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} /></Form.Item>
-          <Form.Item label="Nhân viên bán hàng"><Input value={selectedCustomerData.salesperson || ''} onChange={e => setCustField('salesperson', e.target.value)} placeholder="VD: KM-1989 Nguyễn Văn Ân" /></Form.Item>
+          <Form.Item label="Nhân viên bán hàng">
+            <Select
+              value={selectedCustomerData.salesperson || DEFAULT_SALESPERSON}
+              onChange={v => setCustField('salesperson', v)}
+              options={SALESPERSON_OPTIONS}
+              showSearch
+              optionFilterProp="label"
+            />
+          </Form.Item>
           <Form.Item label="Số ngày được nợ"><Input value={selectedCustomerData.credit_days || ''} onChange={e => setCustField('credit_days', e.target.value)} placeholder="VD: 30" /></Form.Item>
         </div>
       </Form>

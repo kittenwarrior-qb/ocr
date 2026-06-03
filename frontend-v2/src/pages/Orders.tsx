@@ -18,6 +18,7 @@ import {
   ArrowsAltOutlined,
   DeleteOutlined,
   TagsOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -195,6 +196,9 @@ export default function OrdersPage() {
   const [customerPopupInitialTab, setCustomerPopupInitialTab] = useState<'customer' | 'contact'>('customer')
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
+  const [misaSaved, setMisaSaved] = useState(false)
+  const [misaConfirmOpen, setMisaConfirmOpen] = useState(false)
+  const [misaLoading, setMisaLoading] = useState(false)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
 
@@ -215,6 +219,30 @@ export default function OrdersPage() {
   useEffect(() => { if (sessions.length > 0 && !activeSessionId) setActiveSessionId(sessions[0].id) }, [sessions, activeSessionId])
   const [catalogReady, setCatalogReady] = useState(false)
   useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
+
+  useEffect(() => { setMisaSaved(false) }, [editingOrder?.id])
+
+  const handleSaveToMisa = async () => {
+    if (!editingOrder) return
+    setMisaConfirmOpen(false)
+    setMisaLoading(true)
+    try {
+      const { data } = await client.post(`/misa/push/orders/${editingOrder.id}`)
+      if (data?.success && data?.results?.[0]?.success) {
+        message.success(`Đã lưu lên MISA: ${data.sale_order_no}`)
+        setDetailModalOpen(false)
+        setEditingOrder(null)
+        queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+      } else {
+        const err = data?.results?.[0]?.validate_infos?.[0]?.error_message || data?.error_message || 'Lỗi từ MISA'
+        message.error(err)
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Không thể kết nối MISA')
+    } finally {
+      setMisaLoading(false)
+    }
+  }
 
   // Fetch vouchers whenever session orders change
   useEffect(() => {
@@ -736,9 +764,55 @@ export default function OrdersPage() {
       />
 
       {/* Detail Modal */}
-      {detailModalOpen && editingOrder && <Modal open onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }} width={1100} footer={null} centered title={editingOrder.file_name} styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}>
-        <OrderDetailForm orderId={editingOrder.id} onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }} />
-      </Modal>}
+      {detailModalOpen && editingOrder && (
+        <Modal
+          open
+          onCancel={() => { setDetailModalOpen(false); setEditingOrder(null) }}
+          width={1100}
+          footer={null}
+          centered
+          title={
+            <div className="flex items-center gap-3">
+              <Button
+                size="small"
+                type="primary"
+                icon={<CloudUploadOutlined />}
+                disabled={!misaSaved}
+                loading={misaLoading}
+                onClick={() => setMisaConfirmOpen(true)}
+                title={misaSaved ? 'Đẩy đơn hàng này lên MISA CRM' : 'Lưu đơn hàng trước rồi mới lưu lên MISA'}
+              >
+                Lưu với MISA
+              </Button>
+              <span className="font-medium text-gray-700">{editingOrder.file_name}</span>
+            </div>
+          }
+          styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}
+        >
+          <OrderDetailForm
+            orderId={editingOrder.id}
+            onLocalSaved={() => setMisaSaved(true)}
+            onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }}
+          />
+        </Modal>
+      )}
+
+      {/* MISA Confirm Modal */}
+      <Modal
+        open={misaConfirmOpen}
+        title="Xác nhận lưu lên MISA"
+        okText="Xác nhận lưu"
+        cancelText="Hủy"
+        onOk={handleSaveToMisa}
+        onCancel={() => setMisaConfirmOpen(false)}
+        confirmLoading={misaLoading}
+        width={420}
+      >
+        <p className="text-sm text-gray-700">
+          Đơn hàng <strong>{editingOrder?.file_name}</strong> sẽ được đẩy lên MISA CRM với số đơn hàng tự động (DH tiếp theo).
+        </p>
+        <p className="text-xs text-gray-500 mt-2">Thao tác này không thể hoàn tác trên MISA.</p>
+      </Modal>
 
       {selectedVoucher && (
         <Modal

@@ -1,0 +1,306 @@
+{
+  "info": {
+    "name": "MISA CRM API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000/api/v1" }
+  ],
+  "item": [
+    {
+      "name": "Account",
+      "item": [
+        {
+          "name": "Test kết nối & refresh token",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/misa/account/token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync (MISA → DB local)",
+      "item": [
+        {
+          "name": "Sync khách hàng",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/misa/sync/customers"
+          }
+        },
+        {
+          "name": "Sync hàng hóa",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/misa/sync/products"
+          }
+        },
+        {
+          "name": "Sync liên hệ",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/misa/sync/contacts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Khách hàng (Customers)",
+      "item": [
+        {
+          "name": "Danh sách (phân trang)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/customers?page=0&pageSize=10",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "customers"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "orderBy", "value": "modified_date", "disabled": true },
+                { "key": "isDescending", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lấy theo ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/customers/id?ids=1&ids=2",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "customers", "id"],
+              "query": [
+                { "key": "ids", "value": "1" },
+                { "key": "ids", "value": "2" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lấy theo mã KH",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/customers/code?code=KH00001",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "customers", "code"],
+              "query": [{ "key": "code", "value": "KH00001" }]
+            }
+          }
+        },
+        {
+          "name": "Tạo mới",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/customers",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"account_name\": \"Công ty TNHH Test\",\n    \"account_number\": \"KH99999\",\n    \"tax_code\": \"0123456789\",\n    \"office_tel\": \"024 1234 5678\",\n    \"office_email\": \"test@company.vn\",\n    \"billing_province\": \"Hà Nội\",\n    \"billing_district\": \"Đống Đa\",\n    \"billing_ward\": \"Phương Mai\",\n    \"billing_street\": \"Số 1 Đường Láng\",\n    \"description\": \"Tạo từ API\"\n  }\n]"
+            }
+          }
+        },
+        {
+          "name": "Cập nhật",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/customers",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"account_number\": \"KH99999\",\n    \"office_tel\": \"024 9999 0000\"\n  }\n]"
+            }
+          }
+        },
+        {
+          "name": "Xóa (theo ID MISA)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/customers",
+            "body": {
+              "mode": "raw",
+              "raw": "[12345]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Hàng hóa (Products)",
+      "item": [
+        {
+          "name": "Danh sách (phân trang)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/products?page=0&pageSize=10",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "products"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lấy theo mã HH",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/products/code?code=HH00001",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "products", "code"],
+              "query": [{ "key": "code", "value": "HH00001" }]
+            }
+          }
+        },
+        {
+          "name": "Tạo mới",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/products",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"product_name\": \"Sản phẩm test\",\n    \"product_code\": \"HH99999\",\n    \"usage_unit\": \"Cái\",\n    \"unit_price\": \"500000\",\n    \"tax\": \"10%\",\n    \"product_category\": \"Hàng hóa\",\n    \"product_properties\": \"Hàng bán ra\"\n  }\n]"
+            }
+          }
+        },
+        {
+          "name": "Cập nhật",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/products",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"product_code\": \"HH99999\",\n    \"unit_price\": \"600000\"\n  }\n]"
+            }
+          }
+        },
+        {
+          "name": "Xóa (theo ID MISA)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/products",
+            "body": {
+              "mode": "raw",
+              "raw": "[12345]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Liên hệ (Contacts)",
+      "item": [
+        {
+          "name": "Danh sách (phân trang)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/contacts?page=0&pageSize=10",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "contacts"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lấy theo mã LH",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/contacts/code?code=LH00001",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "contacts", "code"],
+              "query": [{ "key": "code", "value": "LH00001" }]
+            }
+          }
+        },
+        {
+          "name": "Tạo mới",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/contacts",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"contact_name\": \"Nguyễn Văn Test\",\n    \"contact_code\": \"LH99999\",\n    \"salutation\": \"Anh\",\n    \"title\": \"Giám đốc\",\n    \"account_name\": \"KH99999\",\n    \"mobile\": \"0901234567\",\n    \"office_email\": \"nv.test@company.vn\",\n    \"mailing_province\": \"Hà Nội\"\n  }\n]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Đơn hàng (SaleOrders)",
+      "item": [
+        {
+          "name": "Danh sách (phân trang)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/sale-orders?page=0&pageSize=10",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "sale-orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tạo mới",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/misa/sale-orders",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"sale_order_no\": \"DH99999\",\n    \"account_name\": \"KH99999\",\n    \"sale_order_date\": \"2024-01-01T00:00:00.000+07:00\",\n    \"deadline_date\": \"2024-02-01T00:00:00.000+07:00\",\n    \"sale_order_product_mappings\": [\n      {\n        \"product_code\": \"HH99999\",\n        \"amount\": 10,\n        \"price\": \"500000\",\n        \"unit\": \"Cái\",\n        \"tax_percent\": \"10%\",\n        \"to_currency\": 5000000\n      }\n    ]\n  }\n]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Kho (Stocks)",
+      "item": [
+        {
+          "name": "Danh sách tất cả kho",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/misa/stocks"
+          }
+        },
+        {
+          "name": "Tồn kho (phân trang)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/misa/stocks/ledger?page=0&pageSize=10",
+              "host": ["{{base_url}}"],
+              "path": ["misa", "stocks", "ledger"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "pageSize", "value": "10" },
+                { "key": "stockId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

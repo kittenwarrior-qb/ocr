@@ -1,0 +1,137 @@
+{
+  "_doc": "Mapping: Excel export → MISA POST /api/v2/SaleOrders payload",
+
+  "header": {
+    "_excel_col": "MISA_field_name",
+
+    "Số đơn hàng (*)":          { "misa": "sale_order_no",              "source": "order.order_number" },
+    "Ngày đặt hàng (*)":        { "misa": "sale_order_date",            "source": "order.order_date",       "format": "YYYY-MM-DDTHH:mm:ss.000+07:00" },
+    "Ngày ghi sổ":               { "misa": "book_date",                  "source": "meta.record_date",        "note": "thường = sale_order_date" },
+    "Hạn giao hàng":             { "misa": "deadline_date",              "source": "order.delivery_date",     "format": "YYYY-MM-DDTHH:mm:ss.000+07:00" },
+    "Hạn thanh toán (*)":        { "misa": "due_date",                   "source": "meta.payment_due" },
+    "Giá trị đơn hàng (*)":      { "misa": "sale_order_amount",          "source": "order.total_amount",      "type": "number" },
+    "Loại đơn hàng (*)":         { "misa": "sale_order_type",            "source": "meta.order_type",         "example": "Kênh MT" },
+    "Tình trạng (*)":            { "misa": "status",                     "source": "meta.status",             "default": "Chưa thực hiện" },
+    "Khách hàng":                { "misa": "account_name",               "source": "meta.customer_code",      "note": "truyền MÃ KH (account_number MISA)" },
+    "Liên hệ":                   { "misa": "contact_name",               "source": "meta.contact",            "note": "truyền MÃ LH (contact_code MISA)" },
+    "Nhân viên bán hàng (*)":    { "misa": "owner_name",                 "source": "meta.salesperson",        "note": "truyền MÃ NV (vd: NV000002)" },
+    "Đơn vị":                    { "misa": "organization_unit_name",     "source": "meta.organization_unit",  "example": "MISA Test" },
+    "Mô tả":                     { "misa": "description",                "source": "meta.note_description" },
+    "Điện thoại":                { "misa": "phone",                      "source": "meta.delivery_phone" },
+
+    "Khách hàng (Hóa đơn)":     { "misa": "billing_account",            "source": "meta.invoice_customer" },
+    "Quốc gia (Hóa đơn)":       { "misa": "billing_country",            "source": "meta.invoice_country",   "default": "Việt Nam" },
+    "Tỉnh/TP (Hóa đơn)":        { "misa": "billing_province",           "source": "meta.invoice_city" },
+    "Quận/Huyện (Hóa đơn)":     { "misa": "billing_district",           "source": "meta.invoice_district" },
+    "Phường/Xã (Hóa đơn)":      { "misa": "billing_ward",               "source": "meta.invoice_ward" },
+    "Số nhà, Đường phố (Hóa đơn)": { "misa": "billing_street",          "source": "meta.invoice_street" },
+    "Địa chỉ (Hóa đơn)":        { "misa": "billing_address",            "source": "meta.invoice_address" },
+
+    "Quốc gia (Giao hàng)":     { "misa": "shipping_country",           "source": "meta.delivery_country",  "default": "Việt Nam" },
+    "Tỉnh/TP (Giao hàng)":      { "misa": "shipping_province",          "source": "meta.delivery_city" },
+    "Quận/Huyện (Giao hàng)":   { "misa": "shipping_district",          "source": "meta.delivery_district" },
+    "Phường/Xã (Giao hàng)":    { "misa": "shipping_ward",              "source": "meta.delivery_ward" },
+    "Số nhà, Đường phố (GH)":   { "misa": "shipping_street",            "source": "meta.delivery_street" },
+    "Địa chỉ (Giao hàng)":      { "misa": "shipping_address",           "source": "meta.delivery_address" },
+
+    "_summary_fields": {
+      "total_summary":    { "source": "SUM(line.line_total)",            "note": "tổng thành tiền trước thuế" },
+      "tax_summary":      { "source": "SUM(line.tax_amount)",            "note": "tổng tiền thuế" },
+      "discount_summary": { "source": "SUM(line.discount_amount)" },
+      "to_currency_summary": { "source": "total_summary - discount_summary", "note": "thành tiền sau CK trước thuế" },
+      "sale_order_amount": { "source": "to_currency_summary + tax_summary", "note": "= giá trị đơn hàng" },
+      "liquidate_amount": { "source": "= sale_order_amount",             "note": "giữ nguyên = sale_order_amount" }
+    }
+  },
+
+  "line_items": {
+    "_array_field": "sale_order_product_mappings",
+    "_excel_col": "MISA_field_name",
+
+    "Mã hàng hóa":       { "misa": "product_code",   "source": "product.code / line.ocr_product_code / line.temp_code" },
+    "Diễn giải":         { "misa": "description",    "source": "product.display_name / line.product_name_original" },
+    "Số lượng":          { "misa": "amount",          "source": "line.quantity",       "type": "number" },
+    "Đơn vị tính":       { "misa": "unit",            "source": "product.uom / line.uom_original" },
+    "Đơn giá":           { "misa": "price",           "source": "line.unit_price",     "type": "string-number", "note": "MISA nhận string" },
+    "Thành tiền":        { "misa": "to_currency",     "source": "line.line_total",     "type": "number" },
+    "Tiền chiết khấu":   { "misa": "discount",        "source": "line.discount_amount","type": "number", "default": 0 },
+    "Thuế suất":         { "misa": "tax_percent",     "source": "line.tax_rate → '%'", "example": "8%", "note": "ghép % vào số" },
+    "Tiền thuế":         { "misa": "tax",             "source": "(to_currency - discount) * tax_rate / 100", "type": "number" },
+    "Tổng tiền":         { "misa": "total",           "source": "to_currency - discount + tax", "type": "number" },
+    "Kho":               { "misa": "stock_name",      "source": "meta.stock_name",     "default": "" }
+  },
+
+  "sample_payload": [
+    {
+      "sale_order_no": "DH0000001",
+      "sale_order_date": "2026-06-03T00:00:00.000+07:00",
+      "book_date": "2026-06-03T00:00:00.000+07:00",
+      "deadline_date": null,
+      "due_date": "2026-06-03T00:00:00.000+07:00",
+      "status": "Chưa thực hiện",
+      "sale_order_type": "Kênh MT",
+      "account_name": "10000252",
+      "contact_name": "LH0000003",
+      "owner_name": "NV000002",
+      "organization_unit_name": "MISA Test",
+      "description": null,
+      "phone": "099997777",
+      "billing_country": "Việt Nam",
+      "billing_province": null,
+      "billing_district": null,
+      "billing_ward": null,
+      "billing_street": null,
+      "billing_address": null,
+      "shipping_country": "Việt Nam",
+      "shipping_province": null,
+      "shipping_district": null,
+      "shipping_ward": null,
+      "shipping_street": null,
+      "shipping_address": null,
+      "total_summary": 50000,
+      "tax_summary": 4000,
+      "discount_summary": 0,
+      "to_currency_summary": 50000,
+      "sale_order_amount": 54000,
+      "liquidate_amount": 54000,
+      "sale_order_product_mappings": [
+        {
+          "product_code": "HH000011",
+          "description": "Máy nóng lạnh Oasis Bottom load",
+          "amount": 1,
+          "unit": "Cái",
+          "price": "10000",
+          "to_currency": 10000,
+          "discount": 0,
+          "tax_percent": "8%",
+          "tax": 800,
+          "total": 10800,
+          "stock_name": ""
+        },
+        {
+          "product_code": "VPP-0003",
+          "description": "Bút bi đỏ",
+          "amount": 1,
+          "unit": "Cây",
+          "price": "10000",
+          "to_currency": 10000,
+          "discount": 0,
+          "tax_percent": "8%",
+          "tax": 800,
+          "total": 10800,
+          "stock_name": ""
+        }
+      ]
+    }
+  ],
+
+  "field_notes": {
+    "account_name": "Truyền MÃ KH (vd: 10000252 = account_code từ MISA), KHÔNG phải tên KH",
+    "contact_name": "Truyền MÃ LH (vd: LH0000003 = contact_code từ MISA), KHÔNG phải tên LH",
+    "owner_name":   "Truyền MÃ NV (vd: NV000002), KHÔNG phải tên đầy đủ",
+    "price":        "Kiểu string theo MISA doc, truyền chuỗi số như '10000'",
+    "sale_order_amount": "= to_currency_summary + tax_summary (tổng cuối có thuế)",
+    "to_currency_summary": "= total_summary - discount_summary (trước thuế, sau CK)",
+    "total_summary": "= SUM(line.to_currency) — tổng thành tiền các dòng trước CK & thuế"
+  }
+}
