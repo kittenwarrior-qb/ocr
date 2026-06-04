@@ -307,5 +307,78 @@
         "max_total": 0
       }
     ]
+  },
+  {
+    "code": "KM0000017",
+    "name": "CTKM B2B QUÝ 2",
+    "type": "Mua 1 hàng hóa - đạt số lượng - tặng hàng",
+    "target": "Theo loại khách hàng",
+    "customer_type": "KAE, PROJECT",
+    "customers": [],
+    "description": "",
+    "from_date": "2026-04-01",
+    "to_date": "2026-06-30",
+    "is_active": true,
+    "apply_with_others": "Không áp dụng",
+    "multiplier": true,
+    "accumulate": false,
+    "base_on": "Theo hàng hóa",
+    "apply_once": false,
+    "uom_type": "Đơn vị tính chính",
+    "unit_price_type": null,
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "uom": "Thùng",
+        "quantity": 10,
+        "gift_product_code": "TP-00001NC",
+        "gift_product_name": "Nước tinh khiết Satori 350ml.",
+        "gift_quantity": 1,
+        "gift_uom": "Thùng",
+        "max_per_order": 0,
+        "max_per_customer": 0,
+        "max_total": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "uom": "Thùng",
+        "quantity": 10,
+        "gift_product_code": "TP-00003NC",
+        "gift_product_name": "Nước tinh khiết Satori 500ml.",
+        "gift_quantity": 1,
+        "gift_uom": "Thùng",
+        "max_per_order": 0,
+        "max_per_customer": 0,
+        "max_total": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "uom": "Thùng",
+        "quantity": 10,
+        "gift_product_code": "TP-00004NC",
+        "gift_product_name": "Nước tinh khiết Satori 1.500ml.",
+        "gift_quantity": 1,
+        "gift_uom": "Thùng",
+        "max_per_order": 0,
+        "max_per_customer": 0,
+        "max_total": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "uom": "Thùng",
+        "quantity": 10,
+        "gift_product_code": "TP-00081",
+        "gift_product_name": "Nước đóng chai Hikari 500ml",
+        "gift_quantity": 1,
+        "gift_uom": "Thùng",
+        "max_per_order": 0,
+        "max_per_customer": 0,
+        "max_total": 0
+      }
+    ]
   }
 ]

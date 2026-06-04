@@ -332,9 +332,10 @@ export default function OrdersPage() {
 
     const giftLines: Partial<SessionLine>[] = []
 
-    for (const item of voucher.items) {
-      // Check cả product_code_mapped (đã map) VÀ ocr_product_code (mã gốc từ PDF)
+    for (const [idx, item] of voucher.items.entries()) {
+      // Bỏ qua gift lines (overridden), chỉ match dòng hàng thật
       const matchedLine = order.lines.find(l => {
+        if (l.mapping_status === 'overridden') return false
         const codes = new Set([l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean))
         return codes.has(item.product_code)
       })
@@ -349,7 +350,7 @@ export default function OrdersPage() {
       if (giftQty <= 0) continue
 
       giftLines.push({
-        id: `gift-${item.gift_product_code}-${Date.now()}`,
+        id: `gift-${idx}-${item.gift_product_code}`,
         temp_code: item.gift_product_code,
         product_name_original: `[Tặng] ${item.gift_product_name}`,
         ocr_product_code: item.gift_product_code,
@@ -971,9 +972,10 @@ export default function OrdersPage() {
       {selectedVoucher && (() => {
         const { voucher: sv, orderId: svOrderId } = selectedVoucher
         const svOrder = sessionDetail?.orders.find(o => o.id === svOrderId)
-        // Index cả mapped code lẫn ocr code để match được dù user đã remap
+        // Chỉ tính dòng hàng thật (bỏ qua dòng tặng đã thêm trước đó)
         const orderProductQty = new Map<string, number>()
         for (const l of svOrder?.lines || []) {
+          if (l.mapping_status === 'overridden') continue  // bỏ gift lines
           const qty = Number(l.quantity) || 0
           for (const code of [l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean) as string[]) {
             if (!orderProductQty.has(code)) orderProductQty.set(code, qty)
