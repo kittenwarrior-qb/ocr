@@ -10,6 +10,7 @@ from app.models.contact import Contact
 from app.models.sku_alias import SkuAlias
 from app.models.company_alias import CompanyAlias
 from app.models.po_history import POHistory
+from app.models.contact_alias import ContactAlias
 
 __all__ = [
     "Base",
@@ -30,4 +31,5 @@ __all__ = [
     "Contact",
     "SkuAlias",
     "POHistory",
+    "ContactAlias",
 ]
