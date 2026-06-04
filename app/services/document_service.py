@@ -55,6 +55,19 @@ def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> 
     db.commit()
 
     try:
+        # ── Excel files: parse directly, no OCR needed ───────────────────────
+        file_ext = Path(raw.file_path).suffix.lower() if raw.file_path else ""
+        if file_ext in (".xlsx", ".xls"):
+            from app.services.excel_order_parser import parse_excel_order
+            extracted = parse_excel_order(raw.file_path)
+            raw.ocr_raw_text = f"Excel: {raw.file_name}"
+            raw.extracted_data = extracted
+            raw.document_type = extracted.get("document_type") or "purchase_order"
+            result = _build_processed_document(db, raw, extracted)
+            raw.ocr_status = "done"
+            db.commit()
+            return result
+
         if use_ai:
             # Pass 1: extract MST + document type
             first_pass = ocr_service.extract_mst_and_type(raw.file_path)

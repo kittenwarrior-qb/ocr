@@ -58,9 +58,14 @@ def list_all_customers(
                 Partner.code.ilike(f"%{t}%"),
                 Partner.tax_code.ilike(f"%{t}%"),
                 Partner.owner.ilike(f"%{t}%"),
+                Partner.address.ilike(f"%{t}%"),
             ]
-        from sqlalchemy import or_
-        q = q.filter(or_(*conditions))
+        from sqlalchemy import or_, exists as sa_exists
+        addr_subq = sa_exists().where(
+            (PartnerAddress.partner_id == Partner.id) &
+            or_(*[PartnerAddress.full_address.ilike(f"%{t}%") for t in terms])
+        )
+        q = q.filter(or_(*conditions, addr_subq))
     total = q.count()
     customers = q.order_by(Partner.code).offset(skip).limit(limit).all()
 
@@ -161,14 +166,32 @@ def list_contacts(
                 Contact.phone.ilike(f"%{t}%"),
                 Contact.email.ilike(f"%{t}%"),
                 Contact.code.ilike(f"%{t}%"),
+                Contact.address.ilike(f"%{t}%"),
+                Contact.delivery_address.ilike(f"%{t}%"),
             ]
         q = q.filter(or_(*conditions))
     total = q.count()
     contacts = q.order_by(Contact.name).offset(skip).limit(limit).all()
-    customers = db.query(Partner).filter(Partner.is_active == True, Partner.partner_type == "customer").all()
+
+    # Match customer by organization name — only query the relevant subset, not all 2000+
+    org_names = {c.organization.lower() for c in contacts if c.organization}
+    customer_map: dict = {}
+    if org_names:
+        matched_customers = db.query(Partner).filter(
+            Partner.is_active == True,
+            Partner.partner_type == "customer",
+        ).all()
+        for p in matched_customers:
+            name = (p.legal_name or "").lower()
+            if any(o in name or name in o for o in org_names):
+                customer_map[name] = p
+
     items = []
     for c in contacts:
-        customer = mapping_service.find_customer_for_contact(db, c, customers)
+        org = (c.organization or "").lower()
+        customer = customer_map.get(org) or next(
+            (v for k, v in customer_map.items() if org and (k in org or org in k)), None
+        ) if org else None
         items.append(
             {
                 "code": c.code,

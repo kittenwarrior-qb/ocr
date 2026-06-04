@@ -12,6 +12,7 @@ import {
   LoadingOutlined,
   FilePdfOutlined,
   CloseCircleOutlined,
+  CloseOutlined,
   HistoryOutlined,
   PlusOutlined,
   SearchOutlined,
@@ -20,6 +21,7 @@ import {
   TagsOutlined,
   CloudUploadOutlined,
   GiftOutlined,
+  ContactsOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -141,6 +143,7 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
   const contactName = typeof contact === 'string' ? contact : contact?.name || ''
   const contactPhone = typeof contact === 'string' ? '' : (contact?.phone || contact?.phone_work || '')
   const contactEmail = typeof contact === 'string' ? '' : (contact?.email || contact?.email_personal || '')
+  const contactOrg = typeof contact === 'string' ? '' : (contact?.organization || '')
   const contactDeliveryAddress = typeof contact === 'string' ? '' : (contact?.delivery_address || contact?.address || '')
   const invoiceAddress = customer.invoice_address || ''
   const deliveryAddress = contactDeliveryAddress || customer.delivery_address || invoiceAddress
@@ -178,7 +181,7 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
     contact_code: typeof contact === 'string' ? '' : contact?.code || '',
     contact_phone: contactPhone,
     contact_email: contactEmail,
-    contact_organization: typeof contact === 'string' ? '' : contact?.organization || '',
+    contact_organization: contactOrg,
     contact_address: contactDeliveryAddress,
   }
 }
@@ -285,8 +288,8 @@ export default function OrdersPage() {
   }, [sessionDetail])
 
   const handleStageFiles = useCallback((files: File[]) => {
-    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'))
-    if (!pdfs.length) { message.error('Chỉ hỗ trợ file PDF'); return }
+    const pdfs = files.filter(f => /\.(pdf|xlsx|xls)$/i.test(f.name))
+    if (!pdfs.length) { message.error('Chỉ hỗ trợ file PDF và Excel (.xlsx)'); return }
     setStagedFiles(prev => {
       const existingNames = new Set(prev.map(f => f.name))
       const newFiles = pdfs.filter(f => !existingNames.has(f.name))
@@ -452,6 +455,37 @@ export default function OrdersPage() {
     } catch { message.error('Cập nhật thất bại') }
   }
 
+  const handleClearCustomer = async (orderId: string) => {
+    const order = sessionDetail?.orders.find(o => o.id === orderId)
+    if (!order) return
+    const extra = { ...(order.extra_data || {}) }
+    delete extra.customer_code; delete extra.customer_name; delete extra.customer_tax_code
+    delete extra.customer_phone; delete extra.customer_owner; delete extra.customer_type
+    delete extra.code; delete extra.name; delete extra.tax_code; delete extra.owner
+    delete extra.invoice_customer; delete extra.invoice_buyer; delete extra.invoice_street
+    delete extra.invoice_address; delete extra.invoice_city
+    await client.patch(`/documents/orders/${orderId}`, { extra_data: extra })
+    queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
+      if (!old) return old
+      return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, extra_data: extra } : o) }
+    })
+    message.success('Đã bỏ chọn khách hàng')
+  }
+
+  const handleClearContact = async (orderId: string) => {
+    const order = sessionDetail?.orders.find(o => o.id === orderId)
+    if (!order) return
+    const extra = { ...(order.extra_data || {}) }
+    delete extra.contact; delete extra.contact_code; delete extra.contact_phone
+    delete extra.contact_email; delete extra.contact_organization; delete extra.contact_address
+    await client.patch(`/documents/orders/${orderId}`, { extra_data: extra })
+    queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
+      if (!old) return old
+      return { ...old, orders: old.orders.map((o: any) => o.id === orderId ? { ...o, extra_data: extra } : o) }
+    })
+    message.success('Đã bỏ chọn liên hệ')
+  }
+
   const handleCustomerContactSelect = async (orderId: string, result: CustomerContactResult) => {
     if (result.type === 'customer') {
       await handleSelectCustomer(orderId, result.customer)
@@ -563,8 +597,8 @@ export default function OrdersPage() {
       <div onDrop={onDrop} onDragOver={e => { e.preventDefault(); setIsDragging(true) }} onDragLeave={() => setIsDragging(false)} onClick={() => !uploading && inputRef.current?.click()}
         className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors mb-4 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}>
         <InboxOutlined className="text-2xl text-gray-400 mb-1 block" />
-        <p className="text-sm text-gray-500">{uploading ? 'Đang tải lên...' : 'Kéo thả file PDF hoặc click để chọn'}</p>
-        <input ref={inputRef} type="file" accept=".pdf" multiple className="hidden" onChange={e => { const f = Array.from(e.target.files || []); if (f.length) handleStageFiles(f); e.target.value = '' }} />
+        <p className="text-sm text-gray-500">{uploading ? 'Đang tải lên...' : 'Kéo thả file PDF hoặc Excel (.xlsx) hoặc click để chọn'}</p>
+        <input ref={inputRef} type="file" accept=".pdf,.xlsx,.xls" multiple className="hidden" onChange={e => { const f = Array.from(e.target.files || []); if (f.length) handleStageFiles(f); e.target.value = '' }} />
       </div>
 
       {/* Staged Files - chờ user bấm Xuất đơn */}
@@ -744,47 +778,76 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
-                  {/* Customer mapping — warm tint */}
-                  <div className="px-4 py-3 border-b border-slate-100 bg-amber-50/50">
-                    <div className="text-xs text-slate-500 font-medium mb-1.5 uppercase tracking-wide">Khách hàng</div>
-                    {(() => {
-                      const alreadySelected = !!order.extra_data?.customer_code
-                      if (alreadySelected) return (
-                        <div className="flex items-center justify-between">
-                          <table className="text-xs"><tbody>
-                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-emerald-700 font-semibold">{order.extra_data?.customer_name || order.partner_name || 'Đã chọn KH'} ✓</td></tr>
-                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{order.extra_data?.customer_code}{order.extra_data?.customer_tax_code ? ` / ${order.extra_data.customer_tax_code}` : ''}</td></tr>
-                            {(order.extra_data?.invoice_address || order.extra_data?.invoice_street) && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{order.extra_data?.invoice_address || order.extra_data?.invoice_street}</td></tr>}
-                            <tr>
-                              <td className="text-slate-500 pr-3 py-0.5 font-medium">Liên hệ:</td>
-                              <td className="text-slate-700">
-                                {order.extra_data?.contact
-                                  ? <span><span className="font-semibold">{order.extra_data.contact}</span>{order.extra_data?.contact_code ? ` (${order.extra_data.contact_code})` : ''}{order.extra_data?.contact_phone ? ` · ${order.extra_data.contact_phone}` : ''}{order.extra_data?.contact_email ? ` · ${order.extra_data.contact_email}` : ''}</span>
-                                  : <span className="text-amber-600 font-medium">Chưa chọn liên hệ</span>}
-                              </td>
-                            </tr>
-                          </tbody></table>
-                          <div className="flex gap-2 shrink-0">
-                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Đổi KH</Button>
-                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setContactModalOpen(true) }}>{order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}</Button>
+                  {/* ── Liên hệ (Contact block) ── */}
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-violet-50/40">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ContactsOutlined className="text-violet-400 shrink-0" />
+                        {order.extra_data?.contact ? (
+                          <span className="text-xs">
+                            <span className="font-semibold text-slate-800">{order.extra_data.contact}</span>
+                            {order.extra_data.contact_code && <span className="text-slate-500 ml-1">({order.extra_data.contact_code})</span>}
+                            {order.extra_data.contact_phone && <span className="text-slate-500 ml-1.5">· {order.extra_data.contact_phone}</span>}
+                            {order.extra_data.contact_organization && <span className="text-slate-500 ml-1.5">· {order.extra_data.contact_organization}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Chưa chọn người liên hệ</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {order.extra_data?.contact && (
+                          <Tooltip title="Bỏ chọn liên hệ">
+                            <button className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 rounded hover:bg-red-50" onClick={e => { e.stopPropagation(); handleClearContact(order.id) }}><CloseOutlined style={{fontSize:10}} /></button>
+                          </Tooltip>
+                        )}
+                        <Button size="small" onClick={e => { e.stopPropagation(); setSelectedOrderId(order.id); setContactModalOpen(true) }}>
+                          {order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Khách hàng (Customer block) ── */}
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-amber-50/40">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        {order.extra_data?.customer_code ? (
+                          <div className="text-xs">
+                            <span className="font-semibold text-emerald-700">{order.extra_data.customer_name || 'KH đã chọn'}</span>
+                            <span className="text-slate-500 ml-1.5 font-mono">{order.extra_data.customer_code}</span>
+                            {order.extra_data.customer_tax_code && <span className="text-slate-400 ml-1.5">MST: {order.extra_data.customer_tax_code}</span>}
+                            {(order.extra_data.invoice_address || order.extra_data.invoice_street) && (
+                              <div className="text-slate-500 mt-0.5 truncate max-w-sm">{order.extra_data.invoice_address || order.extra_data.invoice_street}</div>
+                            )}
                           </div>
-                        </div>
-                      )
-                      const name = order.ocr_company_name || order.recipient_name || ''
-                      const sugg = name ? matchCustomer(name, order.ocr_delivery_address || order.delivery_address || '', 3) : []
-                      const has = sugg.length > 0 && sugg[0].score >= 0.7
-                      if (has) return (
-                        <div className="flex items-center justify-between">
-                          <table className="text-xs"><tbody>
-                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Tên KH:</td><td className="text-slate-800 font-semibold">{sugg[0].customer.name}</td></tr>
-                            <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Mã / MST:</td><td className="text-slate-700">{sugg[0].customer.code}{sugg[0].customer.tax_code ? ` / ${sugg[0].customer.tax_code}` : ''}</td></tr>
-                            {sugg[0].customer.invoice_address && <tr><td className="text-slate-500 pr-3 py-0.5 font-medium">Địa chỉ:</td><td className="text-slate-600">{sugg[0].customer.invoice_address}</td></tr>}
-                          </tbody></table>
-                          <div className="flex gap-2 shrink-0"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
-                        </div>
-                      )
-                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setContactModalOpen(true) }}>Chọn liên hệ</Button></div>
-                    })()}
+                        ) : (() => {
+                          // Auto-suggest from contact org or OCR name
+                          const name = order.extra_data?.contact_organization || order.ocr_company_name || order.recipient_name || ''
+                          const sugg = name ? matchCustomer(name, order.ocr_delivery_address || order.delivery_address || '', 3) : []
+                          const best = sugg.length > 0 && sugg[0].score >= 0.7 ? sugg[0].customer : null
+                          if (best) return (
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs">
+                                <span className="text-slate-700 font-semibold">{best.name}</span>
+                                <span className="text-slate-400 ml-1.5 font-mono">{best.code}</span>
+                              </div>
+                              <Button size="small" type="primary" icon={<CheckOutlined />} onClick={e => { e.stopPropagation(); handleSelectCustomer(order.id, best!) }}>Xác nhận</Button>
+                            </div>
+                          )
+                          return <span className="text-xs text-slate-400 italic">Chưa chọn khách hàng</span>
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        {order.extra_data?.customer_code && (
+                          <Tooltip title="Bỏ chọn khách hàng">
+                            <button className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 rounded hover:bg-red-50" onClick={e => { e.stopPropagation(); handleClearCustomer(order.id) }}><CloseOutlined style={{fontSize:10}} /></button>
+                          </Tooltip>
+                        )}
+                        <Button size="small" onClick={e => { e.stopPropagation(); setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>
+                          {order.extra_data?.customer_code ? 'Đổi KH' : 'Chọn KH'}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Product lines — clean table */}
