@@ -57,24 +57,24 @@ export default function CustomersPage() {
   const columns: ColumnsType<Customer> = [
     {
       title: 'Mã KH', dataIndex: 'code', width: 120, fixed: 'left',
-      render: (v: string) => <span className="text-blue-600 font-medium font-mono">{v}</span>,
+      render: (v: string) => <span className="text-blue-600 font-medium font-mono whitespace-nowrap">{v}</span>,
     },
     {
-      title: 'Tên khách hàng', dataIndex: 'name', width: 260, ellipsis: true,
+      title: 'Tên khách hàng', dataIndex: 'name', width: 260,
       render: (v: string) => <span className="font-medium">{v}</span>,
     },
     {
-      title: 'Loại KH', dataIndex: 'type', width: 160, ellipsis: true,
-      render: (v: string) => v ? <Tag color="blue" className="text-xs">{v}</Tag> : <span className="text-gray-300">—</span>,
+      title: 'Loại KH', dataIndex: 'type', width: 160,
+      render: (v: string) => v ? <Tag color="blue" className="text-xs whitespace-nowrap">{v}</Tag> : <span className="text-gray-300">—</span>,
     },
-    { title: 'MST', dataIndex: 'tax_code', width: 130, ellipsis: true },
-    { title: 'Điện thoại', dataIndex: 'phone', width: 130, ellipsis: true },
-    { title: 'Email', dataIndex: 'email', width: 200, ellipsis: true },
-    { title: 'Lĩnh vực', dataIndex: 'field', width: 120, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
-    { title: 'Người phụ trách', dataIndex: 'owner', width: 180, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
-    { title: 'Địa chỉ HĐ', dataIndex: 'invoice_address', width: 260, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
-    { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 120, ellipsis: true },
-    { title: 'Địa chỉ GH', dataIndex: 'delivery_address', width: 200, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'MST', dataIndex: 'tax_code', width: 130, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Điện thoại', dataIndex: 'phone', width: 130, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Email', dataIndex: 'email', width: 220, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Lĩnh vực', dataIndex: 'field', width: 120, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Người phụ trách', dataIndex: 'owner', width: 200, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Địa chỉ HĐ', dataIndex: 'invoice_address', width: 280, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 120, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Địa chỉ GH', dataIndex: 'delivery_address', width: 220, render: (v: string) => v || <span className="text-gray-300">—</span> },
   ]
 
   return (

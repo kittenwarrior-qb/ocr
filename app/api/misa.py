@@ -416,8 +416,14 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
 
 @router.post("/sync/customers")
 def sync_customers(db: Session = Depends(get_db)):
-    """Kéo toàn bộ khách hàng từ MISA về DB local (upsert theo mã KH)."""
-    return _call(misa_sync.sync_customers, db)
+    """Kéo toàn bộ khách hàng từ MISA về DB local, tự động cập nhật customers.json."""
+    result = _call(misa_sync.sync_customers, db)
+    try:
+        from app.api.partners import export_customers_json
+        export_customers_json(db)
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/sync/products")

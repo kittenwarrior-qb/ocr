@@ -203,7 +203,7 @@ def _build_order_extra_data(
 
     return {
         "code": partner.code if partner else "",
-        "type": partner.display_name if partner else "",
+        "type": ((partner.display_name or "") if partner.display_name != partner.legal_name else "") if partner else "",
         "name": partner.legal_name if partner else "",
         "tax_code": partner.tax_code if partner else "",
         "phone": partner.phone if partner else "",

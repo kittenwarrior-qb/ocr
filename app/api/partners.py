@@ -69,7 +69,7 @@ def list_all_customers(
         delivery = next((a for a in addrs if a.address_type == "branch"), None)
         result.append({
             "code": c.code,
-            "type": c.display_name or "",
+            "type": (c.display_name or "") if c.display_name != c.legal_name else "",
             "name": c.legal_name,
             "tax_code": c.tax_code or "",
             "phone": c.phone or "",
@@ -84,6 +84,49 @@ def list_all_customers(
             "delivery_address": delivery.full_address if delivery else "",
         })
     return {"items": result, "total": total}
+
+
+@router.post("/export-customers-json")
+def export_customers_json(db: Session = Depends(get_db)):
+    """Dump toàn bộ customers từ DB → data/customers.json (dùng sau khi sync MISA)."""
+    import json
+    from pathlib import Path
+
+    customers = db.query(Partner).filter(
+        Partner.is_active == True, Partner.partner_type == "customer"
+    ).order_by(Partner.code).all()
+
+    ids = [c.id for c in customers]
+    addrs = db.query(PartnerAddress).filter(PartnerAddress.partner_id.in_(ids)).all() if ids else []
+    addr_map: dict = {}
+    for a in addrs:
+        addr_map.setdefault(a.partner_id, []).append(a)
+
+    result = []
+    for c in customers:
+        al = addr_map.get(c.id, [])
+        billing  = next((a for a in al if a.address_type == "billing"), None)
+        delivery = next((a for a in al if a.address_type == "branch"), None)
+        result.append({
+            "code":             c.code,
+            "type":             (c.display_name or "") if c.display_name != c.legal_name else "",
+            "name":             c.legal_name,
+            "tax_code":         c.tax_code or "",
+            "phone":            c.phone or "",
+            "email":            c.email or "",
+            "field":            c.field or "",
+            "owner":            c.owner or "",
+            "description":      c.description or "",
+            "invoice_address":  billing.full_address  if billing  else (c.address or ""),
+            "invoice_city":     billing.mapping_key   if billing  else "",
+            "invoice_district": "",
+            "invoice_ward":     "",
+            "delivery_address": delivery.full_address if delivery else "",
+        })
+
+    path = Path(__file__).parent.parent.parent / "data" / "customers.json"
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"exported": len(result), "path": str(path)}
 
 
 @router.get("/contacts")
