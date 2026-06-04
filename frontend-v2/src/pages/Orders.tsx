@@ -39,6 +39,7 @@ import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import ContactSelectPopup from '@/components/ContactSelectPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
+import ExcelPreview from '@/components/ExcelPreview'
 import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import { fetchPricebooksForCustomers, type Pricebook } from '@/api/pricebooks'
 import client from '@/api/client'
@@ -944,11 +945,20 @@ export default function OrdersPage() {
               <Button size="small" icon={<ArrowsAltOutlined />} disabled={!previewPanelOrder} onClick={() => previewPanelOrder && setPreviewOrder(previewPanelOrder)}>Phóng to</Button>
             </div>
             {previewPanelOrder ? (
-              <iframe
-                title={previewPanelOrder.file_name || 'PDF preview'}
-                src={`${getPdfPreviewUrl(previewPanelOrder)}#toolbar=0&navpanes=0`}
-                className="block w-full h-[calc(100vh-180px)] min-h-[520px] bg-white"
-              />
+              /\.(xlsx|xls)$/i.test(previewPanelOrder.file_name || '') ? (
+                <div className="w-full h-[calc(100vh-180px)] min-h-[520px]">
+                  <ExcelPreview
+                    url={getPdfPreviewUrl(previewPanelOrder)}
+                    fileName={previewPanelOrder.file_name || ''}
+                  />
+                </div>
+              ) : (
+                <iframe
+                  title={previewPanelOrder.file_name || 'PDF preview'}
+                  src={`${getPdfPreviewUrl(previewPanelOrder)}#toolbar=0&navpanes=0`}
+                  className="block w-full h-[calc(100vh-180px)] min-h-[520px] bg-white"
+                />
+              )
             ) : (
               <div className="h-[520px] flex items-center justify-center text-xs text-slate-400">Không có file PDF</div>
             )}
@@ -1266,11 +1276,15 @@ export default function OrdersPage() {
             body: { height: '90vh', padding: 0 },
           }}
         >
-          <iframe
-            title={previewOrder.file_name || 'PDF preview large'}
-            src={`${getPdfPreviewUrl(previewOrder)}#toolbar=1&navpanes=0`}
-            className="block w-full h-full bg-white"
-          />
+          {/\.(xlsx|xls)$/i.test(previewOrder.file_name || '') ? (
+            <ExcelPreview url={getPdfPreviewUrl(previewOrder)} fileName={previewOrder.file_name || ''} />
+          ) : (
+            <iframe
+              title={previewOrder.file_name || 'PDF preview large'}
+              src={`${getPdfPreviewUrl(previewOrder)}#toolbar=1&navpanes=0`}
+              className="block w-full h-full bg-white"
+            />
+          )}
         </Modal>
       )}
     </div>
