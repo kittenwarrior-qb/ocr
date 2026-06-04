@@ -76,6 +76,7 @@ def list_all_products(
                 "price": float(p.price or 0),
                 "tax_rate": _format_tax_rate(p.tax_rate),
                 "property": p.property or "",
+                "product_type": p.product_type or "",
             }
             for p in rows
         ],

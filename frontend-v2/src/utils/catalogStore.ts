@@ -11,6 +11,7 @@ export interface Product {
   price: number
   tax_rate: string
   property: string
+  product_type: string
 }
 
 export interface Customer {
@@ -93,6 +94,7 @@ function mapProduct(r: any): Product {
     price: parseFloat(r.unit_price || '0') || 0,
     tax_rate: r.tax || '',
     property: r.product_properties || '',
+    product_type: r.product_type || '',
   }
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Input, Table, Button, Modal, Form, Row, Col, message, Tooltip } from 'antd'
+import { Input, Table, Button, Modal, Form, Row, Col, message, Tooltip, Tag } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { fetchCustomers, type Customer } from '@/utils/catalogStore'
@@ -55,12 +55,26 @@ export default function CustomersPage() {
   }
 
   const columns: ColumnsType<Customer> = [
-    { title: 'Mã KH', dataIndex: 'code', width: 120, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
-    { title: 'Tên khách hàng', dataIndex: 'name', ellipsis: true },
-    { title: 'MST', dataIndex: 'tax_code', width: 130 },
-    { title: 'Địa chỉ (HĐ)', dataIndex: 'invoice_address', ellipsis: true, width: 300 },
-    { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 120 },
-    { title: 'Địa chỉ (GH)', dataIndex: 'delivery_address', ellipsis: true, width: 250 },
+    {
+      title: 'Mã KH', dataIndex: 'code', width: 120, fixed: 'left',
+      render: (v: string) => <span className="text-blue-600 font-medium font-mono">{v}</span>,
+    },
+    {
+      title: 'Tên khách hàng', dataIndex: 'name', width: 260, ellipsis: true,
+      render: (v: string) => <span className="font-medium">{v}</span>,
+    },
+    {
+      title: 'Loại KH', dataIndex: 'type', width: 160, ellipsis: true,
+      render: (v: string) => v ? <Tag color="blue" className="text-xs">{v}</Tag> : <span className="text-gray-300">—</span>,
+    },
+    { title: 'MST', dataIndex: 'tax_code', width: 130, ellipsis: true },
+    { title: 'Điện thoại', dataIndex: 'phone', width: 130, ellipsis: true },
+    { title: 'Email', dataIndex: 'email', width: 200, ellipsis: true },
+    { title: 'Lĩnh vực', dataIndex: 'field', width: 120, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Người phụ trách', dataIndex: 'owner', width: 180, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Địa chỉ HĐ', dataIndex: 'invoice_address', width: 260, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'Tỉnh/TP', dataIndex: 'invoice_city', width: 120, ellipsis: true },
+    { title: 'Địa chỉ GH', dataIndex: 'delivery_address', width: 200, ellipsis: true, render: (v: string) => v || <span className="text-gray-300">—</span> },
   ]
 
   return (
@@ -88,9 +102,19 @@ export default function CustomersPage() {
       </div>
 
       <Table<Customer>
-        columns={columns} dataSource={data} rowKey="code" size="small" loading={loading}
-        pagination={{ current: page, pageSize, total, onChange: (p, s) => { setPage(p); setPageSize(s) }, showTotal: t => `${t} khách hàng`, size: 'small' }}
-        scroll={{ y: 'calc(100vh - 210px)' }} className="border border-gray-200 rounded-lg"
+        columns={columns}
+        dataSource={data}
+        rowKey="code"
+        size="small"
+        loading={loading}
+        scroll={{ x: 1800, y: 'calc(100vh - 210px)' }}
+        className="border border-gray-200 rounded-lg"
+        pagination={{
+          current: page, pageSize, total,
+          onChange: (p, s) => { setPage(p); setPageSize(s) },
+          showTotal: t => `${t} khách hàng`,
+          size: 'small',
+        }}
       />
 
       <Modal
@@ -122,28 +146,35 @@ export default function CustomersPage() {
           </Row>
           <Row gutter={16}>
             <Col span={12}>
+              <Form.Item name="account_type" label="Loại khách hàng">
+                <Input placeholder="VD: NPP Miền Nam" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item name="office_tel" label="Điện thoại">
                 <Input placeholder="024 1234 5678" />
               </Form.Item>
             </Col>
+          </Row>
+          <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="office_email" label="Email">
                 <Input placeholder="contact@company.vn" />
               </Form.Item>
             </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item name="billing_province" label="Tỉnh/TP (HĐ)">
                 <Input placeholder="Hà Nội" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
               <Form.Item name="billing_district" label="Quận/Huyện">
                 <Input placeholder="Đống Đa" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item name="billing_ward" label="Phường/Xã">
                 <Input placeholder="Phương Mai" />
               </Form.Item>

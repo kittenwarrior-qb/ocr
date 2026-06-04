@@ -165,7 +165,7 @@ export default function CustomerContactPopup({ open, onSelect, onCancel, initial
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-2 py-2 w-8" />
-              {['Mã LH', 'Họ và tên', 'Công ty', 'SĐT', 'Email', 'Địa chỉ GH', 'Tỉnh/TP'].map(h => (
+              {['Mã LH', 'Họ và tên', 'Chức danh', 'Công ty', 'SĐT (mobile)', 'SĐT (văn phòng)', 'Email', 'Địa chỉ GH', 'Tỉnh/TP'].map(h => (
                 <th key={h} className="px-2 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -184,12 +184,14 @@ export default function CustomerContactPopup({ open, onSelect, onCancel, initial
                   </td>
                   <td className="px-2 py-1.5 whitespace-nowrap font-mono text-slate-600">{row.code}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap font-medium text-slate-800">{row.name}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.job_title || '-'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-700 max-w-[240px] truncate">
                     {matched
                       ? <span className="text-emerald-700 font-semibold">{row.organization}</span>
                       : <span className="text-slate-500">{row.organization || '-'}</span>}
                   </td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.phone || '-'}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.phone_work || '-'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.email || '-'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-500 max-w-xs truncate">{row.delivery_address || row.address || '-'}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.city || '-'}</td>
@@ -197,7 +199,7 @@ export default function CustomerContactPopup({ open, onSelect, onCancel, initial
               )
             })}
             {!cont.loading && cont.data.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-slate-400">Không tìm thấy</td></tr>
+              <tr><td colSpan={10} className="text-center py-8 text-slate-400">Không tìm thấy</td></tr>
             )}
           </tbody>
         </table>

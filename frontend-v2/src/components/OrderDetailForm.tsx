@@ -47,7 +47,8 @@ function ProductModal({ open, suggestName, onSelect, onCancel }: { open: boolean
         onRow={record => ({ onClick: () => onSelect(record as Product), className: 'cursor-pointer hover:bg-blue-50' })}
         columns={[
           { title: 'Mã hàng hóa', dataIndex: 'code', width: 120 },
-          { title: 'Tên hàng hóa', dataIndex: 'name', width: 320 },
+          { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 },
+          { title: 'Loại HH', dataIndex: 'product_type', width: 110 },
           { title: 'ĐVT', dataIndex: 'uom', width: 80 },
           { title: 'Đơn giá', dataIndex: 'price', width: 120, render: (v: number) => v ? v.toLocaleString('vi-VN') : '\u2014' },
           { title: 'Thuế', dataIndex: 'tax_rate', width: 80 },
@@ -103,7 +104,7 @@ function contactToCustomerData(contact: Contact, matchedCustomer: CustomerData |
 interface Props {
   orderId: string
   onSaved?: () => void
-  onLocalSaved?: () => void
+  onLocalSaved?: (updatedLines: OrderLine[]) => void
 }
 
 function toCustomerData(record?: Record<string, unknown> | null): CustomerData | null {
@@ -283,7 +284,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     try {
       await updateOrder(orderId, buildSavePayload(lines))
       message.success('Đã lưu — bạn có thể Lưu với MISA')
-      onLocalSaved?.()
+      onLocalSaved?.(lines)
     } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
   }
 
@@ -314,7 +315,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     setActivePopup(null)
   }
 
-  const unmappedLines = lines.filter(l => l.mapping_status === 'pending')
+  const unmappedLines = lines.filter(l => l.mapping_status === 'pending' && !isSystemLine(l))
   const hasUnmappedItems = unmappedLines.length > 0
   const total = lines.reduce((s, l) => s + (Number(l.line_total) || 0), 0)
 
@@ -369,8 +370,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <span className="text-xs text-gray-400">{lines.length} dòng</span>
         </div>
         {hasUnmappedItems && (
-          <div className="mb-3 flex items-center gap-2 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
-            <ExclamationCircleOutlined /><span>{unmappedLines.length}/{lines.length} dòng chưa map</span>
+          <div className="mb-3 flex items-center justify-between text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
+            <span className="flex items-center gap-2">
+              <ExclamationCircleOutlined />
+              <span><strong>{unmappedLines.length}</strong>/{lines.filter(l => !isSystemLine(l)).length} dòng chưa map hàng hóa — nhấn <SearchOutlined /> trên từng dòng để chọn</span>
+            </span>
           </div>
         )}
         <div className="overflow-x-auto">
@@ -404,8 +408,12 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     <td className="px-1 py-1 text-center">{isPending && <span className="text-orange-400">⚠</span>}</td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1 flex items-center gap-1">
-                      <EditableCell value={isPending ? '' : (line.ocr_product_code || '')} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
-                      {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>}
+                      {isPending && !systemLine
+                        ? <button className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded px-2 py-0.5 whitespace-nowrap" onClick={() => setProductModalIdx(idx)}><SearchOutlined style={{fontSize:10}} /> Chọn SP</button>
+                        : <>
+                            <EditableCell value={line.ocr_product_code || ''} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
+                            {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>}
+                          </>}
                     </td>
                     <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
                     <td className="px-2 py-1"><EditableCell value={line.uom_original} onChange={v => updateLine(idx, 'uom_original', v)} placeholder="ĐVT" /></td>

@@ -4,18 +4,26 @@ import { ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import client from '@/api/client'
 
+interface PriceBookItem {
+  product_code: string
+  product_name: string
+  product_type: string
+  uom: string
+  unit_price: number
+  discount_type: string
+  discount: number
+}
+
 interface PriceBook {
-  id: number
   code: string
   name: string
   target: string
   customer_type: string
-  discount_type: string
-  discount_value: string
-  from_date: string
-  to_date: string
-  is_active: boolean
-  owner: string
+  from_date: string | null
+  to_date: string | null
+  is_inactive: boolean
+  customers: string[]
+  items: PriceBookItem[]
 }
 
 export default function ChietKhauPage() {
@@ -23,6 +31,7 @@ export default function ChietKhauPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
+  const [expanded, setExpanded] = useState<string[]>([])
   const pageSize = 50
   const cacheRef = useRef<PriceBook[] | null>(null)
 
@@ -30,22 +39,9 @@ export default function ChietKhauPage() {
     if (cacheRef.current && !force) { setAll(cacheRef.current); return }
     setLoading(true)
     try {
-      const res = await client.get('/misa/price-books')
-      const items: PriceBook[] = (res.data || []).map((p: any) => ({
-        id: p.ID,
-        code: p.PriceBookCode || '',
-        name: p.PriceBookName || '',
-        target: p.ObjectIDText || '',
-        customer_type: p.AccountTypeIDText || '—',
-        discount_type: p.DiscountType || '',
-        discount_value: p.DiscountValue ? `${p.DiscountValue}%` : '',
-        from_date: p.FromDate ? p.FromDate.slice(0, 10) : '—',
-        to_date: p.ToDate ? p.ToDate.slice(0, 10) : '—',
-        is_active: !p.Inactive,
-        owner: p.OwnerIDText || '',
-      }))
-      cacheRef.current = items
-      setAll(items)
+      const res = await client.get('/misa/price-books/all')
+      cacheRef.current = res.data || []
+      setAll(res.data || [])
     } finally {
       setLoading(false)
     }
@@ -65,17 +61,14 @@ export default function ChietKhauPage() {
   })()
 
   const columns: ColumnsType<PriceBook> = [
-    { title: 'ID', dataIndex: 'id', width: 70 },
-    { title: 'Mã CSG', dataIndex: 'code', width: 130, render: v => <span className="text-blue-600 font-medium">{v || '—'}</span> },
-    { title: 'Tên chính sách giá', dataIndex: 'name', ellipsis: true, render: v => v || '—' },
-    { title: 'Loại CK', dataIndex: 'discount_type', width: 100 },
-    { title: 'CK%', dataIndex: 'discount_value', width: 80, align: 'center', render: v => v ? <Tag color="orange">{v}</Tag> : '—' },
+    { title: 'Mã CSG', dataIndex: 'code', width: 130, render: v => <span className="text-blue-600 font-medium font-mono">{v || '—'}</span> },
+    { title: 'Tên chính sách giá', dataIndex: 'name', ellipsis: true },
     { title: 'Đối tượng', dataIndex: 'target', width: 180, ellipsis: true },
-    { title: 'Loại KH', dataIndex: 'customer_type', width: 150, ellipsis: true },
-    { title: 'Từ ngày', dataIndex: 'from_date', width: 100 },
-    { title: 'Đến ngày', dataIndex: 'to_date', width: 100 },
-    { title: 'Trạng thái', dataIndex: 'is_active', width: 110, render: v => v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Dừng</Tag> },
-    { title: 'Chủ sở hữu', dataIndex: 'owner', width: 180, ellipsis: true, render: v => v || '—' },
+    { title: 'Loại KH', dataIndex: 'customer_type', width: 160, ellipsis: true, render: v => v || <span className="text-gray-400">—</span> },
+    { title: 'Từ ngày', dataIndex: 'from_date', width: 100, render: v => v || '—' },
+    { title: 'Đến ngày', dataIndex: 'to_date', width: 100, render: v => v || '—' },
+    { title: 'Trạng thái', dataIndex: 'is_inactive', width: 110, render: v => !v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Dừng</Tag> },
+    { title: 'Số SP', key: 'items', width: 70, align: 'center', render: (_, r) => r.items?.length ?? 0 },
   ]
 
   return (
@@ -98,10 +91,43 @@ export default function ChietKhauPage() {
       <Table<PriceBook>
         columns={columns}
         dataSource={filtered}
-        rowKey="id"
+        rowKey="code"
         size="small"
         loading={loading}
-        scroll={{ x: 1200, y: 'calc(100vh - 210px)' }}
+        expandable={{
+          expandedRowKeys: expanded,
+          onExpand: (exp, rec) => setExpanded(prev => exp ? [...prev, rec.code] : prev.filter(k => k !== rec.code)),
+          expandedRowRender: (rec) => (
+            <table className="text-xs w-full border-collapse ml-6">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-2 py-1 text-left font-semibold text-gray-600">Mã hàng</th>
+                  <th className="px-2 py-1 text-left font-semibold text-gray-600">Tên hàng hóa</th>
+                  <th className="px-2 py-1 text-center font-semibold text-gray-600 w-16">ĐVT</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-700 w-28">Đơn giá (CK)</th>
+                  <th className="px-2 py-1 text-center font-semibold text-gray-500 w-24">Loại CK</th>
+                  <th className="px-2 py-1 text-right font-semibold text-gray-500 w-20">CK%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rec.items.map((item, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="px-2 py-1 font-mono text-blue-600">{item.product_code}</td>
+                    <td className="px-2 py-1 text-gray-700">{item.product_name}</td>
+                    <td className="px-2 py-1 text-center text-gray-500">{item.uom || '—'}</td>
+                    <td className="px-2 py-1 text-right font-semibold text-orange-700">{item.unit_price ? item.unit_price.toLocaleString('vi-VN') : '—'}</td>
+                    <td className="px-2 py-1 text-center text-gray-500">{item.discount_type || '—'}</td>
+                    <td className="px-2 py-1 text-right text-gray-400">{item.discount ? `${item.discount}%` : '—'}</td>
+                  </tr>
+                ))}
+                {!rec.items.length && (
+                  <tr><td colSpan={6} className="px-2 py-4 text-center text-gray-400">Không có sản phẩm</td></tr>
+                )}
+              </tbody>
+            </table>
+          ),
+        }}
+        scroll={{ x: 1000, y: 'calc(100vh - 210px)' }}
         className="border border-gray-200 rounded-lg"
         pagination={{ current: page, pageSize, total: filtered.length, onChange: p => setPage(p), showTotal: t => `${t} bảng giá`, size: 'small' }}
       />

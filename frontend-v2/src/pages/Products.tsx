@@ -63,12 +63,13 @@ export default function ProductsPage() {
   }
 
   const columns: ColumnsType<Product> = [
-    { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, render: (v: string) => <span className="text-blue-600 font-medium">{v}</span> },
-    { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true },
+    { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, fixed: 'left', render: (v: string) => <span className="text-blue-600 font-medium font-mono">{v}</span> },
+    { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true, width: 300 },
+    { title: 'Loại HH', dataIndex: 'product_type', width: 130, ellipsis: true, render: (v: string) => v ? <Tag color="geekblue" className="text-xs">{v}</Tag> : <span className="text-gray-300">—</span> },
     { title: 'ĐVT', dataIndex: 'uom', width: 80 },
-    { title: 'Đơn giá', dataIndex: 'price', width: 120, align: 'right', render: (v: number) => v ? v.toLocaleString('vi-VN') + ' đ' : '—' },
+    { title: 'Đơn giá', dataIndex: 'price', width: 130, align: 'right', render: (v: number) => v ? <span className="font-semibold">{v.toLocaleString('vi-VN')} đ</span> : '—' },
     { title: 'Thuế', dataIndex: 'tax_rate', width: 70, render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
-    { title: 'Tính chất', dataIndex: 'property', width: 120, render: (v: string) => v || '—' },
+    { title: 'Tính chất', dataIndex: 'property', width: 140, ellipsis: true, render: (v: string) => v || '—' },
   ]
 
   return (
@@ -98,7 +99,7 @@ export default function ProductsPage() {
       <Table<Product>
         columns={columns} dataSource={data} rowKey="code" size="small" loading={loading}
         pagination={{ current: page, pageSize, total, onChange: (p, s) => { setPage(p); setPageSize(s) }, showTotal: t => `${t} sản phẩm`, size: 'small' }}
-        scroll={{ y: 'calc(100vh - 210px)' }} className="border border-gray-200 rounded-lg"
+        scroll={{ x: 1100, y: 'calc(100vh - 210px)' }} className="border border-gray-200 rounded-lg"
       />
 
       <Modal

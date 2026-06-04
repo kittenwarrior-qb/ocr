@@ -22,7 +22,7 @@ def _call(fn, *args, **kwargs) -> Any:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Price Books (Bảng giá / Chiết khấu — đọc từ JSON tĩnh) ──────────────────
+# ── Price Books (Bảng giá / Chiết khấu — đọc từ data/pricebooks.json) ────────
 
 @router.get("/price-books")
 def list_price_books():
@@ -36,35 +36,26 @@ def all_pricebook_details():
     return get_all_pricebook_details()
 
 
-@router.get("/price-books/{pb_id}")
-def get_pricebook(pb_id: int):
-    from app.services.misa_pricebook import get_pricebook_by_id
-    data = get_pricebook_by_id(pb_id)
+@router.get("/price-books/for-customers")
+def pricebooks_for_customers(codes: str = Query("")):
+    """
+    Return pricebooks keyed by customer_code.
+    `codes` = comma-separated list of customer codes.
+    Returns { customer_code: [pricebook, ...] }
+    """
+    from app.services.misa_pricebook import get_pricebooks_for_customers
+    if not codes:
+        return {}
+    code_list = [c.strip() for c in codes.split(",") if c.strip()]
+    return get_pricebooks_for_customers(code_list)
+
+
+@router.get("/price-books/{pb_code}")
+def get_pricebook(pb_code: str):
+    from app.services.misa_pricebook import get_pricebook_by_code
+    data = get_pricebook_by_code(pb_code)
     if data is None:
-        raise HTTPException(status_code=404, detail=f"PriceBook {pb_id} not found")
-    return data
-
-
-# ── Giảm giá / Khuyến mãi ────────────────────────────────────────────────────
-
-@router.get("/promotions")
-def list_promotions():
-    from app.services.misa_pricebook import get_giamgia_list
-    return get_giamgia_list()
-
-
-@router.get("/promotions/all")
-def all_promotion_details():
-    from app.services.misa_pricebook import get_all_giamgia_details
-    return get_all_giamgia_details()
-
-
-@router.get("/promotions/{gid}")
-def get_promotion(gid: int):
-    from app.services.misa_pricebook import get_giamgia_by_id
-    data = get_giamgia_by_id(gid)
-    if data is None:
-        raise HTTPException(status_code=404, detail=f"Promotion {gid} not found")
+        raise HTTPException(status_code=404, detail=f"PriceBook {pb_code} not found")
     return data
 
 

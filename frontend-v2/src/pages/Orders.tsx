@@ -36,6 +36,7 @@ import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
+import { fetchPricebooksForCustomers, type Pricebook } from '@/api/pricebooks'
 import client from '@/api/client'
 
 type Confidence = 'confirmed' | 'suggest' | 'medium' | 'low' | 'none'
@@ -84,13 +85,14 @@ function productTaxRate(product: Product): number {
 
 function applyProductToSessionLine(line: SessionLine, product: Product): SessionLine {
   const quantity = Number(line.quantity) || 1
-  const unitPrice = Number(product.price) || 0
+  // Preserve existing unit_price from OCR; only use catalog price as fallback
+  const unitPrice = Number(line.unit_price) || Number(product.price) || 0
   return {
     ...line,
     mapping_status: 'mapped',
     product_code_mapped: product.code,
     product_name_mapped: product.name,
-    product_name_original: product.name,   // cập nhật tên hiển thị theo sản phẩm được chọn
+    product_name_original: product.name,
     ocr_product_code: product.code,
     uom_original: product.uom,
     uom_mapped: product.uom,
@@ -206,6 +208,8 @@ export default function OrdersPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [vouchersByCustomer, setVouchersByCustomer] = useState<Record<string, Voucher[]>>({})
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null)
+  const [pricebooksByCustomer, setPricebooksByCustomer] = useState<Record<string, Pricebook[]>>({})
+  const [selectedPricebook, setSelectedPricebook] = useState<{ pb: Pricebook; orderId: string } | null>(null)
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({ queryKey: ['sessions'], queryFn: getSessions, refetchInterval: uploading ? 3000 : false })
   const { data: sessionDetail, refetch: refetchDetail } = useQuery({
@@ -245,7 +249,7 @@ export default function OrdersPage() {
     }
   }
 
-  // Fetch vouchers whenever session orders change
+  // Fetch vouchers + pricebooks whenever session orders change
   useEffect(() => {
     if (!sessionDetail?.orders?.length) return
     const codes = [...new Set(
@@ -255,6 +259,7 @@ export default function OrdersPage() {
     )]
     if (!codes.length) return
     fetchVouchersForCustomers(codes).then(setVouchersByCustomer).catch(() => {})
+    fetchPricebooksForCustomers(codes).then(setPricebooksByCustomer).catch(() => {})
   }, [sessionDetail])
 
   const handleStageFiles = useCallback((files: File[]) => {
@@ -281,6 +286,35 @@ export default function OrdersPage() {
   }, [stagedFiles, refetchSessions])
 
   const onDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); handleStageFiles(Array.from(e.dataTransfer.files)) }, [handleStageFiles])
+
+  const handleApplyPricebook = async (orderId: string, pb: Pricebook) => {
+    const order = sessionDetail?.orders.find(o => o.id === orderId)
+    if (!order) return
+    const pbMap = new Map(pb.items.map(item => [item.product_code, item.unit_price]))
+    const newLines = order.lines.map(line => {
+      const code = line.product_code_mapped || line.ocr_product_code || ''
+      const pbPrice = pbMap.get(code)
+      if (!pbPrice) return line
+      const qty = Number(line.quantity) || 1
+      return { ...line, unit_price: pbPrice, line_total: pbPrice * qty }
+    })
+    const totalWithTax = newLines.reduce((s, l) => {
+      const lt = Number(l.line_total) || 0
+      const tx = Math.round(lt * (Number(l.tax_rate) || 0) / 100)
+      return s + lt + tx
+    }, 0)
+    await client.patch(`/documents/orders/${orderId}`, { lines: newLines.map(toLinePayload), total_amount: totalWithTax })
+    queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
+      if (!old) return old
+      return {
+        ...old,
+        orders: old.orders.map((o: any) => o.id === orderId ? { ...o, lines: newLines, total_amount: totalWithTax } : o),
+      }
+    })
+    const matched = newLines.filter(l => pbMap.has(l.product_code_mapped || l.ocr_product_code || '')).length
+    message.success(`Đã áp dụng giá chiết khấu cho ${matched} sản phẩm`)
+    setSelectedPricebook(null)
+  }
 
   const handleMapProduct = async (line: SessionLine, product: Product) => {
     try {
@@ -592,6 +626,38 @@ export default function OrdersPage() {
                           </div>
                         )
                       })()}
+                      {(() => {
+                        const custCode = String(order.extra_data?.customer_code || '')
+                        const pricebooks = custCode ? (pricebooksByCustomer[custCode] || []) : []
+                        const orderProductCodes = new Set(order.lines.map(l => l.product_code_mapped || l.ocr_product_code || '').filter(Boolean))
+                        // Only show pricebooks that have at least one matching product
+                        const applicable = pricebooks.filter(pb => pb.items.some(item => orderProductCodes.has(item.product_code)))
+                        if (!applicable.length) return null
+                        return (
+                          <div className="col-span-2 flex items-start gap-2 pt-1 min-w-0">
+                            <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Chiết khấu:</span>
+                            <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
+                              {applicable.map((pb, idx) => {
+                                const cls = idx % 2 === 0
+                                  ? 'bg-orange-600 border-orange-600 text-white hover:bg-orange-700'
+                                  : 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
+                                return (
+                                  <button
+                                    key={pb.code}
+                                    className={`inline-flex max-w-[260px] items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors ${cls}`}
+                                    onClick={e => { e.stopPropagation(); setSelectedPricebook({ pb, orderId: order.id }) }}
+                                    title={pb.name}
+                                  >
+                                    <TagsOutlined className="shrink-0" />
+                                    <span className="font-mono shrink-0">{pb.code}</span>
+                                    <span className="truncate">{pb.name}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -738,7 +804,7 @@ export default function OrdersPage() {
 
       {/* Product SelectPopup */}
       <SelectPopup open={productModalOpen} title={selectedLine ? `Chọn hàng hóa — "${selectedLine.product_name_original || ''}"` : 'Chọn hàng hóa'}
-        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 120, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 300 }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }, { title: 'Đơn giá', dataIndex: 'price', width: 110, nowrap: true }, { title: 'Thuế', dataIndex: 'tax_rate', width: 70, nowrap: true }, { title: 'Tính chất', dataIndex: 'property', width: 120, nowrap: true }]}
+        columns={[{ title: 'Mã hàng hóa', dataIndex: 'code', width: 120, nowrap: true }, { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 }, { title: 'Loại HH', dataIndex: 'product_type', width: 110, nowrap: true }, { title: 'ĐVT', dataIndex: 'uom', width: 70, nowrap: true }, { title: 'Đơn giá', dataIndex: 'price', width: 110, nowrap: true }, { title: 'Thuế', dataIndex: 'tax_rate', width: 70, nowrap: true }, { title: 'Tính chất', dataIndex: 'property', width: 120, nowrap: true }]}
         fetchData={async (s, skip, limit) => { const r = await fetchProducts(s, skip, limit); return { items: r.items as unknown as Record<string, unknown>[], total: r.total } }}
         onSelect={r => {
           const product = r as unknown as Product
@@ -793,8 +859,22 @@ export default function OrdersPage() {
         >
           <OrderDetailForm
             orderId={editingOrder.id}
-            onLocalSaved={() => {
+            onLocalSaved={(updatedLines) => {
               setMisaSaved(true)
+              if (updatedLines && editingOrder) {
+                const pendingCount = updatedLines.filter((l: any) => l.mapping_status === 'pending').length
+                queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
+                  if (!old) return old
+                  return {
+                    ...old,
+                    total_unmapped: old.orders.reduce((sum: number, o: any) =>
+                      sum + (o.id === editingOrder.id ? pendingCount : (o.pending_count || 0)), 0),
+                    orders: old.orders.map((o: any) => o.id === editingOrder.id
+                      ? { ...o, lines: updatedLines, pending_count: pendingCount }
+                      : o),
+                  }
+                })
+              }
               queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
             }}
             onSaved={() => { setDetailModalOpen(false); setEditingOrder(null); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }) }}
@@ -878,6 +958,71 @@ export default function OrdersPage() {
           </div>
         </Modal>
       )}
+
+      {selectedPricebook && (() => {
+        const { pb, orderId } = selectedPricebook
+        const order = sessionDetail?.orders.find(o => o.id === orderId)
+        const orderProductCodes = new Set((order?.lines || []).map(l => l.product_code_mapped || l.ocr_product_code || '').filter(Boolean))
+        return (
+          <Modal
+            open
+            width={900}
+            centered
+            footer={
+              <div className="flex justify-end gap-2">
+                <Button onClick={() => setSelectedPricebook(null)}>Đóng</Button>
+                <Button type="primary" onClick={() => handleApplyPricebook(orderId, pb)}>
+                  Áp dụng giá chiết khấu
+                </Button>
+              </div>
+            }
+            title={<span className="text-slate-800"><TagsOutlined className="mr-2 text-orange-500" />{pb.code} - {pb.name}</span>}
+            onCancel={() => setSelectedPricebook(null)}
+            styles={{ body: { paddingTop: 12 } }}
+          >
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs border border-slate-200 rounded px-3 py-2 bg-white">
+                <div><span className="text-slate-500 font-medium">Đối tượng:</span> <span className="text-slate-800">{pb.target || '—'}</span></div>
+                <div><span className="text-slate-500 font-medium">Loại KH:</span> <span className="text-slate-800">{pb.customer_type || 'Tất cả'}</span></div>
+                <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-slate-800 font-semibold">{pb.from_date || '—'} → {pb.to_date || '—'}</span></div>
+              </div>
+              <div className="border border-slate-200 rounded overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                      <th className="px-3 py-2 text-left font-semibold w-6"></th>
+                      <th className="px-3 py-2 text-left font-semibold">Mã hàng hóa</th>
+                      <th className="px-3 py-2 text-left font-semibold">Tên hàng hóa</th>
+                      <th className="px-2 py-2 text-center font-semibold w-20">ĐVT</th>
+                      <th className="px-2 py-2 text-right font-semibold w-28">Đơn giá (CK)</th>
+                      <th className="px-2 py-2 text-center font-semibold w-20">Chiết khấu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pb.items.map((item, i) => {
+                      const inOrder = orderProductCodes.has(item.product_code)
+                      return (
+                        <tr key={i} className={`border-b border-slate-100 last:border-0 ${inOrder ? 'bg-orange-50' : 'hover:bg-slate-50'}`}>
+                          <td className="px-3 py-2 text-center">{inOrder && <span className="text-orange-500 font-bold">✓</span>}</td>
+                          <td className="px-3 py-2 font-mono text-slate-700 font-semibold">{item.product_code}</td>
+                          <td className="px-3 py-2 text-slate-700">{item.product_name}</td>
+                          <td className="px-2 py-2 text-center text-slate-500">{item.uom || '—'}</td>
+                          <td className="px-2 py-2 text-right font-semibold text-orange-700">{item.unit_price ? item.unit_price.toLocaleString('vi-VN') : '—'}</td>
+                          <td className="px-2 py-2 text-center text-slate-500">{item.discount ? `${item.discount}%` : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                    {!pb.items.length && (
+                      <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-slate-500">Sản phẩm có dấu ✓ trùng với đơn hàng. Bấm <strong>Áp dụng giá chiết khấu</strong> để tự động nhập đơn giá.</p>
+            </div>
+          </Modal>
+        )
+      })()}
 
       {previewOrder && (
         <Modal

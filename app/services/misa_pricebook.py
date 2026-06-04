@@ -1,83 +1,68 @@
-"""
-chietkhau.json  = {id: FormConfigNew response}   — bảng giá chi tiết
-giamgia.json    = {id: PromoInfo response}        — khuyến mãi chi tiết
-"""
 import json
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent.parent
-_CK_FILE = _ROOT / "chietkhau.json"   # price books (FormConfigNew)
-_GG_FILE = _ROOT / "giamgia.json"     # promotions (PromoInfo)
+_PB_FILE = _ROOT / "data" / "pricebooks.json"
+_CUSTOMERS_FILE = _ROOT / "data" / "customers.json"
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+def _load_pricebooks() -> list[dict]:
+    if not _PB_FILE.exists():
+        return []
+    return json.loads(_PB_FILE.read_text(encoding="utf-8"))
 
-def _load(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
 
-
-def _infor_fields(entry: dict) -> dict[str, dict]:
-    """Map FieldName → field object from FormConfigNew InforFields."""
-    fields = entry.get("Data", {}).get("FormLayout", {}).get("InforFields", [])
-    return {f["FieldName"]: f for f in fields}
+def _load_customers() -> dict[str, dict]:
+    """Returns {code: customer} map."""
+    if not _CUSTOMERS_FILE.exists():
+        return {}
+    data = json.loads(_CUSTOMERS_FILE.read_text(encoding="utf-8"))
+    return {c["code"]: c for c in data if c.get("code")}
 
 
 # ── Chiết khấu (Price Books) ─────────────────────────────────────────────────
 
 def get_pricebook_list() -> list[dict]:
-    """Trả danh sách bảng giá từ chietkhau.json (FormConfigNew format)."""
-    data = _load(_CK_FILE)
-    result = []
-    for pid, entry in data.items():
-        if not entry.get("Success"):
-            continue
-        fields = _infor_fields(entry)
-        result.append({
-            "ID": int(pid),
-            "PriceBookCode": fields.get("PriceBookCode", {}).get("Text", ""),
-            "PriceBookName": fields.get("PriceBookName", {}).get("Text", ""),
-            "ObjectIDText": fields.get("ObjectID", {}).get("Text", ""),
-            "AccountTypeIDText": fields.get("AccountTypeID", {}).get("Text", ""),
-            "DiscountType": fields.get("DiscountType", {}).get("Text", ""),
-            "DiscountValue": fields.get("DiscountValue", {}).get("Value", ""),
-            "FromDate": fields.get("FromDate", {}).get("Text", ""),
-            "ToDate": fields.get("ToDate", {}).get("Text", ""),
-            "Inactive": fields.get("Inactive", {}).get("Value") == "true",
-            "OwnerIDText": fields.get("OwnerID", {}).get("Text", ""),
-        })
+    return [
+        {k: v for k, v in pb.items() if k != "items"}
+        for pb in _load_pricebooks()
+    ]
+
+
+def get_all_pricebook_details() -> list[dict]:
+    return _load_pricebooks()
+
+
+def get_pricebook_by_code(code: str) -> dict | None:
+    return next((pb for pb in _load_pricebooks() if pb["code"] == code), None)
+
+
+def get_pricebooks_for_customers(customer_codes: list[str]) -> dict[str, list[dict]]:
+    """
+    Return pricebooks keyed by customer_code.
+    Matching rules:
+      - target == "Tất cả khách hàng": applies to all
+      - target == "Theo loại khách hàng": match if customer type contains pricebook's customer_type
+      - target == "Theo khách hàng cụ thể": match if customer_code in pricebook's customers list
+    """
+    pricebooks = _load_pricebooks()
+    customers_map = _load_customers()
+    result: dict[str, list] = {c: [] for c in customer_codes}
+
+    for pb in pricebooks:
+        target = pb.get("target", "")
+        cust_type = pb.get("customer_type", "") or ""
+        pb_customers: list[str] = pb.get("customers", []) or []
+
+        for code in customer_codes:
+            if target == "Tất cả khách hàng":
+                result[code].append(pb)
+            elif target == "Theo loại khách hàng" and cust_type:
+                customer = customers_map.get(code, {})
+                customer_types = customer.get("type", "") or ""
+                if any(t.strip() in customer_types for t in cust_type.split(",")):
+                    result[code].append(pb)
+            elif target == "Theo khách hàng cụ thể" and code in pb_customers:
+                result[code].append(pb)
+
     return result
-
-
-def get_all_pricebook_details() -> dict:
-    return _load(_CK_FILE)
-
-
-def get_pricebook_by_id(pb_id: int) -> dict | None:
-    return _load(_CK_FILE).get(str(pb_id))
-
-
-# ── Giảm giá / Khuyến mãi (Promotions) ──────────────────────────────────────
-
-def get_giamgia_list() -> list[dict]:
-    """Trả danh sách khuyến mãi từ giamgia.json (PromoInfo format)."""
-    data = _load(_GG_FILE)
-    result = []
-    for pid, entry in data.items():
-        if not entry.get("Success"):
-            continue
-        items: list[dict] = entry.get("Data", [])
-        result.append({
-            "ID": int(pid),
-            "PromotionID": int(pid),
-            "ItemCount": len(items),
-            "Items": items,
-        })
-    return result
-
-
-def get_all_giamgia_details() -> dict:
-    return _load(_GG_FILE)
-
-
-def get_giamgia_by_id(gid: int) -> dict | None:
-    return _load(_GG_FILE).get(str(gid))

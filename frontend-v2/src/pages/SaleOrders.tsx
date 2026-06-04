@@ -95,16 +95,26 @@ const lineColumns: ColumnsType<OrderLine> = [
 const columns: ColumnsType<SaleOrder> = [
   {
     title: 'Số ĐH', dataIndex: 'sale_order_no', width: 110, fixed: 'left',
-    render: v => <span className="text-blue-600 font-medium">{v}</span>,
+    render: v => <span className="text-blue-600 font-medium font-mono">{v}</span>,
   },
   { title: 'Ngày đặt', dataIndex: 'sale_order_date', width: 100, render: fmt },
+  { title: 'Ngày sổ', dataIndex: 'book_date', width: 100, render: fmt },
   { title: 'Hạn giao', dataIndex: 'deadline_date', width: 100, render: fmt },
+  {
+    title: 'Mã KH', dataIndex: 'account_code', width: 120,
+    render: v => v ? <span className="text-blue-600 font-mono text-xs">{v}</span> : '—',
+  },
   { title: 'Khách hàng', dataIndex: 'account_name', width: 200, ellipsis: true },
+  { title: 'Mã LH', dataIndex: 'contact_code', width: 100, ellipsis: true, render: v => v || '—' },
   { title: 'Liên hệ', dataIndex: 'contact_name', width: 150, ellipsis: true },
   { title: 'Loại ĐH', dataIndex: 'sale_order_type', width: 100, ellipsis: true },
-  { title: 'Diễn giải', dataIndex: 'sale_order_name', ellipsis: true },
+  { title: 'Diễn giải', dataIndex: 'sale_order_name', ellipsis: true, width: 200 },
   {
     title: 'TT đơn hàng', dataIndex: 'status', width: 140,
+    render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—',
+  },
+  {
+    title: 'TT doanh thu', dataIndex: 'revenue_status', width: 140,
     render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—',
   },
   {
@@ -119,8 +129,12 @@ const columns: ColumnsType<SaleOrder> = [
     title: 'Giá trị', dataIndex: 'sale_order_amount', width: 130, align: 'right',
     render: v => <span className="font-semibold">{fmtN(v)}</span>,
   },
+  { title: 'Trước thuế', dataIndex: 'to_currency_summary', width: 120, align: 'right', render: fmtN },
+  { title: 'Thuế', dataIndex: 'tax_summary', width: 100, align: 'right', render: fmtN },
   { title: 'Nhân viên', dataIndex: 'owner_name', width: 160, ellipsis: true },
   { title: 'Đơn vị', dataIndex: 'organization_unit_name', width: 120, ellipsis: true },
+  { title: 'Người tạo', dataIndex: 'created_by', width: 140, ellipsis: true, render: v => v || '—' },
+  { title: 'Ngày tạo', dataIndex: 'created_date', width: 100, render: fmt },
 ]
 
 export default function SaleOrdersPage() {
@@ -186,7 +200,7 @@ export default function SaleOrdersPage() {
         rowKey="id"
         size="small"
         loading={loading}
-        scroll={{ x: 1600, y: 'calc(100vh - 210px)' }}
+        scroll={{ x: 2600, y: 'calc(100vh - 210px)' }}
         className="border border-gray-200 rounded-lg"
         pagination={{
           current: page,

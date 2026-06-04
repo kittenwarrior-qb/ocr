@@ -1,0 +1,1482 @@
+[
+  {
+    "code": "CSG0000028",
+    "name": "Bảng giá CÔNG TY TNHH RƯỢU VANG HẢO HẠNG VIER (ck 40%)",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000429"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 54000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 59400,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 59400,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 82778,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 50400,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 32727,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 32727,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 200000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 200000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 200000,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000027",
+    "name": "Bảng giá CÔNG TY TNHH NHO CORECAM",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000427"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000012",
+    "name": "Bảng giá CÔNG TY TNHH DỊCH VỤ VÀ THƯƠNG MẠI BÃO TUYẾT - Miền Bắc",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": "2026-04-23",
+    "to_date": "2026-07-31",
+    "is_inactive": false,
+    "customers": [
+      "KH70000406"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 53704,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 60185,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 62037,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 111111,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 218182,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 218182,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 218182,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000026",
+    "name": "Bảng giá CÔNG TY TNHH SVH INVESTMENT",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000423"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000025",
+    "name": "Bảng Giá CÔNG TY LIÊN DOANH CĂN HỘ VÀ VĂN PHÒNG SÀI GÒN",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000424"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 31942,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000024",
+    "name": "CK 10% Đơn Khai Trương ",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": "2026-05-26",
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000422"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 36266,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000023",
+    "name": "CÔNG TY VINATEA CK 18%",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000422"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 73800,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 81180,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 81180,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 40296,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 113130,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000021",
+    "name": "CTKM CK 20% ST KINGKONGQ",
+    "target": "Tất cả khách hàng",
+    "customer_type": "",
+    "from_date": "2026-05-19",
+    "to_date": "2026-06-30",
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00136",
+        "product_name": "Nước tinh khiết Satori 5L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 80080,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000022",
+    "name": "Bảng Giá kênh GT - ĐLTT Miền Nam - Hikari bình 19L",
+    "target": "Theo loại khách hàng",
+    "customer_type": "ĐLTT Miền Nam",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00130",
+        "product_name": "Nước tinh khiết Hikari bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 29167,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000015",
+    "name": "KINGKONG",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000408"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 80990,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 76440,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 125546,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 303333,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 303333,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 303333,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00142",
+        "product_name": "Nước tinh khiết Satori 5L có vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 100100,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00143",
+        "product_name": "Nước tinh khiết Satori 5L không vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 100100,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000020",
+    "name": "Bảng Giá kênh GT - NPP Miền Nam - (bổ sung sản phẩm Satori 5 lít & Hikari 250ml)",
+    "target": "Theo loại khách hàng",
+    "customer_type": "NPP Miền Nam",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00135",
+        "product_name": "Nước tinh khiết Satori 5L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 94300,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00136",
+        "product_name": "Nước tinh khiết Satori 5L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 101200,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00143",
+        "product_name": "Nước tinh khiết Satori 5L không vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 23575,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00142",
+        "product_name": "Nước tinh khiết Satori 5L có vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 25300,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00137",
+        "product_name": "Nước đóng chai Hikari 250ml-thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 57500,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00140",
+        "product_name": "Nước đóng chai Hikari 250ml (24 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 57500,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00139",
+        "product_name": "Nước đóng chai Hikari 250ml (12 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 28750,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00138",
+        "product_name": "Nước đóng chai Hikari 250ml (6 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 14375,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000019",
+    "name": "Bảng Giá kênh GT - ĐLTT Miền Nam - (bổ sung sản phẩm Satori 5 lít & Hikari 250ml)",
+    "target": "Theo loại khách hàng",
+    "customer_type": "ĐLTT Miền Nam",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00135",
+        "product_name": "Nước tinh khiết Satori 5L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 87125,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00136",
+        "product_name": "Nước tinh khiết Satori 5L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 93500,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00143",
+        "product_name": "Nước tinh khiết Satori 5L không vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 21781,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00142",
+        "product_name": "Nước tinh khiết Satori 5L có vòi_bình",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 23375,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00137",
+        "product_name": "Nước đóng chai Hikari 250ml-thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 53125,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00140",
+        "product_name": "Nước đóng chai Hikari 250ml (24 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 53125,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00139",
+        "product_name": "Nước đóng chai Hikari 250ml (12 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 26563,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00138",
+        "product_name": "Nước đóng chai Hikari 250ml (6 chai/lốc)",
+        "product_type": "Hàng hóa",
+        "uom": "Lốc",
+        "unit_price": 13281,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000017",
+    "name": "Bảng giá NPP kênh GT Miền Nam",
+    "target": "Theo loại khách hàng",
+    "customer_type": "GT,  NPP Miền Nam",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 80960,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 90160,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 90160,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00005",
+        "product_name": "Nước tinh khiết Satori bình 20L có tay cầm, không vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 126926,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 76360,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000018",
+    "name": "Bảng giá kênh GT - ĐLTT Miền Nam",
+    "target": "Theo loại khách hàng",
+    "customer_type": "ĐLTT Miền Nam",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 74800,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 83330,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 83300,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 117269,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00005",
+        "product_name": "Nước tinh khiết Satori bình 20L có tay cầm, không vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 41771,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 41771,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 41771,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 70550,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 41771,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 41771,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000016",
+    "name": "Bảng giá CÔNG TY TNHH HIKOJI",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000409"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 82800,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 91080,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 91080,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00005",
+        "product_name": "Nước tinh khiết Satori bình 20L có tay cầm, không vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 126926,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033.",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096.",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Vỏ Bình",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000014",
+    "name": "Bảng giá CÔNG TY TNHH HOÀNG DIỆU KHÁNH HÒA",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000407"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 80960,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 90160,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 90160,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 126926,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 76360,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00005",
+        "product_name": "Nước tinh khiết Satori bình 20L có tay cầm, không vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 45211,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000011",
+    "name": "Bảng giá NPP FOREST - Miền Bắc",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000405"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 82800,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 91080,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 91080,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 77280,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00005",
+        "product_name": "Nước tinh khiết Satori bình 20L có tay cầm, không vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 50181,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 306666,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 126926,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000009",
+    "name": "OHMEE",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": "2026-04-01",
+    "to_date": "2027-04-16",
+    "is_inactive": false,
+    "customers": [
+      "KH70000404"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 85440,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 95040,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 95040,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 319992,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 319992,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 319992,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000008",
+    "name": "Siêu Thị Menas",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [
+      "KH70000401"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 89000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 99000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00004NC",
+        "product_name": "Nước tinh khiết Satori 1.500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 99000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 333336,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 333336,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 333336,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00051",
+        "product_name": "Nước tinh khiết Satori Premium 450ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 137960,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 84000,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000010",
+    "name": "Giá bán cho hàng 500ml ST Menas",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": "2026-04-14",
+    "to_date": "2026-05-06",
+    "is_inactive": false,
+    "customers": [
+      "KH70000401"
+    ],
+    "items": [
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 62963,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000007",
+    "name": "MR.DIY -CÔNG TY TNHH CÚC TÂY TRADING",
+    "target": "Theo khách hàng cụ thể",
+    "customer_type": "",
+    "from_date": null,
+    "to_date": null,
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00003NC",
+        "product_name": "Nước tinh khiết Satori 500ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 79200,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00081",
+        "product_name": "Nước đóng chai Hikari 500ml",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 63000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00055",
+        "product_name": "Nước ép me SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 266664,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00056",
+        "product_name": "Nước ép mãng cầu SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 266664,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00058",
+        "product_name": "Nước ép ổi hồng SATORI JUICE 24lon/thùng",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 266664,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  },
+  {
+    "code": "CSG0000004",
+    "name": "Giá bán Sacombank Miền ĐNB",
+    "target": "Theo loại khách hàng",
+    "customer_type": "ĐNB",
+    "from_date": "2026-03-01",
+    "to_date": "2026-12-31",
+    "is_inactive": false,
+    "customers": [],
+    "items": [
+      {
+        "product_code": "TP-00001NC",
+        "product_name": "Nước tinh khiết Satori 350ml.",
+        "product_type": "Hàng hóa",
+        "uom": "Thùng",
+        "unit_price": 72000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00096",
+        "product_name": "Nước tinh khiết Satori bình 19L không vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 33000,
+        "discount_type": "Theo %",
+        "discount": 0
+      },
+      {
+        "product_code": "TP-00033",
+        "product_name": "Nước tinh khiết Satori bình 19L có vòi",
+        "product_type": "Hàng hóa",
+        "uom": "Bình",
+        "unit_price": 33000,
+        "discount_type": "Theo %",
+        "discount": 0
+      }
+    ]
+  }
+]
