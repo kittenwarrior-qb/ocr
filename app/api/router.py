@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api import documents, products, partners, templates, mappings, settings, exports, sessions, vouchers, sku_aliases, company_aliases, misa, po_history, contact_aliases
+from app.api import documents, products, partners, templates, mappings, settings, exports, sessions, vouchers, sku_aliases, company_aliases, misa, po_history, contact_aliases, email_orders
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -17,3 +17,4 @@ api_router.include_router(company_aliases.router)
 api_router.include_router(misa.router)
 api_router.include_router(po_history.router)
 api_router.include_router(contact_aliases.router)
+api_router.include_router(email_orders.router)

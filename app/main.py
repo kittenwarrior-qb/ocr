@@ -54,6 +54,39 @@ _MIGRATIONS = [
     "ALTER TABLE processed_orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(100)",
     "ALTER TABLE sys_config ALTER COLUMN config_value TYPE VARCHAR(500)",
     "ALTER TABLE po_history ALTER COLUMN order_id DROP NOT NULL",
+    # email_orders tables — created via create_all, migrations kept for safety
+    """CREATE TABLE IF NOT EXISTS email_orders (
+        id SERIAL PRIMARY KEY,
+        external_id VARCHAR(500) UNIQUE,
+        sender_email VARCHAR(300) NOT NULL,
+        sender_name VARCHAR(300),
+        subject VARCHAR(1000),
+        received_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS email_attachments (
+        id SERIAL PRIMARY KEY,
+        email_id INTEGER NOT NULL REFERENCES email_orders(id) ON DELETE CASCADE,
+        external_attachment_id INTEGER,
+        filename VARCHAR(500) NOT NULL,
+        file_size BIGINT,
+        download_url VARCHAR(1000),
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        converted_at TIMESTAMP,
+        done_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )""",
+    """CREATE TABLE IF NOT EXISTS webhook_logs (
+        id SERIAL PRIMARY KEY,
+        event VARCHAR(100),
+        external_id VARCHAR(500),
+        payload JSONB,
+        status VARCHAR(20) NOT NULL DEFAULT 'received',
+        error TEXT,
+        email_id INTEGER,
+        received_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        processed_at TIMESTAMP
+    )""",
 ]
 
 

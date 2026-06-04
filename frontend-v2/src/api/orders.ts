@@ -60,6 +60,18 @@ export async function uploadExcel(file: File): Promise<ExcelImportResult> {
   return data
 }
 
+/**
+ * Check OCR status for a list of filenames.
+ * Returns a map of filename → "pending" | "processing" | "done" | "failed" | null
+ * null means the file has never been submitted to OCR.
+ */
+export async function checkFilenames(
+  filenames: string[]
+): Promise<Record<string, 'pending' | 'processing' | 'done' | 'failed' | null>> {
+  const { data } = await client.post('/documents/check-filenames', { filenames })
+  return data
+}
+
 export function getImageUrl(rawDocId: string, annotated = false): string {
   const suffix = annotated ? '/annotated-image' : '/image'
   const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')

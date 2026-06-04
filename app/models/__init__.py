@@ -11,6 +11,7 @@ from app.models.sku_alias import SkuAlias
 from app.models.company_alias import CompanyAlias
 from app.models.po_history import POHistory
 from app.models.contact_alias import ContactAlias
+from app.models.email_order import EmailOrder, EmailAttachment, WebhookLog
 
 __all__ = [
     "Base",
@@ -32,4 +33,7 @@ __all__ = [
     "SkuAlias",
     "POHistory",
     "ContactAlias",
+    "EmailOrder",
+    "EmailAttachment",
+    "WebhookLog",
 ]

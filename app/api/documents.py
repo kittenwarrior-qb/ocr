@@ -115,6 +115,30 @@ def get_queue_status():
     return {"queue_pending": queue_pending(), "workers": worker_count()}
 
 
+@router.post("/check-filenames")
+def check_filenames(body: dict, db: Session = Depends(get_db)):
+    """
+    Given a list of filenames, return their latest OCR status in the system.
+    Response: { filename: ocr_status | null }
+    ocr_status values: "pending" | "processing" | "done" | "failed" | null (not found)
+    """
+    filenames: list[str] = body.get("filenames", [])
+    if not filenames:
+        return {}
+    rows = (
+        db.query(RawDocument.file_name, RawDocument.ocr_status)
+        .filter(RawDocument.file_name.in_(filenames))
+        .order_by(RawDocument.upload_date.desc())
+        .all()
+    )
+    # keep only latest status per filename (first hit due to desc order)
+    seen: dict[str, str] = {}
+    for file_name, ocr_status in rows:
+        if file_name not in seen:
+            seen[file_name] = ocr_status
+    return {name: seen.get(name, None) for name in filenames}
+
+
 @router.get("/raw", response_model=list[RawDocumentOut])
 def list_raw_documents(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     return db.query(RawDocument).order_by(RawDocument.upload_date.desc()).offset(skip).limit(limit).all()
