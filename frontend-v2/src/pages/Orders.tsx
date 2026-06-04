@@ -330,24 +330,46 @@ export default function OrdersPage() {
     const order = sessionDetail?.orders.find(o => o.id === orderId)
     if (!order) return
 
-    const giftLines: Partial<SessionLine>[] = []
+    // ── Bước 1: validate TẤT CẢ items trước khi apply ─────────────────────
+    const missing: string[] = []
+    const insufficient: string[] = []
 
-    for (const [idx, item] of voucher.items.entries()) {
-      // Bỏ qua gift lines (overridden), chỉ match dòng hàng thật
+    for (const item of voucher.items) {
       const matchedLine = order.lines.find(l => {
         if (l.mapping_status === 'overridden') return false
         const codes = new Set([l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean))
         return codes.has(item.product_code)
       })
-      if (!matchedLine) continue
-
+      if (!matchedLine) {
+        missing.push(`${item.product_code} - ${item.product_name}`)
+        continue
+      }
       const orderedQty = Number(matchedLine.quantity) || 0
-      if (orderedQty < item.quantity) continue
+      if (orderedQty < item.quantity) {
+        insufficient.push(`${item.product_code} (cần ${item.quantity}, có ${orderedQty})`)
+      }
+    }
 
+    if (missing.length || insufficient.length) {
+      const lines: string[] = []
+      if (missing.length) lines.push(`Thiếu sản phẩm:\n• ${missing.join('\n• ')}`)
+      if (insufficient.length) lines.push(`Chưa đủ số lượng:\n• ${insufficient.join('\n• ')}`)
+      message.error({ content: lines.join('\n\n'), duration: 6 })
+      return
+    }
+
+    // ── Bước 2: build gift lines (tất cả đều đủ điều kiện) ─────────────────
+    const giftLines: Partial<SessionLine>[] = []
+    for (const [idx, item] of voucher.items.entries()) {
+      const matchedLine = order.lines.find(l => {
+        if (l.mapping_status === 'overridden') return false
+        const codes = new Set([l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean))
+        return codes.has(item.product_code)
+      })!
+      const orderedQty = Number(matchedLine.quantity) || 0
       const multiplier = voucher.multiplier ? Math.floor(orderedQty / item.quantity) : 1
       let giftQty = multiplier * item.gift_quantity
       if (item.max_per_order > 0) giftQty = Math.min(giftQty, item.max_per_order)
-      if (giftQty <= 0) continue
 
       giftLines.push({
         id: `gift-${idx}-${item.gift_product_code}`,
@@ -364,12 +386,6 @@ export default function OrdersPage() {
       })
     }
 
-    if (!giftLines.length) {
-      message.warning('Đơn hàng chưa đủ điều kiện áp dụng khuyến mại này')
-      return
-    }
-
-    // Remove existing gift lines from this voucher to avoid duplicates
     const existingCodes = new Set(giftLines.map(l => l.temp_code))
     const cleanLines = order.lines.filter(l =>
       !(l.mapping_status === 'overridden' && existingCodes.has(l.temp_code || l.ocr_product_code || ''))
@@ -986,14 +1002,29 @@ export default function OrdersPage() {
           open
           width={980}
           centered
-          footer={
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>
-              <Button type="primary" onClick={() => handleApplyVoucher(svOrderId, sv)}>
-                Áp dụng khuyến mại
-              </Button>
-            </div>
-          }
+          footer={(() => {
+            const allMet = sv.items?.every(item => {
+              const line = (svOrder?.lines || []).find(l => {
+                if (l.mapping_status === 'overridden') return false
+                const codes = new Set([l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean))
+                return codes.has(item.product_code)
+              })
+              return line && (Number(line.quantity) || 0) >= item.quantity
+            }) ?? false
+            return (
+              <div className="flex justify-end gap-2">
+                <Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>
+                <Button
+                  type="primary"
+                  disabled={!allMet}
+                  title={allMet ? '' : 'Chưa đủ điều kiện — xem các dòng đỏ'}
+                  onClick={() => handleApplyVoucher(svOrderId, sv)}
+                >
+                  Áp dụng khuyến mại
+                </Button>
+              </div>
+            )
+          })()}
           title={<span className="text-slate-800"><TagsOutlined className="mr-2 text-purple-500" />{sv.code} - {sv.name}</span>}
           onCancel={() => setSelectedVoucher(null)}
           styles={{ body: { paddingTop: 12 } }}
