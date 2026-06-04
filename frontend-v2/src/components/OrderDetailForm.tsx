@@ -4,12 +4,25 @@ import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
 
-// Điền đúng tên hiển thị trong MISA CRM (format: "Tên (MãNV)")
-// Kiểm tra tại: MISA CRM → Nhân viên → xem cột Tên
-const DEFAULT_SALESPERSON = ''  // để trống — điền sau khi xác nhận format đúng
-const SALESPERSON_OPTIONS: { value: string; label: string }[] = [
-  // Thêm nhân viên theo format MISA: { value: 'Nguyễn Văn Ân (KM1989)', label: '...' }
-]
+const LS_KEY = 'misa_salesperson'
+const DEFAULT_SALESPERSON = 'Hà Mộng Thúy (KM0139)'
+const SALESPERSON_OPTIONS = [
+  'Đỗ Thị Mỹ Dung (ar-km@satoricompany.vn)',
+  'Hà Mộng Thúy (KM0139)',
+  'Lê Thị Hồng Hân (KM1602)',
+  'Nguyễn Thị Ngọc Thắng (KM0115)',
+  'Nguyễn Thị Tuyến (tuyen.nguyen@satoricompany.vn)',
+  'TRẦN MINH QUỐC (quoc.tran@satoricompany.vn)',
+  'Trần Ngọc Nhi (KM1847)',
+  'Trương Thanh Vũ (ktth@satoricompany.vn)',
+].map(v => ({ value: v, label: v }))
+
+function getSavedSalesperson(): string {
+  try { return localStorage.getItem(LS_KEY) || DEFAULT_SALESPERSON } catch { return DEFAULT_SALESPERSON }
+}
+function saveSalesperson(v: string) {
+  try { localStorage.setItem(LS_KEY, v) } catch {}
+}
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
@@ -193,7 +206,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       setSelectedCustomer(baseData.name || order.recipient_name || '')
       setSelectedCustomerData({
         ...baseData,
-        salesperson: String(extra?.salesperson || DEFAULT_SALESPERSON),
+        salesperson: String(extra?.salesperson || getSavedSalesperson()),
         credit_days: String(extra?.credit_days || ''),
         contact: String(extra?.contact || ''),
       })
@@ -252,7 +265,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     const meta: Record<string, string> = {
       ...buildExtraData(selectedCustomerData),
       order_type: values.order_type || 'Kênh MT',
-      salesperson: selectedCustomerData.salesperson || DEFAULT_SALESPERSON,
+      salesperson: selectedCustomerData.salesperson || getSavedSalesperson(),
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
     }
@@ -352,8 +365,8 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}><Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} /></Form.Item>
           <Form.Item label="Nhân viên bán hàng">
             <Select
-              value={selectedCustomerData.salesperson || DEFAULT_SALESPERSON}
-              onChange={v => setCustField('salesperson', v)}
+              value={selectedCustomerData.salesperson || getSavedSalesperson()}
+              onChange={v => { setCustField('salesperson', v); saveSalesperson(v) }}
               options={SALESPERSON_OPTIONS}
               showSearch
               optionFilterProp="label"
