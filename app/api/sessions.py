@@ -64,7 +64,8 @@ def reopen_session(session_id: UUID, db: Session = Depends(get_db)):
 
 @router.post("/{session_id}/retry")
 def retry_failed(session_id: UUID, db: Session = Depends(get_db)):
-    """Retry all failed documents in a session."""
+    """Retry failed + stuck-pending documents in a session."""
+    import time
     from app.models.document import RawDocument
     from app.services.ocr_queue import enqueue
 
@@ -72,17 +73,25 @@ def retry_failed(session_id: UUID, db: Session = Depends(get_db)):
     if not s:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    from datetime import datetime, timedelta
+    stuck_threshold = datetime.utcnow() - timedelta(minutes=5)
+
     raw_docs = db.query(RawDocument).filter(
         RawDocument.session_id == session_id,
-        RawDocument.ocr_status == "failed",
+        RawDocument.ocr_status.in_(["failed", "pending", "processing"]),
     ).all()
 
     count = 0
     for doc in raw_docs:
-        doc.ocr_status = "pending"
-        doc.ocr_error = None
-        enqueue(doc.id, use_ai=True)
-        count += 1
+        # Retry failed, hoặc pending/processing bị kẹt quá 5 phút
+        if doc.ocr_status == "failed" or (
+            doc.ocr_status in ("pending", "processing")
+            and doc.created_at < stuck_threshold
+        ):
+            doc.ocr_status = "pending"
+            doc.ocr_error = None
+            enqueue(doc.id, use_ai=True)
+            count += 1
     db.commit()
     return {"retried": count}
 

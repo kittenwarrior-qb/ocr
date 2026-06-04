@@ -86,28 +86,31 @@ def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> 
             raw.extracted_data = extracted
             raw.document_type = extracted.get("document_type") or "purchase_order"
 
+        # Build processed document TRƯỚC khi commit "done"
+        # tránh race condition: poll thấy "done" nhưng order chưa có
+        result = _build_processed_document(db, raw, extracted)
+
         raw.ocr_status = "done"
         db.commit()
-
-        # Build processed document
-        result = _build_processed_document(db, raw, extracted)
         return result
 
     except Exception as exc:
-        raw.ocr_status = "failed"
-        # Simplify error message for display
         err_str = str(exc)
-        if "402" in err_str or "Payment Required" in err_str:
-            raw.ocr_error = "API key hết credit. Vào Settings nạp thêm hoặc đổi key."
-        elif "401" in err_str or "Unauthorized" in err_str:
-            raw.ocr_error = "API key không hợp lệ. Vào Settings kiểm tra lại key."
-        elif "429" in err_str or "Too Many Requests" in err_str:
-            raw.ocr_error = "Quá nhiều request. Thử lại sau vài giây."
-        elif "API key chưa" in err_str:
-            raw.ocr_error = err_str
-        else:
-            raw.ocr_error = f"Lỗi OCR: {err_str[:150]}"
-        db.commit()
+        try:
+            raw.ocr_status = "failed"
+            if "402" in err_str or "Payment Required" in err_str:
+                raw.ocr_error = "API key hết credit. Vào Settings nạp thêm hoặc đổi key."
+            elif "401" in err_str or "Unauthorized" in err_str:
+                raw.ocr_error = "API key không hợp lệ. Vào Settings kiểm tra lại key."
+            elif "429" in err_str or "Too Many Requests" in err_str:
+                raw.ocr_error = "Quá nhiều request. Thử lại sau vài giây."
+            elif "API key chưa" in err_str:
+                raw.ocr_error = err_str
+            else:
+                raw.ocr_error = f"Lỗi OCR: {err_str[:150]}"
+            db.commit()
+        except Exception:
+            db.rollback()
         raise
 
 

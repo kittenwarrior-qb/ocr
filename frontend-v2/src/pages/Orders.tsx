@@ -226,7 +226,12 @@ export default function OrdersPage() {
     // Retry nếu server chưa tạo xong session ngay sau upload
     retry: 3,
     retryDelay: 1500,
-    refetchInterval: (query) => { const d = query.state.data; return d && d.processing_count > 0 ? 2000 : false },
+    refetchInterval: (query) => {
+      const d = query.state.data
+      // Poll khi còn processing, hoặc khi file đang upload/xử lý (tránh ngừng poll quá sớm)
+      if (stillProcessingFiles) return 2000
+      return d && d.processing_count > 0 ? 2000 : false
+    },
   })
 
   useEffect(() => { if (sessionDetail && uploadFiles.length > 0) { const done = sessionDetail.orders.map(o => o.file_name); setUploadFiles(prev => prev.map(f => f.status === 'done' || f.status === 'error' ? f : done.includes(f.name) ? { ...f, status: 'done' } : sessionDetail.processing_count > 0 ? { ...f, status: 'processing' } : f)); if (sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) setTimeout(() => setUploadFiles([]), 3000) } }, [sessionDetail])
