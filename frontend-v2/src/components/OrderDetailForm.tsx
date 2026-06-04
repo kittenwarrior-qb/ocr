@@ -4,6 +4,7 @@ import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
 
+// ── Người thực hiện (executor → MISA owner_name) ────────────────────────────
 const LS_KEY = 'misa_salesperson'
 const DEFAULT_SALESPERSON = 'Hà Mộng Thúy (KM0139)'
 const SALESPERSON_OPTIONS = [
@@ -22,6 +23,32 @@ function getSavedSalesperson(): string {
 }
 function saveSalesperson(v: string) {
   try { localStorage.setItem(LS_KEY, v) } catch {}
+}
+
+// ── Nhân viên bán hàng (custom_field4 → MISA) ────────────────────────────────
+const LS_NV_KEY = 'misa_nv_ban_hang'
+const DEFAULT_NV = 'KM1989-Nguyễn Văn Ân'
+const NV_OPTIONS = [
+  'Trần Hữu Thành',
+  'Võ Chí Thông',
+  'KM1989-Nguyễn Văn Ân',
+  'KD0209-Lê Văn Vinh',
+  'KD0045-Nguyễn Đình Việt',
+  'KD0003-Nguyễn Thị Mai Hân',
+  'KM1349-Mai Tiến Hợp',
+  'KD0002-Nguyễn Huỳnh Sơn',
+  'KD0217-Nguyễn Thị Như Thảo',
+  'KM4048-Lê Ngân Vương',
+  'KM1753-Cao Viết Thắng',
+  'KD0092-Đỗ Thành Công',
+  'KM0189-Doãn Thị Ngư',
+].map(v => ({ value: v, label: v }))
+
+function getSavedNV(): string {
+  try { return localStorage.getItem(LS_NV_KEY) || DEFAULT_NV } catch { return DEFAULT_NV }
+}
+function saveNV(v: string) {
+  try { localStorage.setItem(LS_NV_KEY, v) } catch {}
 }
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
@@ -180,6 +207,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData>({})
   const [selectedContactName, setSelectedContactName] = useState('')
+  const [salesperson, setSalesperson] = useState(getSavedNV)
   const [loading, setLoading] = useState(true)
   const [nextNo, setNextNo] = useState('')
 
@@ -214,6 +242,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         contact: String(extra?.contact || ''),
       })
       setSelectedContactName(String(extra?.contact || ''))
+      if (extra?.salesperson) setSalesperson(String(extra.salesperson))
       // Chỉ fill thông tin cho MAPPED lines từ catalog. Pending lines giữ nguyên.
       const allProducts = getProducts()
       const mappedLines = (order.lines || []).map(line => {
@@ -269,6 +298,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       ...buildExtraData(selectedCustomerData),
       order_type: values.order_type || 'Kênh MT',
       executor: selectedCustomerData.salesperson || getSavedSalesperson(),
+      salesperson: salesperson || getSavedNV(),
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
     }
@@ -376,6 +406,16 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
             />
           </Form.Item>
           <Form.Item label="Số ngày được nợ"><Input value={selectedCustomerData.credit_days || ''} onChange={e => setCustField('credit_days', e.target.value)} placeholder="VD: 30" /></Form.Item>
+          <Form.Item label="Nhân viên bán hàng">
+            <Select
+              value={salesperson}
+              onChange={v => { setSalesperson(v); saveNV(v) }}
+              options={NV_OPTIONS}
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn nhân viên bán hàng"
+            />
+          </Form.Item>
         </div>
       </Form>
 
