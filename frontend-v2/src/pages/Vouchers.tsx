@@ -68,12 +68,12 @@ export default function VouchersPage() {
   })()
 
   const columns: ColumnsType<VoucherRow> = [
-    { title: 'Mã CTKM', dataIndex: 'code', width: 120, render: v => <span className="text-blue-600 font-medium font-mono">{v}</span> },
-    { title: 'Tên chương trình', dataIndex: 'name', ellipsis: true },
-    { title: 'Loại', dataIndex: 'type', width: 240, ellipsis: true },
+    { title: 'Mã CTKM', dataIndex: 'code', width: 120, sorter: (a, b) => a.code.localeCompare(b.code), render: v => <span className="text-blue-600 font-medium font-mono">{v}</span> },
+    { title: 'Tên chương trình', dataIndex: 'name', ellipsis: true, sorter: (a, b) => a.name.localeCompare(b.name) },
+    { title: 'Loại', dataIndex: 'type', width: 240, ellipsis: true, sorter: (a, b) => (a.type||'').localeCompare(b.type||'') },
     { title: 'Đối tượng', dataIndex: 'target', width: 170, ellipsis: true },
-    { title: 'KH áp dụng', dataIndex: 'customers', width: 120, render: (v: string[]) => v?.length ? <span className="text-xs font-medium">{v.length} KH</span> : <span className="text-gray-400 text-xs">Tất cả</span> },
-    { title: 'Hiệu lực', width: 190, render: (_, r) => <span className="text-xs">{r.from_date || '—'} → {r.to_date || '—'}</span> },
+    { title: 'KH áp dụng', dataIndex: 'customers', width: 120, sorter: (a, b) => (a.customers?.length||0) - (b.customers?.length||0), render: (v: string[]) => v?.length ? <span className="text-xs font-medium">{v.length} KH</span> : <span className="text-gray-400 text-xs">Tất cả</span> },
+    { title: 'Hiệu lực', width: 190, sorter: (a, b) => (a.from_date||'').localeCompare(b.from_date||''), render: (_, r) => <span className="text-xs">{r.from_date || '—'} → {r.to_date || '—'}</span> },
     { title: 'Trạng thái', dataIndex: 'is_active', width: 110, render: v => v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Dừng</Tag> },
     { title: 'Số SP', dataIndex: 'item_count', width: 70, align: 'center' },
   ]

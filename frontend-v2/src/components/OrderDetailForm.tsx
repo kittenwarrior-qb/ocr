@@ -75,7 +75,7 @@ function applyProductToLine(line: OrderLine, product: Product): OrderLine {
     product_name_original: line.product_name_original || product.name,
     uom_original: line.uom_original || product.uom,
     unit_price: unitPrice,
-    tax_rate: line.tax_rate ?? productTaxRate(product),
+    tax_rate: productTaxRate(product) !== 0 ? productTaxRate(product) : (line.tax_rate ?? 0),
     line_total: line.line_total || (unitPrice && quantity ? unitPrice * quantity : 0),
     mapping_status: 'mapped',
   }
@@ -506,6 +506,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         open={!!activePopup}
         onSelect={handleCustomerContactResult}
         onCancel={() => setActivePopup(null)}
+        initialSearch={selectedCustomer || ''}
       />
 
     </div>

@@ -61,14 +61,14 @@ export default function ChietKhauPage() {
   })()
 
   const columns: ColumnsType<PriceBook> = [
-    { title: 'Mã CSG', dataIndex: 'code', width: 130, render: v => <span className="text-blue-600 font-medium font-mono">{v || '—'}</span> },
-    { title: 'Tên chính sách giá', dataIndex: 'name', ellipsis: true },
-    { title: 'Đối tượng', dataIndex: 'target', width: 180, ellipsis: true },
-    { title: 'Loại KH', dataIndex: 'customer_type', width: 160, ellipsis: true, render: v => v || <span className="text-gray-400">—</span> },
-    { title: 'Từ ngày', dataIndex: 'from_date', width: 100, render: v => v || '—' },
-    { title: 'Đến ngày', dataIndex: 'to_date', width: 100, render: v => v || '—' },
-    { title: 'Trạng thái', dataIndex: 'is_inactive', width: 110, render: v => !v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Dừng</Tag> },
-    { title: 'Số SP', key: 'items', width: 70, align: 'center', render: (_, r) => r.items?.length ?? 0 },
+    { title: 'Mã CSG', dataIndex: 'code', width: 130, sorter: (a, b) => a.code.localeCompare(b.code), render: v => <span className="text-blue-600 font-medium font-mono">{v || '—'}</span> },
+    { title: 'Tên chính sách giá', dataIndex: 'name', ellipsis: true, sorter: (a, b) => a.name.localeCompare(b.name) },
+    { title: 'Đối tượng', dataIndex: 'target', width: 180, ellipsis: true, sorter: (a, b) => a.target.localeCompare(b.target) },
+    { title: 'Loại KH', dataIndex: 'customer_type', width: 160, ellipsis: true, sorter: (a, b) => (a.customer_type||'').localeCompare(b.customer_type||''), render: v => v || <span className="text-gray-400">—</span> },
+    { title: 'Từ ngày', dataIndex: 'from_date', width: 100, sorter: (a, b) => (a.from_date||'').localeCompare(b.from_date||''), render: v => v || '—' },
+    { title: 'Đến ngày', dataIndex: 'to_date', width: 100, sorter: (a, b) => (a.to_date||'').localeCompare(b.to_date||''), render: v => v || '—' },
+    { title: 'Trạng thái', dataIndex: 'is_inactive', width: 110, sorter: (a, b) => Number(a.is_inactive) - Number(b.is_inactive), render: v => !v ? <Tag color="green">Kích hoạt</Tag> : <Tag>Dừng</Tag> },
+    { title: 'Số SP', key: 'items', width: 70, align: 'center', sorter: (a, b) => (a.items?.length||0) - (b.items?.length||0), render: (_, r) => r.items?.length ?? 0 },
   ]
 
   return (

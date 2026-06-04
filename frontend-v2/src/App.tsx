@@ -15,6 +15,7 @@ import {
   SwapOutlined,
   UploadOutlined,
   UserSwitchOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useState } from 'react'
@@ -29,6 +30,7 @@ import ChietKhauPage from './pages/ChietKhau'
 import ProductMappingPage from './pages/ProductMapping'
 import CustomerMappingPage from './pages/CustomerMapping'
 import SettingsPage from './pages/Settings'
+import POHistoryPage from './pages/POHistory'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -48,6 +50,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     { key: '/chiet-khau', label: 'Chiết khấu', icon: <PercentageOutlined /> },
     { key: '/mapping', label: 'Mapping HH', icon: <SwapOutlined /> },
     { key: '/mapping-customer', label: 'Mapping KH', icon: <UserSwitchOutlined /> },
+    { key: '/po-history', label: 'PO History', icon: <HistoryOutlined /> },
     { key: '/settings', label: 'Cài đặt', icon: <SettingOutlined /> },
   ]
 
@@ -100,6 +103,7 @@ function AppLayout() {
           <Route path="/chiet-khau" element={<ChietKhauPage />} />
           <Route path="/mapping" element={<ProductMappingPage />} />
           <Route path="/mapping-customer" element={<CustomerMappingPage />} />
+          <Route path="/po-history" element={<POHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/orders" replace />} />
         </Routes>

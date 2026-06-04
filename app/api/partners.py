@@ -1,3 +1,4 @@
+import unicodedata
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +11,11 @@ from app.schemas.partner import PartnerAddressUpdate, PartnerOut, PartnerUpdate
 from app.services import mapping_service
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
+
+
+def _norm(text: str) -> str:
+    """Normalize Vietnamese: remove diacritics, lowercase."""
+    return unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode().lower()
 
 
 @router.get("", response_model=list[PartnerOut])
@@ -44,11 +50,17 @@ def list_all_customers(
         Partner.is_active == True, Partner.partner_type == "customer"
     )
     if search:
-        q = q.filter(
-            Partner.legal_name.ilike(f"%{search}%")
-            | Partner.code.ilike(f"%{search}%")
-            | Partner.tax_code.ilike(f"%{search}%")
-        )
+        terms = [t for t in [search.strip(), _norm(search)] if t]
+        conditions = []
+        for t in terms:
+            conditions += [
+                Partner.legal_name.ilike(f"%{t}%"),
+                Partner.code.ilike(f"%{t}%"),
+                Partner.tax_code.ilike(f"%{t}%"),
+                Partner.owner.ilike(f"%{t}%"),
+            ]
+        from sqlalchemy import or_
+        q = q.filter(or_(*conditions))
     total = q.count()
     customers = q.order_by(Partner.code).offset(skip).limit(limit).all()
 
@@ -139,12 +151,18 @@ def list_contacts(
     """Return contacts, paginated and searchable."""
     q = db.query(Contact)
     if search:
-        q = q.filter(
-            Contact.name.ilike(f"%{search}%")
-            | Contact.organization.ilike(f"%{search}%")
-            | Contact.phone.ilike(f"%{search}%")
-            | Contact.code.ilike(f"%{search}%")
-        )
+        from sqlalchemy import or_
+        terms = [t for t in [search.strip(), _norm(search)] if t]
+        conditions = []
+        for t in terms:
+            conditions += [
+                Contact.name.ilike(f"%{t}%"),
+                Contact.organization.ilike(f"%{t}%"),
+                Contact.phone.ilike(f"%{t}%"),
+                Contact.email.ilike(f"%{t}%"),
+                Contact.code.ilike(f"%{t}%"),
+            ]
+        q = q.filter(or_(*conditions))
     total = q.count()
     contacts = q.order_by(Contact.name).offset(skip).limit(limit).all()
     customers = db.query(Partner).filter(Partner.is_active == True, Partner.partner_type == "customer").all()

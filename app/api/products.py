@@ -59,12 +59,19 @@ def list_all_products(
     db: Session = Depends(get_db),
 ):
     """Return products paginated for frontend."""
+    import unicodedata
+    from sqlalchemy import or_
+
+    def _norm(t: str) -> str:
+        return unicodedata.normalize("NFD", t).encode("ascii", "ignore").decode().lower()
+
     q = db.query(Product).filter(Product.is_active == True)
     if search:
-        q = q.filter(
-            Product.display_name.ilike(f"%{search}%")
-            | Product.code.ilike(f"%{search}%")
-        )
+        terms = list({search.strip(), _norm(search)} - {""})
+        conditions = []
+        for t in terms:
+            conditions += [Product.display_name.ilike(f"%{t}%"), Product.code.ilike(f"%{t}%")]
+        q = q.filter(or_(*conditions))
     total = q.count()
     rows = q.order_by(Product.code).offset(skip).limit(limit).all()
     return {

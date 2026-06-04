@@ -63,13 +63,13 @@ export default function ProductsPage() {
   }
 
   const columns: ColumnsType<Product> = [
-    { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, fixed: 'left', render: (v: string) => <span className="text-blue-600 font-medium font-mono">{v}</span> },
-    { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true, width: 300 },
-    { title: 'Loại HH', dataIndex: 'product_type', width: 130, ellipsis: true, render: (v: string) => v ? <Tag color="geekblue" className="text-xs">{v}</Tag> : <span className="text-gray-300">—</span> },
-    { title: 'ĐVT', dataIndex: 'uom', width: 80 },
-    { title: 'Đơn giá', dataIndex: 'price', width: 130, align: 'right', render: (v: number) => v ? <span className="font-semibold">{v.toLocaleString('vi-VN')} đ</span> : '—' },
-    { title: 'Thuế', dataIndex: 'tax_rate', width: 70, render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
-    { title: 'Tính chất', dataIndex: 'property', width: 140, ellipsis: true, render: (v: string) => v || '—' },
+    { title: 'Mã hàng hóa', dataIndex: 'code', width: 130, fixed: 'left', sorter: (a, b) => a.code.localeCompare(b.code), render: (v: string) => <span className="text-blue-600 font-medium font-mono">{v}</span> },
+    { title: 'Tên hàng hóa', dataIndex: 'name', ellipsis: true, width: 300, sorter: (a, b) => a.name.localeCompare(b.name) },
+    { title: 'Loại HH', dataIndex: 'product_type', width: 130, ellipsis: true, sorter: (a, b) => (a.product_type||'').localeCompare(b.product_type||''), render: (v: string) => v ? <Tag color="geekblue" className="text-xs">{v}</Tag> : <span className="text-gray-300">—</span> },
+    { title: 'ĐVT', dataIndex: 'uom', width: 80, sorter: (a, b) => a.uom.localeCompare(b.uom) },
+    { title: 'Đơn giá', dataIndex: 'price', width: 130, align: 'right', sorter: (a, b) => a.price - b.price, render: (v: number) => v ? <span className="font-semibold">{v.toLocaleString('vi-VN')} đ</span> : '—' },
+    { title: 'Thuế', dataIndex: 'tax_rate', width: 70, sorter: (a, b) => (a.tax_rate||'').localeCompare(b.tax_rate||''), render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
+    { title: 'Tính chất', dataIndex: 'property', width: 140, ellipsis: true, sorter: (a, b) => (a.property||'').localeCompare(b.property||''), render: (v: string) => v || '—' },
   ]
 
   return (

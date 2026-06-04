@@ -92,49 +92,32 @@ const lineColumns: ColumnsType<OrderLine> = [
   },
 ]
 
+const strSort = (key: keyof SaleOrder) => (a: SaleOrder, b: SaleOrder) => String(a[key]||'').localeCompare(String(b[key]||''))
+const numSort = (key: keyof SaleOrder) => (a: SaleOrder, b: SaleOrder) => (Number(a[key])||0) - (Number(b[key])||0)
+const dateSort = (key: keyof SaleOrder) => (a: SaleOrder, b: SaleOrder) => String(a[key]||'').localeCompare(String(b[key]||''))
+
 const columns: ColumnsType<SaleOrder> = [
-  {
-    title: 'Số ĐH', dataIndex: 'sale_order_no', width: 110, fixed: 'left',
-    render: v => <span className="text-blue-600 font-medium font-mono">{v}</span>,
-  },
-  { title: 'Ngày đặt', dataIndex: 'sale_order_date', width: 100, render: fmt },
-  { title: 'Ngày sổ', dataIndex: 'book_date', width: 100, render: fmt },
-  { title: 'Hạn giao', dataIndex: 'deadline_date', width: 100, render: fmt },
-  {
-    title: 'Mã KH', dataIndex: 'account_code', width: 120,
-    render: v => v ? <span className="text-blue-600 font-mono text-xs">{v}</span> : '—',
-  },
-  { title: 'Khách hàng', dataIndex: 'account_name', width: 200, ellipsis: true },
+  { title: 'Số ĐH', dataIndex: 'sale_order_no', width: 110, fixed: 'left', sorter: strSort('sale_order_no'), render: v => <span className="text-blue-600 font-medium font-mono">{v}</span> },
+  { title: 'Ngày đặt', dataIndex: 'sale_order_date', width: 100, sorter: dateSort('sale_order_date'), render: fmt },
+  { title: 'Ngày sổ', dataIndex: 'book_date', width: 100, sorter: dateSort('book_date'), render: fmt },
+  { title: 'Hạn giao', dataIndex: 'deadline_date', width: 100, sorter: dateSort('deadline_date'), render: fmt },
+  { title: 'Mã KH', dataIndex: 'account_code', width: 120, sorter: strSort('account_code'), render: v => v ? <span className="text-blue-600 font-mono text-xs">{v}</span> : '—' },
+  { title: 'Khách hàng', dataIndex: 'account_name', width: 200, ellipsis: true, sorter: strSort('account_name') },
   { title: 'Mã LH', dataIndex: 'contact_code', width: 100, ellipsis: true, render: v => v || '—' },
-  { title: 'Liên hệ', dataIndex: 'contact_name', width: 150, ellipsis: true },
-  { title: 'Loại ĐH', dataIndex: 'sale_order_type', width: 100, ellipsis: true },
+  { title: 'Liên hệ', dataIndex: 'contact_name', width: 150, ellipsis: true, sorter: strSort('contact_name') },
+  { title: 'Loại ĐH', dataIndex: 'sale_order_type', width: 100, ellipsis: true, sorter: strSort('sale_order_type') },
   { title: 'Diễn giải', dataIndex: 'sale_order_name', ellipsis: true, width: 200 },
-  {
-    title: 'TT đơn hàng', dataIndex: 'status', width: 140,
-    render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—',
-  },
-  {
-    title: 'TT doanh thu', dataIndex: 'revenue_status', width: 140,
-    render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—',
-  },
-  {
-    title: 'TT giao hàng', dataIndex: 'delivery_status', width: 140,
-    render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : <Tag>—</Tag>,
-  },
-  {
-    title: 'TT thanh toán', dataIndex: 'pay_status', width: 140,
-    render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—',
-  },
-  {
-    title: 'Giá trị', dataIndex: 'sale_order_amount', width: 130, align: 'right',
-    render: v => <span className="font-semibold">{fmtN(v)}</span>,
-  },
-  { title: 'Trước thuế', dataIndex: 'to_currency_summary', width: 120, align: 'right', render: fmtN },
-  { title: 'Thuế', dataIndex: 'tax_summary', width: 100, align: 'right', render: fmtN },
-  { title: 'Nhân viên', dataIndex: 'owner_name', width: 160, ellipsis: true },
+  { title: 'TT đơn hàng', dataIndex: 'status', width: 140, sorter: strSort('status'), render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—' },
+  { title: 'TT doanh thu', dataIndex: 'revenue_status', width: 140, sorter: strSort('revenue_status'), render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—' },
+  { title: 'TT giao hàng', dataIndex: 'delivery_status', width: 140, sorter: strSort('delivery_status'), render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : <Tag>—</Tag> },
+  { title: 'TT thanh toán', dataIndex: 'pay_status', width: 140, sorter: strSort('pay_status'), render: v => v ? <Tag color={tagColor(v)}>{v}</Tag> : '—' },
+  { title: 'Giá trị', dataIndex: 'sale_order_amount', width: 130, align: 'right', sorter: numSort('sale_order_amount'), render: v => <span className="font-semibold">{fmtN(v)}</span> },
+  { title: 'Trước thuế', dataIndex: 'to_currency_summary', width: 120, align: 'right', sorter: numSort('to_currency_summary'), render: fmtN },
+  { title: 'Thuế', dataIndex: 'tax_summary', width: 100, align: 'right', sorter: numSort('tax_summary'), render: fmtN },
+  { title: 'Nhân viên', dataIndex: 'owner_name', width: 160, ellipsis: true, sorter: strSort('owner_name') },
   { title: 'Đơn vị', dataIndex: 'organization_unit_name', width: 120, ellipsis: true },
   { title: 'Người tạo', dataIndex: 'created_by', width: 140, ellipsis: true, render: v => v || '—' },
-  { title: 'Ngày tạo', dataIndex: 'created_date', width: 100, render: fmt },
+  { title: 'Ngày tạo', dataIndex: 'created_date', width: 100, sorter: dateSort('created_date'), render: fmt },
 ]
 
 export default function SaleOrdersPage() {

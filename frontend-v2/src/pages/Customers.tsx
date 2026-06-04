@@ -57,17 +57,20 @@ export default function CustomersPage() {
   const columns: ColumnsType<Customer> = [
     {
       title: 'Mã KH', dataIndex: 'code', width: 120, fixed: 'left',
+      sorter: (a, b) => a.code.localeCompare(b.code),
       render: (v: string) => <span className="text-blue-600 font-medium font-mono whitespace-nowrap">{v}</span>,
     },
     {
       title: 'Tên khách hàng', dataIndex: 'name', width: 260,
+      sorter: (a, b) => a.name.localeCompare(b.name),
       render: (v: string) => <span className="font-medium">{v}</span>,
     },
     {
       title: 'Loại KH', dataIndex: 'type', width: 160,
+      sorter: (a, b) => (a.type||'').localeCompare(b.type||''),
       render: (v: string) => v ? <Tag color="blue" className="text-xs whitespace-nowrap">{v}</Tag> : <span className="text-gray-300">—</span>,
     },
-    { title: 'MST', dataIndex: 'tax_code', width: 130, render: (v: string) => v || <span className="text-gray-300">—</span> },
+    { title: 'MST', dataIndex: 'tax_code', width: 130, sorter: (a, b) => (a.tax_code||'').localeCompare(b.tax_code||''), render: (v: string) => v || <span className="text-gray-300">—</span> },
     { title: 'Điện thoại', dataIndex: 'phone', width: 130, render: (v: string) => v || <span className="text-gray-300">—</span> },
     { title: 'Email', dataIndex: 'email', width: 220, render: (v: string) => v || <span className="text-gray-300">—</span> },
     { title: 'Lĩnh vực', dataIndex: 'field', width: 120, render: (v: string) => v || <span className="text-gray-300">—</span> },

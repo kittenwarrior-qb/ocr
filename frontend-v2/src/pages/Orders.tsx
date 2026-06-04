@@ -98,7 +98,7 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
     uom_original: product.uom,
     uom_mapped: product.uom,
     unit_price: unitPrice,
-    tax_rate: line.tax_rate ?? productTaxRate(product),
+    tax_rate: productTaxRate(product) !== 0 ? productTaxRate(product) : (line.tax_rate ?? 0),
     line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
   }
 }
@@ -212,11 +212,20 @@ export default function OrdersPage() {
   const [pricebooksByCustomer, setPricebooksByCustomer] = useState<Record<string, Pricebook[]>>({})
   const [selectedPricebook, setSelectedPricebook] = useState<{ pb: Pricebook; orderId: string } | null>(null)
 
-  const { data: sessions = [], refetch: refetchSessions } = useQuery({ queryKey: ['sessions'], queryFn: getSessions, refetchInterval: uploading ? 3000 : false })
+  // Keep polling sessions while uploading OR while any file is still processing
+  const stillProcessingFiles = uploadFiles.some(f => f.status === 'uploading' || f.status === 'processing')
+  const { data: sessions = [], refetch: refetchSessions } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: getSessions,
+    refetchInterval: uploading || stillProcessingFiles ? 2000 : false,
+  })
   const { data: sessionDetail, refetch: refetchDetail } = useQuery({
     queryKey: ['session-detail', activeSessionId],
     queryFn: () => getSessionDetails(activeSessionId!),
     enabled: !!activeSessionId,
+    // Retry nếu server chưa tạo xong session ngay sau upload
+    retry: 3,
+    retryDelay: 1500,
     refetchInterval: (query) => { const d = query.state.data; return d && d.processing_count > 0 ? 2000 : false },
   })
 
@@ -324,9 +333,11 @@ export default function OrdersPage() {
     const giftLines: Partial<SessionLine>[] = []
 
     for (const item of voucher.items) {
-      const matchedLine = order.lines.find(l =>
-        (l.product_code_mapped || l.ocr_product_code || '') === item.product_code
-      )
+      // Check cả product_code_mapped (đã map) VÀ ocr_product_code (mã gốc từ PDF)
+      const matchedLine = order.lines.find(l => {
+        const codes = new Set([l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean))
+        return codes.has(item.product_code)
+      })
       if (!matchedLine) continue
 
       const orderedQty = Number(matchedLine.quantity) || 0
@@ -875,7 +886,16 @@ export default function OrdersPage() {
         onSelect={result => { if (selectedOrderId) handleCustomerContactSelect(selectedOrderId, result) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }}
         initialTab={customerPopupInitialTab}
-        initialSearch={(() => { const o = sessionDetail?.orders.find(x => x.id === selectedOrderId); return o?.partner_name || o?.recipient_name || '' })()}
+        initialSearch={(() => {
+          const o = sessionDetail?.orders.find(x => x.id === selectedOrderId)
+          if (!o) return ''
+          if (customerPopupInitialTab === 'customer') {
+            // Ưu tiên: tên KH đã chọn → mã KH đã chọn → tên công ty từ OCR
+            return o.extra_data?.customer_name || o.extra_data?.customer_code || o.ocr_company_name || o.partner_name || ''
+          }
+          // Tab liên hệ: dùng tên LH đã chọn → tên người nhận từ OCR
+          return o.extra_data?.contact || o.ocr_recipient_name || o.recipient_name || ''
+        })()}
       />
 
       {/* Detail Modal */}
@@ -951,9 +971,14 @@ export default function OrdersPage() {
       {selectedVoucher && (() => {
         const { voucher: sv, orderId: svOrderId } = selectedVoucher
         const svOrder = sessionDetail?.orders.find(o => o.id === svOrderId)
-        const orderProductQty = new Map(
-          (svOrder?.lines || []).map(l => [l.product_code_mapped || l.ocr_product_code || '', Number(l.quantity) || 0])
-        )
+        // Index cả mapped code lẫn ocr code để match được dù user đã remap
+        const orderProductQty = new Map<string, number>()
+        for (const l of svOrder?.lines || []) {
+          const qty = Number(l.quantity) || 0
+          for (const code of [l.product_code_mapped, l.ocr_product_code, l.temp_code].filter(Boolean) as string[]) {
+            if (!orderProductQty.has(code)) orderProductQty.set(code, qty)
+          }
+        }
         return (
         <Modal
           open

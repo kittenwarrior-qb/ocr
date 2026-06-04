@@ -9,6 +9,7 @@ from app.models.document import RawDocument, ProcessedOrder, OrderLine, Processe
 from app.models.contact import Contact
 from app.models.sku_alias import SkuAlias
 from app.models.company_alias import CompanyAlias
+from app.models.po_history import POHistory
 
 __all__ = [
     "Base",
@@ -28,4 +29,5 @@ __all__ = [
     "BillLine",
     "Contact",
     "SkuAlias",
+    "POHistory",
 ]

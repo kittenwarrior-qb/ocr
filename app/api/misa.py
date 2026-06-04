@@ -319,6 +319,21 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    # ── Kiểm tra PO number trùng ────────────────────────────────────────────
+    if order.po_number:
+        from app.models.po_history import POHistory
+        existing_po = db.query(POHistory).filter(POHistory.po_number == order.po_number.strip()).first()
+        if existing_po:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Số PO '{order.po_number}' đã được đẩy lên MISA trước đó"
+                    + (f" (Đơn {existing_po.sale_order_no})" if existing_po.sale_order_no else "")
+                    + (f" cho KH {existing_po.customer_name or existing_po.customer_code}" if existing_po.customer_code else "")
+                    + ". Xóa bản ghi trong PO History nếu muốn đẩy lại."
+                ),
+            )
+
     # ── Auto-increment DH number ────────────────────────────────────────────
     try:
         all_orders = misa_cache.get_or_fetch('sale_orders', misa_client.list_sale_orders)
@@ -398,12 +413,29 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
         "sale_order_amount": sale_order_amount,
         "liquidate_amount": sale_order_amount,
         "sale_order_product_mappings": lines_payload,
+        "custom_field3": order.po_number or "",
     }
 
     try:
         result = misa_client.create_sale_orders([payload])
         misa_cache.invalidate('sale_orders')
+
+        # ── Ghi PO history sau khi push thành công ──────────────────────────
+        if order.po_number:
+            from app.models.po_history import POHistory
+            meta_data: dict = order.extra_data or {}
+            db.add(POHistory(
+                po_number=order.po_number.strip(),
+                order_id=order.id,
+                customer_code=meta_data.get("customer_code") or (partner.code if partner else None),
+                customer_name=meta_data.get("customer_name") or (partner.legal_name if partner else None),
+                sale_order_no=next_no,
+            ))
+            db.commit()
+
         return {**result, "sale_order_no": next_no}
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except RuntimeError as e:
