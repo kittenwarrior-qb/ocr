@@ -208,7 +208,7 @@ def export_session_excel(db: Session, session_id: UUID) -> bytes:
             order.order_number or "",                                    # 4  Số đơn hàng
             order_date_str,                                             # 5  Ngày đặt hàng
             order.po_number or "",                                      # 6  Số PO
-            meta.get("salesperson") or "KM-1989 Nguyễn Văn Ân",           # 7  Nhân viên bán hàng (*)
+            meta.get("salesperson", "KM1989-Nguyễn Văn Ân"),                # 7  Nhân viên bán hàng (mặc định)
             customer_code,                                              # 8  Khách hàng
             meta.get("contact", ""),                                    # 9  Liên hệ
             meta.get("parent_order", ""),                               # 10 Đơn hàng cha

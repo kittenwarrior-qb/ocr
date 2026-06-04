@@ -206,7 +206,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       setSelectedCustomer(baseData.name || order.recipient_name || '')
       setSelectedCustomerData({
         ...baseData,
-        salesperson: String(extra?.salesperson || getSavedSalesperson()),
+        salesperson: String(extra?.executor || getSavedSalesperson()),
         credit_days: String(extra?.credit_days || ''),
         contact: String(extra?.contact || ''),
       })
@@ -265,7 +265,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     const meta: Record<string, string> = {
       ...buildExtraData(selectedCustomerData),
       order_type: values.order_type || 'Kênh MT',
-      salesperson: selectedCustomerData.salesperson || getSavedSalesperson(),
+      executor: selectedCustomerData.salesperson || getSavedSalesperson(),
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
     }
@@ -363,7 +363,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
           <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
           <Form.Item label={<>Tình trạng <span className="text-red-500">*</span></>}><Select defaultValue="not_done" options={[{ value: 'not_done', label: 'Chưa thực hiện' }, { value: 'in_progress', label: 'Đang thực hiện' }, { value: 'done', label: 'Hoàn thành' }]} /></Form.Item>
-          <Form.Item label="Nhân viên bán hàng">
+          <Form.Item label="Người thực hiện">
             <Select
               value={selectedCustomerData.salesperson || getSavedSalesperson()}
               onChange={v => { setCustField('salesperson', v); saveSalesperson(v) }}

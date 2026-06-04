@@ -225,7 +225,7 @@ def _export_order_misa_template(db, order, partner, address):
         order.order_number or "",                                   # 1  So don hang
         order_date_str,                                             # 2  Ngay dat hang
         order.po_number or "",                                      # 3  So PO
-        meta.get("salesperson", ""),                                # 4  Nhan vien ban hang
+        meta.get("salesperson", "KM1989-Nguyễn Văn Ân"),             # 4  Nhan vien ban hang (mac dinh)
         customer_code,                                              # 5  Khach hang (ma tu customers.json)
         meta.get("contact", ""),                                    # 6  Lien he
         meta.get("parent_order", ""),                               # 7  Don hang cha
@@ -266,7 +266,7 @@ def _export_order_misa_template(db, order, partner, address):
         meta.get("delivery_address", addr_text),                    # 42 Dia chi (Giao hang)
         meta.get("note_description", ""),                           # 43 Mo ta
         meta.get("invoice_note", ""),                               # 44 Ghi chu Hoa don
-        meta.get("executor", ""),                                   # 45 Nguoi thuc hien
+        meta.get("executor", ""),                                   # 45 Nguoi thuc hien (dropdown NV)
         meta.get("shared", ""),                                     # 46 Dung chung
         "",                                                         # 47 Ngung theo doi
         meta.get("referral_partner", ""),                           # 48 Doi tac/CTV gioi thieu
