@@ -11,6 +11,7 @@ import {
   UserOutlined,
   LoadingOutlined,
   FilePdfOutlined,
+  FileExcelOutlined,
   CloseCircleOutlined,
   CloseOutlined,
   HistoryOutlined,
@@ -55,6 +56,13 @@ function getConfidence(line: SessionLine): { level: Confidence; suggestion: Prod
 }
 const DOT_COLORS: Record<Confidence, string> = { confirmed: 'bg-emerald-500', suggest: 'bg-emerald-500', medium: 'bg-yellow-400', low: 'bg-red-400', none: 'bg-gray-300' }
 const DOT_TIPS: Record<Confidence, string> = { confirmed: 'Đã xác nhận', suggest: 'Gợi ý tốt — bấm ✓ để xác nhận nhanh', medium: 'Gợi ý cần xem lại — bấm Xác nhận', low: 'Không tìm thấy — chọn thủ công', none: 'Không có gợi ý' }
+
+function FileIcon({ name, className }: { name?: string | null; className?: string }) {
+  const isExcel = /\.(xlsx|xls)$/i.test(name || '')
+  return isExcel
+    ? <FileExcelOutlined className={className || 'text-green-400'} />
+    : <FilePdfOutlined className={className || 'text-red-400'} />
+}
 
 function isSystemLine(line: Partial<SessionLine>): boolean {
   return line.mapping_status === 'overridden'
@@ -612,7 +620,7 @@ export default function OrdersPage() {
           </div>
         </div>
         {stagedFiles.map((f, i) => (<div key={i} className="flex items-center gap-3 px-4 py-2 border-b border-gray-50 last:border-0">
-          <FilePdfOutlined className="text-red-400" />
+          <FileIcon name={f.name} />
           <span className="flex-1 text-sm text-gray-700 truncate">{f.name}</span>
           <span className="text-xs text-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
           <button className="text-xs text-red-400 hover:text-red-600" onClick={e => { e.stopPropagation(); handleRemoveStaged(f.name) }}><CloseCircleOutlined /></button>
@@ -701,7 +709,7 @@ export default function OrdersPage() {
                   {/* Header — navy accent */}
                   <div className="px-4 py-2.5 bg-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <FilePdfOutlined className="text-red-300 text-base" />
+                      <FileIcon name={order.file_name} className={/\.(xlsx|xls)$/i.test(order.file_name||'') ? 'text-green-300 text-base' : 'text-red-300 text-base'} />
                       <span className="text-sm font-bold text-white">{order.file_name}</span>
                       <span className="text-xs text-slate-300 ml-2">{order.order_number || ''}</span>
                       {(() => { const ok = order.pending_count === 0 && hasMappedCustomer(order); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; if (!hasMappedCustomer(order)) return <Tag color="warning" className="text-xs ml-2">Chưa chọn KH</Tag>; return null })()}
@@ -939,8 +947,8 @@ export default function OrdersPage() {
           <aside className="xl:sticky xl:top-4 rounded-lg border border-slate-300 bg-white shadow overflow-hidden">
             <div className="h-11 px-3 border-b border-slate-200 flex items-center justify-between bg-slate-700">
               <div className="min-w-0 flex items-center gap-2">
-                <FilePdfOutlined className="text-red-300" />
-                <span className="text-sm font-semibold text-white truncate">{previewPanelOrder?.file_name || 'PDF'}</span>
+                <FileIcon name={previewPanelOrder?.file_name} className={/\.(xlsx|xls)$/i.test(previewPanelOrder?.file_name||'') ? 'text-green-300' : 'text-red-300'} />
+                <span className="text-sm font-semibold text-white truncate">{previewPanelOrder?.file_name || 'File'}</span>
               </div>
               <Button size="small" icon={<ArrowsAltOutlined />} disabled={!previewPanelOrder} onClick={() => previewPanelOrder && setPreviewOrder(previewPanelOrder)}>Phóng to</Button>
             </div>
@@ -970,7 +978,7 @@ export default function OrdersPage() {
       {/* History Tab */}
       {activeTab === 'history' && (<div className="space-y-2">
         {sessions.map(s => (<div key={s.id} className={`bg-white rounded-lg border px-4 py-3 flex items-center justify-between cursor-pointer transition-colors ${s.id === activeSessionId ? 'border-slate-400 bg-slate-50' : 'border-slate-200 hover:bg-slate-50'}`} onClick={() => { setActiveSessionId(s.id); setActiveTab('current') }}>
-          <div className="flex items-center gap-3"><FilePdfOutlined className="text-red-400" /><span className="text-sm font-semibold text-slate-800">{s.name}</span><span className="text-xs text-slate-400">{s.doc_count} file</span>{s.done_count < s.doc_count ? <Tag color="processing" className="text-xs">OCR</Tag> : <Tag color="success" className="text-xs">Xong</Tag>}</div>
+          <div className="flex items-center gap-3"><FileIcon name={s.name} /><span className="text-sm font-semibold text-slate-800">{s.name}</span><span className="text-xs text-slate-400">{s.doc_count} file</span>{s.done_count < s.doc_count ? <Tag color="processing" className="text-xs">OCR</Tag> : <Tag color="success" className="text-xs">Xong</Tag>}</div>
           <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{new Date(s.created_at).toLocaleDateString('vi-VN')}</span>{s.done_count === s.doc_count && <Button size="small" icon={<ExportOutlined />} onClick={e => { e.stopPropagation(); handleExport(s.id) }}>Excel</Button>}</div>
         </div>))}
         {sessions.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">Chưa có lịch sử</div>}

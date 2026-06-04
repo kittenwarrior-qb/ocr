@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Spin, Select } from 'antd'
 import * as XLSX from 'xlsx'
-import client from '@/api/client'
 
 interface Props {
   url: string
@@ -20,10 +19,11 @@ export default function ExcelPreview({ url, fileName }: Props) {
     setLoading(true)
     setError('')
 
-    // Fetch the file as binary
-    client.get(url, { responseType: 'arraybuffer' })
-      .then(res => {
-        const wb = XLSX.read(res.data, { type: 'array' })
+    // Fetch the file as binary — dùng fetch trực tiếp (không qua axios baseURL)
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.arrayBuffer() })
+      .then(buf => {
+        const wb = XLSX.read(buf, { type: 'array' })
         const result: Record<string, string[][]> = {}
         for (const name of wb.SheetNames) {
           const ws = wb.Sheets[name]
@@ -33,7 +33,7 @@ export default function ExcelPreview({ url, fileName }: Props) {
         setSheetNames(wb.SheetNames)
         setActiveSheet(wb.SheetNames[0] || '')
       })
-      .catch(() => setError('Không thể tải file Excel'))
+      .catch(e => setError(`Không thể tải file Excel: ${e.message}`))
       .finally(() => setLoading(false))
   }, [url])
 
