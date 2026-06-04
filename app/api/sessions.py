@@ -158,6 +158,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "raw_document_id": str(order.raw_document_id),
             "file_name": raw_doc.file_name if raw_doc else None,
             "order_number": order.order_number,
+            "po_number": order.po_number or None,
             "order_date": str(order.order_date) if order.order_date else None,
             "delivery_date": str(order.delivery_date) if order.delivery_date else None,
             "total_amount": float(order.total_amount) if order.total_amount else None,

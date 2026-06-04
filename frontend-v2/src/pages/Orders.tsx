@@ -35,6 +35,7 @@ import { matchCustomer, type Customer } from '@/utils/customerMatcher'
 import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
 import SelectPopup from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
+import ContactSelectPopup from '@/components/ContactSelectPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
 import { fetchVouchersForCustomers, type Voucher } from '@/api/vouchers'
 import { fetchPricebooksForCustomers, type Pricebook } from '@/api/pricebooks'
@@ -196,6 +197,7 @@ export default function OrdersPage() {
   const [selectedLine, setSelectedLine] = useState<SessionLine | null>(null)
   const [productTargetOrderId, setProductTargetOrderId] = useState<string | null>(null)
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
+  const [contactModalOpen, setContactModalOpen] = useState(false)
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [customerPopupInitialTab, setCustomerPopupInitialTab] = useState<'customer' | 'contact'>('customer')
   const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -682,6 +684,7 @@ export default function OrdersPage() {
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs">
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Tên công ty:</span><span className="text-slate-800 font-semibold">{order.ocr_company_name || order.recipient_name || <span className="text-red-500 italic font-normal">Chưa nhận diện</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày đặt:</span><span className="text-slate-800">{order.order_date || <span className="text-red-500 italic font-normal">Chưa có</span>}</span></div>
+                      <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Số PO:</span><span className="text-slate-700 font-mono">{order.po_number || <span className="text-slate-300">—</span>}</span></div>
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ:</span><span className="text-slate-700">{order.ocr_company_address || order.ocr_delivery_address || order.delivery_address || '\u2014'}</span></div>
                       {order.ocr_delivery_address && <div className="flex col-span-2"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Địa chỉ giao:</span><span className="text-slate-700">{order.ocr_delivery_address}</span></div>}
                       <div className="flex"><span className="text-slate-500 w-24 flex-shrink-0 font-medium">Ngày giao:</span><span className="text-slate-700">{order.delivery_date || '\u2014'}</span></div>
@@ -763,7 +766,7 @@ export default function OrdersPage() {
                           </tbody></table>
                           <div className="flex gap-2 shrink-0">
                             <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Đổi KH</Button>
-                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('contact'); setCustomerModalOpen(true) }}>{order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}</Button>
+                            <Button size="small" onClick={() => { setSelectedOrderId(order.id); setContactModalOpen(true) }}>{order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}</Button>
                           </div>
                         </div>
                       )
@@ -780,7 +783,7 @@ export default function OrdersPage() {
                           <div className="flex gap-2 shrink-0"><Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => handleSelectCustomer(order.id, sugg[0].customer)}>Xác nhận</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Chọn khác</Button></div>
                         </div>
                       )
-                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('contact'); setCustomerModalOpen(true) }}>Chọn liên hệ</Button></div>
+                      return <div className="flex items-center gap-3"><span className="text-sm text-red-600 font-medium">Không tìm thấy KH phù hợp</span><Button size="small" type="primary" icon={<SearchOutlined />} onClick={() => { setSelectedOrderId(order.id); setCustomerPopupInitialTab('customer'); setCustomerModalOpen(true) }}>Tìm & chọn KH</Button><Button size="small" onClick={() => { setSelectedOrderId(order.id); setContactModalOpen(true) }}>Chọn liên hệ</Button></div>
                     })()}
                   </div>
 
@@ -920,24 +923,34 @@ export default function OrdersPage() {
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
         initialSearch={selectedLine ? getProductSearchHint(selectedLine) : ''} />
 
-      {/* Customer + Contact Popup */}
+      {/* Customer Popup — chỉ chọn KH */}
       <CustomerContactPopup
         open={customerModalOpen}
         onSelect={result => { if (selectedOrderId) handleCustomerContactSelect(selectedOrderId, result) }}
         onCancel={() => { setCustomerModalOpen(false); setSelectedOrderId(null) }}
-        initialTab={customerPopupInitialTab}
+        initialTab="customer"
         initialSearch={(() => {
           const o = sessionDetail?.orders.find(x => x.id === selectedOrderId)
           if (!o) return ''
-          if (customerPopupInitialTab === 'customer') {
-            // Chỉ pre-fill nếu đã từng chọn KH trước đó (có customer_code)
-            return o.extra_data?.customer_code
-              ? (o.extra_data?.customer_name || o.extra_data?.customer_code)
-              : ''
-          }
-          // Chỉ pre-fill nếu đã từng chọn liên hệ trước đó
-          return o.extra_data?.contact || ''
+          return o.extra_data?.customer_code
+            ? (o.extra_data?.customer_name || o.extra_data?.customer_code)
+            : ''
         })()}
+      />
+
+      {/* Contact Popup — chỉ chọn LH, tách riêng */}
+      <ContactSelectPopup
+        open={contactModalOpen}
+        onSelect={(contact, matchedCustomer) => {
+          if (!selectedOrderId) return
+          const result: CustomerContactResult = matchedCustomer
+            ? { type: 'contact', contact, customer: matchedCustomer as any }
+            : { type: 'contact', contact, customer: null }
+          handleCustomerContactSelect(selectedOrderId, result)
+          setContactModalOpen(false)
+          setSelectedOrderId(null)
+        }}
+        onCancel={() => { setContactModalOpen(false); setSelectedOrderId(null) }}
       />
 
       {/* Detail Modal */}

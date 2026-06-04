@@ -110,6 +110,7 @@ export interface SessionOrder {
   raw_document_id: string
   file_name: string | null
   order_number: string | null
+  po_number: string | null
   order_date: string | null
   delivery_date: string | null
   total_amount: number | null
