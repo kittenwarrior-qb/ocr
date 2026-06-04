@@ -99,8 +99,13 @@ export default function CustomerContactPopup({ open, onSelect, onCancel, initial
   const cont = useTableData<Contact>(open && activeTab === 'contact', fetchContacts, initialSearch)
 
   useEffect(() => {
-    if (open) setActiveTab(initialTab)
-    else { setSelectedCustomer(null); setSelectedContact(null); setActiveTab(initialTab) }
+    if (open) {
+      setActiveTab(initialTab)  // chỉ set khi mở, theo đúng tab được yêu cầu
+    } else {
+      setSelectedCustomer(null)
+      setSelectedContact(null)
+      // KHÔNG reset tab ở đây — giữ nguyên để lần sau mở theo initialTab từ parent
+    }
   }, [open, initialTab])
 
   const handleOk = () => {

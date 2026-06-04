@@ -109,6 +109,9 @@ function contactToCustomerData(contact: Contact, matchedCustomer: CustomerData |
     contact_code: contact.code,
     contact_phone: contact.phone || contact.phone_work || '',
     contact_email: contact.email || contact.email_personal || '',
+    // Người mua hàng = tên liên hệ được chọn
+    owner: contact.name,
+    invoice_buyer: contact.name,
     ...(addr && !matchedCustomer ? { invoice_address: addr, delivery_address: addr } : {}),
     ...(contact.city && !matchedCustomer ? { invoice_city: contact.city } : {}),
   }
@@ -126,7 +129,7 @@ function toCustomerData(record?: Record<string, unknown> | null): CustomerData |
   const invoiceAddress = value('invoice_address') || value('invoice_street')
   const deliveryAddress = value('delivery_address') || value('delivery_street') || invoiceAddress
   const name = value('name') || value('customer_name') || value('invoice_customer')
-  const owner = value('owner') || value('customer_owner') || value('invoice_buyer')
+  const owner = value('invoice_buyer') || ''
   const phone = value('phone') || value('customer_phone') || value('delivery_phone')
   return {
     code: value('code') || value('customer_code'),
@@ -161,7 +164,7 @@ function buildExtraData(customer: CustomerData): Record<string, string> {
     customer_phone: customer.phone || '',
     customer_owner: customer.owner || '',
     invoice_customer: customer.name || '',
-    invoice_buyer: customer.name || '',
+    invoice_buyer: customer.owner || '',
     invoice_street: customer.invoice_address || '',
     delivery_receiver: customer.delivery_receiver || customer.owner || '',
     delivery_phone: customer.delivery_phone || customer.phone || '',

@@ -235,7 +235,12 @@ export default function OrdersPage() {
   })
 
   useEffect(() => { if (sessionDetail && uploadFiles.length > 0) { const done = sessionDetail.orders.map(o => o.file_name); setUploadFiles(prev => prev.map(f => f.status === 'done' || f.status === 'error' ? f : done.includes(f.name) ? { ...f, status: 'done' } : sessionDetail.processing_count > 0 ? { ...f, status: 'processing' } : f)); if (sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) setTimeout(() => setUploadFiles([]), 3000) } }, [sessionDetail])
-  useEffect(() => { if (sessionDetail && sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) refetchSessions() }, [sessionDetail?.processing_count, sessionDetail?.done_count])
+  useEffect(() => {
+    if (sessionDetail && sessionDetail.processing_count === 0 && sessionDetail.done_count > 0) {
+      refetchSessions()
+      refetchDetail()  // fetch lại để có no_order_docs sau khi OCR xong
+    }
+  }, [sessionDetail?.processing_count, sessionDetail?.done_count])
   useEffect(() => { if (sessions.length > 0 && !activeSessionId) setActiveSessionId(sessions[0].id) }, [sessions, activeSessionId])
   const [catalogReady, setCatalogReady] = useState(false)
   useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
@@ -925,11 +930,13 @@ export default function OrdersPage() {
           const o = sessionDetail?.orders.find(x => x.id === selectedOrderId)
           if (!o) return ''
           if (customerPopupInitialTab === 'customer') {
-            // Ưu tiên: tên KH đã chọn → mã KH đã chọn → tên công ty từ OCR
-            return o.extra_data?.customer_name || o.extra_data?.customer_code || o.ocr_company_name || o.partner_name || ''
+            // Chỉ pre-fill nếu đã từng chọn KH trước đó (có customer_code)
+            return o.extra_data?.customer_code
+              ? (o.extra_data?.customer_name || o.extra_data?.customer_code)
+              : ''
           }
-          // Tab liên hệ: dùng tên LH đã chọn → tên người nhận từ OCR
-          return o.extra_data?.contact || o.ocr_recipient_name || o.recipient_name || ''
+          // Chỉ pre-fill nếu đã từng chọn liên hệ trước đó
+          return o.extra_data?.contact || ''
         })()}
       />
 
