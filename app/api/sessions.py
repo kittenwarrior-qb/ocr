@@ -207,6 +207,14 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         for d in raw_docs if d.ocr_status == "failed"
     ]
 
+    # Docs đã OCR xong nhưng không tạo được đơn hàng (phiếu GH, sai format...)
+    order_raw_ids = {o["raw_document_id"] for o in orders_out}
+    no_order_docs = [
+        {"id": str(d.id), "file_name": d.file_name}
+        for d in raw_docs
+        if d.ocr_status == "done" and str(d.id) not in order_raw_ids
+    ]
+
     return {
         "id": str(s.id),
         "name": s.name,
@@ -217,6 +225,7 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         "done_count": done_count,
         "failed_count": failed_count,
         "failed_docs": failed_docs,
+        "no_order_docs": no_order_docs,
         "total_products": total_products,
         "total_unmapped": total_unmapped,
         "orders": orders_out,

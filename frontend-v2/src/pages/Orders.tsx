@@ -849,6 +849,19 @@ export default function OrdersPage() {
                 </div>
               ))}
               {sessionDetail.orders.length === 0 && sessionDetail.processing_count > 0 && <div className="py-10 text-center text-gray-400"><LoadingOutlined spin className="text-3xl mb-2 block" /><p className="text-sm">Đang xử lý OCR...</p></div>}
+
+              {/* Files đã OCR xong nhưng không tạo được đơn */}
+              {((sessionDetail as any).no_order_docs || []).map((doc: any) => (
+                <div key={doc.id} className="border border-amber-200 rounded-lg bg-amber-50 px-4 py-3 flex items-start gap-3">
+                  <WarningOutlined className="text-amber-500 text-base mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-800 truncate">{doc.file_name}</p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      OCR hoàn tất nhưng không tạo được đơn hàng — file có thể là phiếu giao hàng, báo giá hoặc định dạng chưa hỗ trợ.
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <aside className="xl:sticky xl:top-4 rounded-lg border border-slate-300 bg-white shadow overflow-hidden">
