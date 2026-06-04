@@ -19,6 +19,7 @@ import {
   DeleteOutlined,
   TagsOutlined,
   CloudUploadOutlined,
+  GiftOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -207,7 +208,7 @@ export default function OrdersPage() {
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [vouchersByCustomer, setVouchersByCustomer] = useState<Record<string, Voucher[]>>({})
-  const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null)
+  const [selectedVoucher, setSelectedVoucher] = useState<{ voucher: Voucher; orderId: string } | null>(null)
   const [pricebooksByCustomer, setPricebooksByCustomer] = useState<Record<string, Pricebook[]>>({})
   const [selectedPricebook, setSelectedPricebook] = useState<{ pb: Pricebook; orderId: string } | null>(null)
 
@@ -314,6 +315,57 @@ export default function OrdersPage() {
     const matched = newLines.filter(l => pbMap.has(l.product_code_mapped || l.ocr_product_code || '')).length
     message.success(`Đã áp dụng giá chiết khấu cho ${matched} sản phẩm`)
     setSelectedPricebook(null)
+  }
+
+  const handleApplyVoucher = async (orderId: string, voucher: Voucher) => {
+    const order = sessionDetail?.orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const giftLines: Partial<SessionLine>[] = []
+
+    for (const item of voucher.items) {
+      const matchedLine = order.lines.find(l =>
+        (l.product_code_mapped || l.ocr_product_code || '') === item.product_code
+      )
+      if (!matchedLine) continue
+
+      const orderedQty = Number(matchedLine.quantity) || 0
+      if (orderedQty < item.quantity) continue
+
+      const multiplier = voucher.multiplier ? Math.floor(orderedQty / item.quantity) : 1
+      let giftQty = multiplier * item.gift_quantity
+      if (item.max_per_order > 0) giftQty = Math.min(giftQty, item.max_per_order)
+      if (giftQty <= 0) continue
+
+      giftLines.push({
+        id: `gift-${item.gift_product_code}-${Date.now()}`,
+        temp_code: item.gift_product_code,
+        product_name_original: `[Tặng] ${item.gift_product_name}`,
+        ocr_product_code: item.gift_product_code,
+        product_code_mapped: item.gift_product_code,
+        uom_original: item.gift_uom,
+        quantity: giftQty,
+        unit_price: 0,
+        line_total: 0,
+        tax_rate: 0,
+        mapping_status: 'overridden',
+      })
+    }
+
+    if (!giftLines.length) {
+      message.warning('Đơn hàng chưa đủ điều kiện áp dụng khuyến mại này')
+      return
+    }
+
+    // Remove existing gift lines from this voucher to avoid duplicates
+    const existingCodes = new Set(giftLines.map(l => l.temp_code))
+    const cleanLines = order.lines.filter(l =>
+      !(l.mapping_status === 'overridden' && existingCodes.has(l.temp_code || l.ocr_product_code || ''))
+    )
+
+    await saveOrderLines(order, [...cleanLines, ...giftLines])
+    message.success(`Đã thêm ${giftLines.length} dòng tặng hàng`)
+    setSelectedVoucher(null)
   }
 
   const handleMapProduct = async (line: SessionLine, product: Product) => {
@@ -605,23 +657,18 @@ export default function OrdersPage() {
                           <div className="col-span-2 flex items-start gap-2 pt-1 min-w-0">
                             <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Voucher:</span>
                             <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
-                              {vouchers.map((v, idx) => {
-                                const cls = idx % 2 === 0
-                                  ? 'bg-purple-600 border-purple-600 text-white hover:bg-purple-700'
-                                  : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'
-                                return (
-                                  <button
-                                    key={v.code}
-                                    className={`inline-flex max-w-[260px] items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors ${cls}`}
-                                    onClick={e => { e.stopPropagation(); setSelectedVoucher(v) }}
-                                    title={v.name}
-                                  >
-                                    <TagsOutlined className="shrink-0" />
-                                    <span className="font-mono shrink-0">{v.code}</span>
-                                    <span className="truncate">{v.name}</span>
-                                  </button>
-                                )
-                              })}
+                              {vouchers.map(v => (
+                                <button
+                                  key={v.code}
+                                  className="inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold border border-purple-400 text-purple-700 hover:bg-purple-50 transition-colors"
+                                  onClick={e => { e.stopPropagation(); setSelectedVoucher({ voucher: v, orderId: order.id }) }}
+                                  title={v.name}
+                                >
+                                  <TagsOutlined className="shrink-0" />
+                                  <span className="font-mono shrink-0">{v.code}</span>
+                                  <span className="truncate">{v.name}</span>
+                                </button>
+                              ))}
                             </div>
                           </div>
                         )
@@ -637,23 +684,18 @@ export default function OrdersPage() {
                           <div className="col-span-2 flex items-start gap-2 pt-1 min-w-0">
                             <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Chiết khấu:</span>
                             <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
-                              {applicable.map((pb, idx) => {
-                                const cls = idx % 2 === 0
-                                  ? 'bg-orange-600 border-orange-600 text-white hover:bg-orange-700'
-                                  : 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
-                                return (
-                                  <button
-                                    key={pb.code}
-                                    className={`inline-flex max-w-[260px] items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors ${cls}`}
-                                    onClick={e => { e.stopPropagation(); setSelectedPricebook({ pb, orderId: order.id }) }}
-                                    title={pb.name}
-                                  >
-                                    <TagsOutlined className="shrink-0" />
-                                    <span className="font-mono shrink-0">{pb.code}</span>
-                                    <span className="truncate">{pb.name}</span>
-                                  </button>
-                                )
-                              })}
+                              {applicable.map(pb => (
+                                <button
+                                  key={pb.code}
+                                  className="inline-flex max-w-[280px] items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold border border-orange-400 text-orange-700 hover:bg-orange-50 transition-colors"
+                                  onClick={e => { e.stopPropagation(); setSelectedPricebook({ pb, orderId: order.id }) }}
+                                  title={pb.name}
+                                >
+                                  <TagsOutlined className="shrink-0" />
+                                  <span className="font-mono shrink-0">{pb.code}</span>
+                                  <span className="truncate">{pb.name}</span>
+                                </button>
+                              ))}
                             </div>
                           </div>
                         )
@@ -713,7 +755,12 @@ export default function OrdersPage() {
                       <div key={line.id} className={`flex items-start gap-2 py-2 border-b border-slate-100 last:border-0 rounded px-2 ${bg}`}>
                         <Tooltip title={DOT_TIPS[conf.level]}><span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_COLORS[conf.level]}`} /></Tooltip>
                         <span className="text-xs text-slate-400 w-5 text-center shrink-0 mt-0.5">{lineIdx + 1}</span>
-                        <span className="text-xs text-slate-800 flex-1 font-medium break-words leading-snug">{line.product_name_original}</span>
+                        <span className="text-xs text-slate-800 flex-1 font-medium break-words leading-snug flex items-center gap-1">
+                          {line.product_name_original?.startsWith('[Tặng]') && <GiftOutlined className="text-emerald-500 shrink-0" />}
+                          {line.product_name_original?.startsWith('[Tặng]')
+                            ? <span className="text-emerald-700">{line.product_name_original.replace('[Tặng] ', '')}</span>
+                            : line.product_name_original}
+                        </span>
                         <div className="w-32 shrink-0">
                           {systemLine
                             ? <span className="text-xs text-slate-500 font-mono font-bold">{systemLineCode(line)}</span>
@@ -901,25 +948,38 @@ export default function OrdersPage() {
         <p className="text-xs text-gray-500 mt-2">Thao tác này không thể hoàn tác trên MISA.</p>
       </Modal>
 
-      {selectedVoucher && (
+      {selectedVoucher && (() => {
+        const { voucher: sv, orderId: svOrderId } = selectedVoucher
+        const svOrder = sessionDetail?.orders.find(o => o.id === svOrderId)
+        const orderProductQty = new Map(
+          (svOrder?.lines || []).map(l => [l.product_code_mapped || l.ocr_product_code || '', Number(l.quantity) || 0])
+        )
+        return (
         <Modal
           open
           width={980}
           centered
-          footer={null}
-          title={<span className="text-slate-800"><TagsOutlined className="mr-2 text-slate-500" />{selectedVoucher.code} - {selectedVoucher.name}</span>}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>
+              <Button type="primary" onClick={() => handleApplyVoucher(svOrderId, sv)}>
+                Áp dụng khuyến mại
+              </Button>
+            </div>
+          }
+          title={<span className="text-slate-800"><TagsOutlined className="mr-2 text-purple-500" />{sv.code} - {sv.name}</span>}
           onCancel={() => setSelectedVoucher(null)}
           styles={{ body: { paddingTop: 12 } }}
         >
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-xs border border-slate-200 rounded px-3 py-2 bg-white">
-              <div><span className="text-slate-500 font-medium">Loại:</span> <span className="text-slate-800">{selectedVoucher.type || '—'}</span></div>
-              <div><span className="text-slate-500 font-medium">Đối tượng:</span> <span className="text-slate-800">{selectedVoucher.target || '—'}</span></div>
-              <div><span className="text-slate-500 font-medium">Căn cứ:</span> <span className="text-slate-800">{selectedVoucher.base_on || '—'}</span></div>
-              <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-slate-800 font-semibold">{selectedVoucher.from_date || '—'} → {selectedVoucher.to_date || '—'}</span></div>
-              <div><span className="text-slate-500 font-medium">Khách hàng:</span> <span className="text-slate-800">{selectedVoucher.customers?.length ? selectedVoucher.customers.join(', ') : 'Tất cả'}</span></div>
-              <div><span className="text-slate-500 font-medium">Trạng thái:</span> <span className={selectedVoucher.is_active ? 'text-slate-800 font-semibold' : 'text-slate-500'}>{selectedVoucher.is_active ? 'Kích hoạt' : 'Không hoạt động'}</span></div>
-              {selectedVoucher.description && <div className="col-span-3"><span className="text-slate-500 font-medium">Mô tả:</span> <span className="text-slate-800">{selectedVoucher.description}</span></div>}
+              <div><span className="text-slate-500 font-medium">Loại:</span> <span className="text-slate-800">{sv.type || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Đối tượng:</span> <span className="text-slate-800">{sv.target || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Căn cứ:</span> <span className="text-slate-800">{sv.base_on || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Hiệu lực:</span> <span className="text-slate-800 font-semibold">{sv.from_date || '—'} → {sv.to_date || '—'}</span></div>
+              <div><span className="text-slate-500 font-medium">Khách hàng:</span> <span className="text-slate-800">{sv.customers?.length ? sv.customers.join(', ') : 'Tất cả'}</span></div>
+              <div><span className="text-slate-500 font-medium">Nhân hệ số:</span> <span className="text-slate-800">{sv.multiplier ? 'Có' : 'Không'}</span></div>
+              {sv.description && <div className="col-span-3"><span className="text-slate-500 font-medium">Mô tả:</span> <span className="text-slate-800">{sv.description}</span></div>}
             </div>
 
             <div className="border border-slate-200 rounded overflow-hidden">
@@ -927,37 +987,46 @@ export default function OrdersPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
                     <th className="px-3 py-2 text-left font-semibold">Hàng hóa mua</th>
-                    <th className="px-2 py-2 text-center font-semibold w-20">ĐVT</th>
-                    <th className="px-2 py-2 text-right font-semibold w-20">SL mua</th>
+                    <th className="px-2 py-2 text-center font-semibold w-16">ĐVT</th>
+                    <th className="px-2 py-2 text-right font-semibold w-20">SL cần mua</th>
+                    <th className="px-2 py-2 text-right font-semibold w-20">SL đơn</th>
+                    <th className="px-2 py-2 text-center font-semibold w-16">Đủ?</th>
                     <th className="px-3 py-2 text-left font-semibold">Hàng hóa tặng</th>
-                    <th className="px-2 py-2 text-center font-semibold w-20">ĐVT tặng</th>
                     <th className="px-2 py-2 text-right font-semibold w-20">SL tặng</th>
-                    <th className="px-2 py-2 text-right font-semibold w-24">Tối đa/đơn</th>
-                    <th className="px-2 py-2 text-right font-semibold w-24">Tối đa/KH</th>
+                    <th className="px-2 py-2 text-right font-semibold w-20">Max/đơn</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedVoucher.items?.map((item, i) => (
-                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-slate-700 font-semibold">{item.product_code}</span> · {item.product_name}</td>
-                      <td className="px-2 py-2 text-center text-slate-500">{item.uom || '—'}</td>
-                      <td className="px-2 py-2 text-right font-semibold text-slate-800">{item.quantity || '—'}</td>
-                      <td className="px-3 py-2 text-slate-700"><span className="font-mono text-slate-700 font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
-                      <td className="px-2 py-2 text-center text-slate-500">{item.gift_uom || '—'}</td>
-                      <td className="px-2 py-2 text-right font-semibold text-slate-800">{item.gift_quantity || '—'}</td>
-                      <td className="px-2 py-2 text-right text-slate-500">{item.max_per_order || '∞'}</td>
-                      <td className="px-2 py-2 text-right text-slate-500">{item.max_per_customer || '∞'}</td>
-                    </tr>
-                  ))}
-                  {!selectedVoucher.items?.length && (
-                    <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm trong voucher</td></tr>
+                  {sv.items?.map((item, i) => {
+                    const orderedQty = orderProductQty.get(item.product_code) || 0
+                    const met = orderedQty >= item.quantity
+                    const multiplierN = sv.multiplier ? Math.floor(orderedQty / item.quantity) : 1
+                    let giftQty = met ? multiplierN * item.gift_quantity : 0
+                    if (item.max_per_order > 0) giftQty = Math.min(giftQty, item.max_per_order)
+                    return (
+                      <tr key={i} className={`border-b border-slate-100 last:border-0 ${met ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
+                        <td className="px-3 py-2 text-slate-700"><span className="font-mono font-semibold">{item.product_code}</span> · {item.product_name}</td>
+                        <td className="px-2 py-2 text-center text-slate-500">{item.uom || '—'}</td>
+                        <td className="px-2 py-2 text-right font-semibold">{item.quantity}</td>
+                        <td className="px-2 py-2 text-right font-semibold">{orderedQty || '—'}</td>
+                        <td className="px-2 py-2 text-center">{met ? <span className="text-emerald-600 font-bold">✓</span> : <span className="text-red-400">✗</span>}</td>
+                        <td className="px-3 py-2 text-slate-700"><span className="font-mono font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
+                        <td className="px-2 py-2 text-right font-semibold text-emerald-700">{met ? giftQty : '—'}</td>
+                        <td className="px-2 py-2 text-right text-slate-400">{item.max_per_order || '∞'}</td>
+                      </tr>
+                    )
+                  })}
+                  {!sv.items?.length && (
+                    <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
+            <p className="text-xs text-slate-500">Dòng xanh = đủ điều kiện. Bấm <strong>Áp dụng</strong> để thêm hàng tặng (giá 0đ) vào đơn.</p>
           </div>
         </Modal>
-      )}
+        )
+      })()}
 
       {selectedPricebook && (() => {
         const { pb, orderId } = selectedPricebook
