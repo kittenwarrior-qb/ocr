@@ -9,6 +9,12 @@ export interface SelectPopupColumn {
   nowrap?: boolean
 }
 
+export interface PriceOverride {
+  unit_price: number
+  pricebook_name: string
+  pricebook_code: string
+}
+
 interface SelectPopupProps {
   open: boolean
   title: string
@@ -18,9 +24,10 @@ interface SelectPopupProps {
   onCancel: () => void
   rowKey?: string
   initialSearch?: string
+  priceOverrides?: Map<string, PriceOverride>  // product_code → pricebook price info
 }
 
-export default function SelectPopup({ open, title, columns, fetchData, onSelect, onCancel, rowKey = 'id', initialSearch = '' }: SelectPopupProps) {
+export default function SelectPopup({ open, title, columns, fetchData, onSelect, onCancel, rowKey = 'id', initialSearch = '', priceOverrides }: SelectPopupProps) {
   const [search, setSearch] = useState('')
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
   const [page, setPage] = useState(1)
@@ -93,9 +100,11 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
               {data.map(row => {
                 const key = row[rowKey] as string
                 const isSelected = selectedRow && (selectedRow[rowKey] === key)
+                const override = priceOverrides?.get(String(row['code'] ?? row[rowKey] ?? ''))
+                const hasPbPrice = !!override
                 return (
                   <tr key={key} onClick={() => setSelectedRow(row)}
-                    className={`border-b border-slate-100 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200' : 'hover:bg-slate-50'}`}>
+                    className={`border-b border-slate-100 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200' : hasPbPrice ? 'bg-amber-50/60 hover:bg-amber-100/60' : 'hover:bg-slate-50'}`}>
                     <td className="px-2 py-1.5">
                       <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-blue-600' : 'border-slate-300'}`}>
                         {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
@@ -104,7 +113,14 @@ export default function SelectPopup({ open, title, columns, fetchData, onSelect,
                     {columns.map(col => (
                       <td key={col.dataIndex}
                         className="px-2 py-1.5 text-slate-700 whitespace-nowrap">
-                        {String(row[col.dataIndex] ?? '') || '-'}
+                        {col.dataIndex === 'price' && hasPbPrice ? (
+                          <span className="flex items-center gap-1.5">
+                            <span className="line-through text-slate-400 text-[10px]">{String(row[col.dataIndex] ?? '') || '—'}</span>
+                            <span className="font-bold text-orange-700 bg-orange-100 border border-orange-300 rounded px-1.5 py-0.5 text-[11px]">
+                              {override!.unit_price.toLocaleString('vi-VN')} ★CK
+                            </span>
+                          </span>
+                        ) : String(row[col.dataIndex] ?? '') || '-'}
                       </td>
                     ))}
                   </tr>

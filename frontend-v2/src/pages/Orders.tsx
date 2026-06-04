@@ -36,7 +36,7 @@ import {
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { matchCustomer, type Customer } from '@/utils/customerMatcher'
 import { preloadCatalogs, fetchProducts } from '@/utils/catalogStore'
-import SelectPopup from '@/components/SelectPopup'
+import SelectPopup, { type PriceOverride } from '@/components/SelectPopup'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import ContactSelectPopup from '@/components/ContactSelectPopup'
 import OrderDetailForm from '@/components/OrderDetailForm'
@@ -111,7 +111,7 @@ function applyProductToSessionLine(line: SessionLine, product: Product): Session
     uom_mapped: product.uom,
     unit_price: unitPrice,
     tax_rate: productTaxRate(product) !== 0 ? productTaxRate(product) : (line.tax_rate ?? 0),
-    line_total: unitPrice && quantity ? unitPrice * quantity : line.line_total,
+    line_total: line.line_total,  // giữ nguyên từ PDF, không tính lại
   }
 }
 
@@ -329,20 +329,15 @@ export default function OrdersPage() {
       const code = line.product_code_mapped || line.ocr_product_code || ''
       const pbPrice = pbMap.get(code)
       if (!pbPrice) return line
-      const qty = Number(line.quantity) || 1
-      return { ...line, unit_price: pbPrice, line_total: pbPrice * qty }
+      // Chỉ cập nhật đơn giá — không tính toán thành tiền
+      return { ...line, unit_price: pbPrice }
     })
-    const totalWithTax = newLines.reduce((s, l) => {
-      const lt = Number(l.line_total) || 0
-      const tx = Math.round(lt * (Number(l.tax_rate) || 0) / 100)
-      return s + lt + tx
-    }, 0)
-    await client.patch(`/documents/orders/${orderId}`, { lines: newLines.map(toLinePayload), total_amount: totalWithTax })
+    await client.patch(`/documents/orders/${orderId}`, { lines: newLines.map(toLinePayload) })
     queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
       if (!old) return old
       return {
         ...old,
-        orders: old.orders.map((o: any) => o.id === orderId ? { ...o, lines: newLines, total_amount: totalWithTax } : o),
+        orders: old.orders.map((o: any) => o.id === orderId ? { ...o, lines: newLines } : o),
       }
     })
     const matched = newLines.filter(l => pbMap.has(l.product_code_mapped || l.ocr_product_code || '')).length
@@ -423,7 +418,16 @@ export default function OrdersPage() {
   const handleMapProduct = async (line: SessionLine, product: Product) => {
     try {
       await client.post(`/mappings/${line.temp_code}/map`, { product_code: product.code, new_product_name: product.name, new_product_uom: product.uom })
-      // Optimistic update: mark line as mapped in local cache
+
+      // Patch order line để lưu UOM và thuế từ catalog xuống DB
+      const order = sessionDetail?.orders.find(o => o.lines.some(l => l.id === line.id))
+      if (order) {
+        const mappedLine = applyProductToSessionLine(line, product)
+        const updatedLines = order.lines.map(l => l.id === line.id ? mappedLine : l)
+        await client.patch(`/documents/orders/${order.id}`, { lines: updatedLines.map(toLinePayload) })
+      }
+
+      // Optimistic update cache
       queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
         if (!old) return old
         const wasPending = line.mapping_status === 'pending'
@@ -432,15 +436,9 @@ export default function OrdersPage() {
           total_unmapped: wasPending ? Math.max(0, (old.total_unmapped || 0) - 1) : (old.total_unmapped || 0),
           orders: old.orders.map((o: any) => {
             const newLines = o.lines.map((l: any) => l.id === line.id ? applyProductToSessionLine(l, product) : l)
-            const totalWithTax = newLines.reduce((s: number, l: any) => {
-              const lt = Number(l.line_total) || 0
-              const tx = Math.round(lt * (Number(l.tax_rate) || 0) / 100)
-              return s + lt + tx
-            }, 0)
             return {
               ...o,
               pending_count: newLines.filter((l: any) => l.mapping_status === 'pending').length,
-              total_amount: totalWithTax || o.total_amount,
               lines: newLines,
             }
           }),
@@ -531,12 +529,8 @@ export default function OrdersPage() {
   })
 
   const saveOrderLines = async (order: SessionOrder, nextLines: Partial<SessionLine>[]) => {
-    const totalWithTax = nextLines.reduce((sum, line) => {
-      const lt = Number(line.line_total) || 0
-      const tx = Math.round(lt * (Number(line.tax_rate) || 0) / 100)
-      return sum + lt + tx
-    }, 0)
-    await client.patch(`/documents/orders/${order.id}`, { lines: nextLines.map(toLinePayload), total_amount: totalWithTax })
+    // Không tính toán total — kế toán tự xử lý trong MISA
+    await client.patch(`/documents/orders/${order.id}`, { lines: nextLines.map(toLinePayload) })
     queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
       if (!old) return old
       return {
@@ -544,7 +538,6 @@ export default function OrdersPage() {
         orders: old.orders.map((o: any) => o.id === order.id ? {
           ...o,
           lines: nextLines,
-          total_amount: totalWithTax,
           pending_count: nextLines.filter(l => l.mapping_status === 'pending').length,
           mapped_count: nextLines.filter(l => l.mapping_status !== 'pending').length,
         } : o),
@@ -1002,7 +995,31 @@ export default function OrdersPage() {
           }
         }}
         onCancel={() => { setProductModalOpen(false); setSelectedLine(null); setProductTargetOrderId(null) }} rowKey="code"
-        initialSearch={selectedLine ? getProductSearchHint(selectedLine) : ''} />
+        initialSearch={selectedLine ? getProductSearchHint(selectedLine) : ''}
+        priceOverrides={(() => {
+          const orderId = selectedLine
+            ? sessionDetail?.orders.find(o => o.lines.some(l => l.id === selectedLine.id))?.id
+            : productTargetOrderId
+          if (!orderId) return undefined
+          const order = sessionDetail?.orders.find(o => o.id === orderId)
+          const custCode = order?.extra_data?.customer_code
+          if (!custCode) return undefined
+          const pbs = pricebooksByCustomer[custCode] || []
+          const map = new Map<string, PriceOverride>()
+          for (const pb of pbs) {
+            for (const item of pb.items) {
+              if (!map.has(item.product_code)) {
+                map.set(item.product_code, {
+                  unit_price: item.unit_price,
+                  pricebook_name: pb.name,
+                  pricebook_code: pb.code,
+                })
+              }
+            }
+          }
+          return map.size > 0 ? map : undefined
+        })()}
+      />
 
       {/* Customer Popup — chỉ chọn KH */}
       <CustomerContactPopup

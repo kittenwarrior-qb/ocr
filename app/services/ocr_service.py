@@ -44,12 +44,18 @@ DOUBLECHECK RULES:
 - DO NOT confuse them. Read the label carefully.
 - If total_amount has both "before VAT" and "after VAT" versions, use the FINAL total (after VAT)
 
-PRICE DISAMBIGUATION (CRITICAL — avoid pre/post tax confusion):
-- items.unit_price = price PER UNIT, BEFORE TAX (ex-VAT). If document shows both "Đơn giá" and "Đơn giá sau VAT", use the BEFORE-tax one.
-- items.line_total = unit_price × quantity (subtotal BEFORE TAX). Must satisfy: line_total ≈ unit_price × quantity.
-- If line_total column is labeled "Thành tiền (sau VAT)" or "Amount incl. VAT", divide by (1 + tax_rate/100) to get the pre-tax line_total.
-- total_amount = FINAL amount the buyer pays = sum of line_totals + all taxes. Use the LARGEST total printed (after all VAT/tax).
-- VERIFY: unit_price × quantity ≈ line_total (within rounding). If not, recalculate: unit_price = line_total / quantity.
+VIETNAMESE NUMBER FORMAT:
+- In Vietnamese documents: "." (dot) = THOUSANDS separator, "," (comma) = DECIMAL separator.
+- "6.533,439" = 6533.439 (not 6,533,439). "53.190.000" = 53,190,000. "2.216,25" = 2216.25.
+- Always parse by treating "." as thousands separator, "," as decimal.
+
+PRICE EXTRACTION (read as-is, NO calculations):
+- Extract numbers EXACTLY as printed in the document. Do NOT calculate, verify, or adjust any values.
+- items.unit_price: read the printed unit price column value directly (e.g. "Đơn giá cuối (-VAT)", "Đơn giá", "Unit Price"). If multiple price columns exist, prefer the FINAL/NET price column after all discounts.
+- items.line_total: read the printed line amount directly (e.g. "Thành tiền (-VAT)", "Thành tiền"). If absent, leave null — do NOT calculate.
+- items.tax_rate: read the % VAT column as a number (e.g. "8%" → 8).
+- total_amount: read the printed grand total exactly as shown (e.g. "Thành tiền (+VAT)", "TỔNG CỘNG", total after VAT). Do NOT sum or calculate.
+- Leave any field null if not clearly printed in the document.
 
 QUANTITY UNIT (CRITICAL — avoid Pcs vs Box confusion):
 - When a document shows MULTIPLE quantity columns (e.g., "Ord/CS", "Ord/Pcs", "Qty Thùng", "Qty Pcs"):

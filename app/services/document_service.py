@@ -342,16 +342,11 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
         temp_code, product_id = mapping_service.resolve_temp_code(
             db, item.get("product_code"), product_name
         )
-        product = db.query(Product).filter(Product.id == product_id).first() if product_id else None
+        # Chỉ đọc giá trị từ PDF, không tính toán gì cả
         unit_price = item.get("unit_price")
         line_total = item.get("line_total")
         tax_rate = item.get("tax_rate")
         quantity = item.get("quantity")
-        if product:
-            if unit_price is None and product.price is not None:
-                unit_price = product.price
-            if line_total is None and unit_price is not None and quantity is not None:
-                line_total = unit_price * quantity
         line = OrderLine(
             processed_order_id=order_id,
             temp_code=temp_code,
