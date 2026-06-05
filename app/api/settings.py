@@ -11,6 +11,7 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "notification_email")
 MISA_APP_ID_KEY = "misa_app_id"
 MISA_SECRET_KEY = "misa_client_secret"
+ALLOWED_MISA_APP_IDS = {"MONGTHUY", "DUYANHTEST", "NGOCTHANG", "NGOCNHI"}
 
 
 def _get_config(db: Session, key: str) -> SysConfig | None:
@@ -149,9 +150,12 @@ def update_misa_settings(body: MisaSettingsUpdate, db: Session = Depends(get_db)
     """Update MISA app id and/or secret. Blank secret means keep existing secret."""
     updated = []
     if body.app_id is not None:
-        app_id = body.app_id.strip()
+        app_id = body.app_id.strip().upper()
         if not app_id:
             raise HTTPException(status_code=400, detail="APP ID không được để trống")
+        if app_id not in ALLOWED_MISA_APP_IDS:
+            allowed = ", ".join(sorted(ALLOWED_MISA_APP_IDS))
+            raise HTTPException(status_code=400, detail=f"App ID không hợp lệ. Chỉ được dùng: {allowed}")
         _upsert_config(db, MISA_APP_ID_KEY, app_id)
         updated.append("app_id")
 

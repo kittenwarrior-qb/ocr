@@ -47,7 +47,8 @@ export default function ContactsPage() {
     try {
       const res = await createMisaContact(values)
       if (isOk(res)) {
-        message.success('Tạo liên hệ thành công!')
+        message.success('Tao lien he thanh cong, dang dong bo du lieu...')
+        await syncMisa('contacts')
         form.resetFields()
         setModalOpen(false)
         load()

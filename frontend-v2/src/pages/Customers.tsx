@@ -40,7 +40,8 @@ export default function CustomersPage() {
     try {
       const res = await createMisaCustomer(values)
       if (isOk(res)) {
-        message.success('Tạo khách hàng thành công!')
+        message.success('Tao khach hang thanh cong, dang dong bo du lieu...')
+        await syncMisa('customers')
         form.resetFields()
         setModalOpen(false)
         load()

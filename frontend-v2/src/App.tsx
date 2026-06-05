@@ -32,37 +32,11 @@ import ContactMappingPage from './pages/ContactMapping'
 import SettingsPage from './pages/Settings'
 import POHistoryPage from './pages/POHistory'
 import client from './api/client'
+import { FIXED_MISA_ACCOUNTS } from './config/misaAccounts'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 })
-
-const FIXED_ACCOUNTS = [
-  {
-    code: 'MONGTHUY',
-    initials: 'MT',
-    name: 'Hà Mộng Thúy',
-    email: 'sa-mt@satoricompany.vn',
-  },
-  {
-    code: 'DUYANHTEST',
-    initials: 'DA',
-    name: 'Duy Ánh',
-    email: 'huynhduyanh01011996@gmail.com',
-  },
-  {
-    code: 'NGOCTHANG',
-    initials: 'NT',
-    name: 'Ngọc Thắng',
-    email: '',
-  },
-  {
-    code: 'NGOCNHI',
-    initials: 'NN',
-    name: 'Ngọc Nhi',
-    email: '',
-  },
-]
 
 function initialsFromCode(code: string) {
   const cleaned = code.trim().replace(/[^a-zA-Z0-9]/g, '')
@@ -124,7 +98,7 @@ function AccountSwitcher() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [appId, setAppId] = useState('')
-  const mappedAccount = FIXED_ACCOUNTS.find(account => account.code === appId)
+  const mappedAccount = FIXED_MISA_ACCOUNTS.find(account => account.code === appId)
   const selected = mappedAccount || {
     code: appId || 'MISA',
     initials: initialsFromCode(appId || 'MISA'),
@@ -204,7 +178,7 @@ function AppLayout() {
     <div className="min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <AccountSwitcher />
-      <main className={`transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
+      <main className={`pr-16 transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/sale-orders" element={<SaleOrdersPage />} />

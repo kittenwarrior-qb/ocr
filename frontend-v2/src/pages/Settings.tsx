@@ -9,6 +9,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import client from '@/api/client'
+import { FIXED_MISA_ACCOUNT_CODES, normalizeMisaAppId } from '@/config/misaAccounts'
 
 export default function SettingsPage() {
   const [appId, setAppId] = useState('')
@@ -30,8 +31,13 @@ export default function SettingsPage() {
   useEffect(() => { loadSettings() }, [])
 
   const handleSave = async () => {
-    if (!appId.trim()) {
+    const normalizedAppId = normalizeMisaAppId(appId)
+    if (!normalizedAppId) {
       message.warning('Vui lòng nhập App ID MISA')
+      return
+    }
+    if (!FIXED_MISA_ACCOUNT_CODES.includes(normalizedAppId)) {
+      message.error('App ID không hợp lệ. Chỉ được dùng: ' + FIXED_MISA_ACCOUNT_CODES.join(', '))
       return
     }
     if (!clientSecret.trim() && !hasClientSecret) {
@@ -41,10 +47,11 @@ export default function SettingsPage() {
 
     setSaving(true)
     try {
-      const payload: Record<string, string> = { app_id: appId.trim() }
+      const payload: Record<string, string> = { app_id: normalizedAppId }
       if (clientSecret.trim()) payload.client_secret = clientSecret.trim()
       await client.patch('/settings/misa', payload)
-      message.success(`Đã lưu cấu hình MISA cho App ID: ${appId.trim()}`)
+      setAppId(normalizedAppId)
+      message.success('Đã lưu cấu hình MISA cho App ID: ' + normalizedAppId)
       window.dispatchEvent(new Event('misa-settings-updated'))
       setClientSecret('')
       loadSettings()
@@ -119,7 +126,7 @@ export default function SettingsPage() {
               prefix={<ApiOutlined className="text-slate-400" />}
               placeholder="Nhập App ID"
               value={appId}
-              onChange={e => setAppId(e.target.value)}
+              onChange={e => setAppId(e.target.value.toUpperCase())}
               size="large"
             />
           </div>
