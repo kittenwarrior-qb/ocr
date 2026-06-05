@@ -72,6 +72,7 @@ import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { getProducts } from '@/utils/catalogStore'
+import { getUomConversion, type UomConversionResult } from '@/utils/uomConversion'
 import type { PriceOverride } from '@/components/SelectPopup'
 import ContactSelectPopup from '@/components/ContactSelectPopup'
 import dayjs from 'dayjs'
@@ -258,6 +259,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     uomFrom?: string; uomTo?: string; uomChanged: boolean
     pbPrice?: number; pbName?: string; currentPrice?: number
   } | null>(null)
+  const [pendingUomConversion, setPendingUomConversion] = useState<{
+    lineIdx: number
+    nextLine: OrderLine
+    conversion: UomConversionResult
+  } | null>(null)
 
   // Build pricebook price map for product selection
   const priceOverrides = useMemo(() => {
@@ -344,6 +350,26 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   }, [lines, form, loading])
 
   const updateLine = (i: number, field: string, value: unknown) => {
+    const current = lines[i]
+    if ((field === 'uom_original' || field === 'quantity') && current) {
+      const products = getProducts()
+      const product = products.find(p => p.code === current.ocr_product_code || p.code === (current as any).product_code || p.code === (current as any).product_code_mapped)
+        || matchProduct(current.product_name_original || '', 1)[0]?.product
+      const nextLine = { ...current, [field]: value } as OrderLine
+      const conversion = getUomConversion({
+        quantity: nextLine.quantity,
+        sourceUom: nextLine.uom_original,
+        targetUom: product?.uom,
+        product,
+        fallbackProductName: nextLine.product_name_original || '',
+      })
+
+      if (conversion && conversion.fromUom !== conversion.toUom) {
+        setPendingUomConversion({ lineIdx: i, nextLine, conversion })
+        return
+      }
+    }
+
     setLines(prev => {
       const u = [...prev]
       const line = { ...u[i], [field]: value }
@@ -362,6 +388,45 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       u[i] = line
       return u
     })
+  }
+
+  const applyUomConversion = () => {
+    if (!pendingUomConversion) return
+    const { lineIdx, nextLine, conversion } = pendingUomConversion
+    setLines(prev => {
+      const u = [...prev]
+      const line = {
+        ...nextLine,
+        quantity: conversion.convertedQty,
+        uom_original: conversion.toUom,
+      }
+      const currentTotal = Number(nextLine.line_total) || 0
+      const price = Number(line.unit_price) || 0
+      if (currentTotal > 0 && conversion.convertedQty > 0) {
+        line.line_total = currentTotal
+        line.unit_price = Math.round(currentTotal / conversion.convertedQty)
+      } else if (price > 0) {
+        line.line_total = price * conversion.convertedQty
+      }
+      u[lineIdx] = line
+      return u
+    })
+    setPendingUomConversion(null)
+  }
+
+  const keepUomConversionOriginal = () => {
+    if (!pendingUomConversion) return
+    const { lineIdx, nextLine } = pendingUomConversion
+    setLines(prev => {
+      const u = [...prev]
+      const line = { ...nextLine }
+      const price = Number(line.unit_price) || 0
+      const qty = Number(line.quantity) || 0
+      if (price > 0 && qty > 0) line.line_total = price * qty
+      u[lineIdx] = line
+      return u
+    })
+    setPendingUomConversion(null)
   }
 
   const buildSavePayload = (nextLines: OrderLine[]) => {
@@ -758,6 +823,22 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 const finalPrice = pendingChange.pbPrice || applied.unit_price
                 const qty = Number(line.quantity) || 1
                 const finalLineTotal = finalPrice && qty ? finalPrice * qty : applied.line_total
+                const conversion = getUomConversion({
+                  quantity: line.quantity,
+                  sourceUom: line.uom_original,
+                  targetUom: pendingChange.product.uom,
+                  product: pendingChange.product,
+                  fallbackProductName: line.product_name_original || '',
+                })
+                if (conversion) {
+                  setPendingUomConversion({
+                    lineIdx: pendingChange.lineIdx,
+                    nextLine: { ...applied, unit_price: finalPrice, line_total: finalLineTotal },
+                    conversion,
+                  })
+                  setPendingChange(null)
+                  return
+                }
                 setLines(prev => prev.map((l, idx) => idx === pendingChange.lineIdx
                   ? { ...applied, unit_price: finalPrice, line_total: finalLineTotal }
                   : l))
@@ -790,6 +871,49 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 </div>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {pendingUomConversion && (
+        <Modal
+          open
+          centered
+          title="Xác nhận quy đổi số lượng"
+          width={540}
+          onCancel={() => setPendingUomConversion(null)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button onClick={keepUomConversionOriginal}>Giữ số lượng gốc</Button>
+              <Button type="primary" onClick={applyUomConversion}>Áp dụng quy đổi</Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            <div className="border border-blue-200 bg-blue-50 rounded p-3">
+              <div className="font-semibold text-blue-800 mb-1">{pendingUomConversion.conversion.productLabel}</div>
+              <div className="text-slate-700">{pendingUomConversion.conversion.reason}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border border-slate-200 rounded p-3">
+                <div className="text-xs text-slate-500 mb-1">Số lượng OCR/nhập</div>
+                <div className="font-semibold text-slate-800">
+                  {pendingUomConversion.conversion.originalQty.toLocaleString('vi-VN')} {pendingUomConversion.conversion.fromUom}
+                </div>
+              </div>
+              <div className="border border-emerald-200 bg-emerald-50 rounded p-3">
+                <div className="text-xs text-emerald-700 mb-1">Số lượng sau quy đổi</div>
+                <div className="font-bold text-emerald-800">
+                  {pendingUomConversion.conversion.convertedQty.toLocaleString('vi-VN')} {pendingUomConversion.conversion.toUom}
+                </div>
+              </div>
+            </div>
+            <div className="font-mono text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2 text-slate-700">
+              {pendingUomConversion.conversion.formula}
+            </div>
+            <p className="text-xs text-slate-500">
+              Bấm <strong>Áp dụng quy đổi</strong> để ghi số lượng đã chuyển đổi vào ô SL và đổi ĐVT về đơn vị của công ty.
+            </p>
           </div>
         </Modal>
       )}
