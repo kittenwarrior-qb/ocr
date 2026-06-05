@@ -70,7 +70,7 @@ function isSystemLine(line: Partial<SessionLine>): boolean {
 
 function systemLineCode(line: Partial<SessionLine>): string {
   const name = String(line.product_name_original || '').toLowerCase()
-  if (name.includes('chiết khấu') || name.includes('chiết')) return 'CKĐH'
+  if (name.includes('Chính sách giá') || name.includes('chiết')) return 'CKĐH'
   if (name.includes('khuyến mại') || name.includes('khuyến')) return 'KM'
   return line.ocr_product_code || line.temp_code || '✓'
 }
@@ -155,7 +155,11 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
   const contactOrg = typeof contact === 'string' ? '' : (contact?.organization || '')
   const contactDeliveryAddress = typeof contact === 'string' ? '' : (contact?.delivery_address || contact?.address || '')
   const invoiceAddress = customer.invoice_address || ''
+  // Contact là tuyệt đối — overrides customer address/phone/email khi có
   const deliveryAddress = contactDeliveryAddress || customer.delivery_address || invoiceAddress
+  const contactCity = typeof contact === 'string' ? '' : contact?.city || ''
+  const contactDistrict = typeof contact === 'string' ? '' : contact?.district || ''
+  const contactWard = typeof contact === 'string' ? '' : contact?.ward || ''
   return {
     code: customer.code || '',
     type: customer.type || '',
@@ -166,10 +170,10 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
     field: customer.field || '',
     owner: customer.owner || '',
     description: customer.description || '',
-    invoice_address: invoiceAddress,
-    invoice_city: customer.invoice_city || '',
-    invoice_district: customer.invoice_district || '',
-    invoice_ward: customer.invoice_ward || '',
+    invoice_address: contactDeliveryAddress || invoiceAddress,
+    invoice_city: contactCity || customer.invoice_city || '',
+    invoice_district: contactDistrict || customer.invoice_district || '',
+    invoice_ward: contactWard || customer.invoice_ward || '',
     delivery_address: deliveryAddress,
     customer_code: customer.code || '',
     customer_name: customer.name || '',
@@ -177,13 +181,14 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
     customer_phone: customer.phone || '',
     customer_owner: customer.owner || '',
     invoice_customer: customer.name || '',
-    invoice_buyer: customer.owner || '',
+    invoice_buyer: contactName || '',
     invoice_street: invoiceAddress,
+    // Contact overrides: receiver, phone, address, city, district, ward
     delivery_receiver: contactName || customer.name || '',
     delivery_phone: contactPhone || customer.phone || '',
-    delivery_city: (typeof contact === 'string' ? '' : contact?.city) || customer.invoice_city || '',
-    delivery_district: (typeof contact === 'string' ? '' : contact?.district) || customer.invoice_district || '',
-    delivery_ward: (typeof contact === 'string' ? '' : contact?.ward) || customer.invoice_ward || '',
+    delivery_city: contactCity || customer.invoice_city || '',
+    delivery_district: contactDistrict || customer.invoice_district || '',
+    delivery_ward: contactWard || customer.invoice_ward || '',
     delivery_street: deliveryAddress,
     order_type: 'Kênh MT',
     contact: contactName,
@@ -329,8 +334,8 @@ export default function OrdersPage() {
       const code = line.product_code_mapped || line.ocr_product_code || ''
       const pbPrice = pbMap.get(code)
       if (!pbPrice) return line
-      // Chỉ cập nhật đơn giá — không tính toán thành tiền
-      return { ...line, unit_price: pbPrice }
+      const qty = Number(line.quantity) || 1
+      return { ...line, unit_price: pbPrice, line_total: pbPrice * qty }
     })
     await client.patch(`/documents/orders/${orderId}`, { lines: newLines.map(toLinePayload) })
     queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {
@@ -341,7 +346,7 @@ export default function OrdersPage() {
       }
     })
     const matched = newLines.filter(l => pbMap.has(l.product_code_mapped || l.ocr_product_code || '')).length
-    message.success(`Đã áp dụng giá chiết khấu cho ${matched} sản phẩm`)
+    message.success(`Đã áp dụng giá Chính sách giá cho ${matched} sản phẩm`)
     setSelectedPricebook(null)
   }
 
@@ -753,13 +758,11 @@ export default function OrdersPage() {
                       {(() => {
                         const custCode = String(order.extra_data?.customer_code || '')
                         const pricebooks = custCode ? (pricebooksByCustomer[custCode] || []) : []
-                        const orderProductCodes = new Set(order.lines.map(l => l.product_code_mapped || l.ocr_product_code || '').filter(Boolean))
-                        // Only show pricebooks that have at least one matching product
-                        const applicable = pricebooks.filter(pb => pb.items.some(item => orderProductCodes.has(item.product_code)))
+                        const applicable = pricebooks  // show all applicable pricebooks (consistent with detail popup)
                         if (!applicable.length) return null
                         return (
                           <div className="col-span-2 flex items-start gap-2 pt-1 min-w-0">
-                            <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Chiết khấu:</span>
+                            <span className="text-slate-500 w-24 flex-shrink-0 font-medium">Chính sách giá:</span>
                             <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
                               {applicable.map(pb => (
                                 <button
@@ -780,76 +783,20 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
-                  {/* ── Liên hệ (Contact block) ── */}
-                  <div className="px-4 py-2.5 border-b border-slate-100 bg-violet-50/40">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ContactsOutlined className="text-violet-400 shrink-0" />
-                        {order.extra_data?.contact ? (
-                          <span className="text-xs">
-                            <span className="font-semibold text-slate-800">{order.extra_data.contact}</span>
-                            {order.extra_data.contact_code && <span className="text-slate-500 ml-1">({order.extra_data.contact_code})</span>}
-                            {order.extra_data.contact_phone && <span className="text-slate-500 ml-1.5">· {order.extra_data.contact_phone}</span>}
-                            {order.extra_data.contact_organization && <span className="text-slate-500 ml-1.5">· {order.extra_data.contact_organization}</span>}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Chưa chọn người liên hệ</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {order.extra_data?.contact && (
-                          <Tooltip title="Bỏ chọn liên hệ">
-                            <button className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 rounded hover:bg-red-50" onClick={e => { e.stopPropagation(); handleClearContact(order.id) }}><CloseOutlined style={{fontSize:10}} /></button>
-                          </Tooltip>
-                        )}
-                        <Button size="small" onClick={e => { e.stopPropagation(); setSelectedOrderId(order.id); setContactModalOpen(true) }}>
-                          {order.extra_data?.contact ? 'Đổi LH' : 'Chọn LH'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Khách hàng (Customer block) ── */}
-                  <div className="px-4 py-2.5 border-b border-slate-100 bg-amber-50/40">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        {order.extra_data?.customer_code ? (
-                          <div className="text-xs">
-                            <span className="font-semibold text-emerald-700">{order.extra_data.customer_name || 'KH đã chọn'}</span>
-                            <span className="text-slate-500 ml-1.5 font-mono">{order.extra_data.customer_code}</span>
-                            {order.extra_data.customer_tax_code && <span className="text-slate-400 ml-1.5">MST: {order.extra_data.customer_tax_code}</span>}
-                            {(order.extra_data.invoice_address || order.extra_data.invoice_street) && (
-                              <div className="text-slate-500 mt-0.5 truncate max-w-sm">{order.extra_data.invoice_address || order.extra_data.invoice_street}</div>
-                            )}
-                          </div>
-                        ) : (() => {
-                          // Auto-suggest from contact org or OCR name
-                          const name = order.extra_data?.contact_organization || order.ocr_company_name || order.recipient_name || ''
-                          const sugg = name ? matchCustomer(name, order.ocr_delivery_address || order.delivery_address || '', 3) : []
-                          const best = sugg.length > 0 && sugg[0].score >= 0.7 ? sugg[0].customer : null
-                          if (best) return (
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs">
-                                <span className="text-slate-700 font-semibold">{best.name}</span>
-                                <span className="text-slate-400 ml-1.5 font-mono">{best.code}</span>
-                              </div>
-                              <Button size="small" type="primary" icon={<CheckOutlined />} onClick={e => { e.stopPropagation(); handleSelectCustomer(order.id, best!) }}>Xác nhận</Button>
-                            </div>
-                          )
-                          return <span className="text-xs text-slate-400 italic">Chưa chọn khách hàng</span>
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        {order.extra_data?.customer_code && (
-                          <Tooltip title="Bỏ chọn khách hàng">
-                            <button className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 rounded hover:bg-red-50" onClick={e => { e.stopPropagation(); handleClearCustomer(order.id) }}><CloseOutlined style={{fontSize:10}} /></button>
-                          </Tooltip>
-                        )}
-                        <Button size="small" onClick={e => { e.stopPropagation(); setSelectedOrderId(order.id); setCustomerModalOpen(true) }}>
-                          {order.extra_data?.customer_code ? 'Đổi KH' : 'Chọn KH'}
-                        </Button>
-                      </div>
-                    </div>
+                  {/* ── KH + LH — read only, edit inside Chi tiết ── */}
+                  <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/40 flex items-center gap-4 text-xs">
+                    <span className="shrink-0">
+                      <ContactsOutlined className="text-violet-400 mr-1" />
+                      {order.extra_data?.contact
+                        ? <><span className="font-semibold text-slate-700">{order.extra_data.contact}</span>{order.extra_data.contact_phone ? <span className="text-slate-400 ml-1">· {order.extra_data.contact_phone}</span> : null}</>
+                        : <span className="text-slate-300 italic">Chưa có LH</span>}
+                    </span>
+                    <span className="text-slate-200">|</span>
+                    <span className="min-w-0 truncate">
+                      {order.extra_data?.customer_code
+                        ? <><span className="font-semibold text-emerald-700">{order.extra_data.customer_name}</span><span className="text-slate-400 ml-1 font-mono">{order.extra_data.customer_code}</span></>
+                        : <span className="text-amber-500 italic">Chưa chọn KH — vào Chi tiết để chọn</span>}
+                    </span>
                   </div>
 
                   {/* Product lines — clean table */}
@@ -883,23 +830,7 @@ export default function OrdersPage() {
                           <span className="text-xs text-slate-600 w-[72px] text-right">{txAmt ? txAmt.toLocaleString('vi-VN') : ''}</span>
                           <span className="text-xs text-slate-800 w-20 text-right font-semibold">{tong ? tong.toLocaleString('vi-VN') : ''}</span>
                         </>)})()}
-                        <div className="w-16 flex-shrink-0 flex items-center justify-end gap-1">
-                          {!systemLine && line.mapping_status !== 'mapped' && conf.level === 'suggest' && conf.suggestion && (
-                            <Tooltip title={`Xác nhận: ${conf.suggestion.code}`} placement="left">
-                              <button className="w-6 h-6 flex items-center justify-center text-white bg-emerald-500 hover:bg-emerald-600 rounded text-sm font-bold" onClick={() => handleMapProduct(line, conf.suggestion!)}><CheckOutlined /></button>
-                            </Tooltip>
-                          )}
-                          {!systemLine && (
-                            <Tooltip title={line.mapping_status === 'mapped' ? 'Đổi hàng hóa' : 'Chọn hàng hóa'} placement="left">
-                              <button className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-blue-600 border border-slate-200 rounded hover:bg-blue-50 hover:border-blue-300" onClick={() => { setSelectedLine(line); setProductModalOpen(true) }}>
-                                <SearchOutlined style={{fontSize: 11}} />
-                              </button>
-                            </Tooltip>
-                          )}
-                          <Tooltip title="Xóa dòng" placement="left">
-                            <button className="w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 border border-red-200 rounded hover:bg-red-50" onClick={(e) => { e.stopPropagation(); handleDeleteLine(order, line).catch(err => message.error(err?.response?.data?.detail || 'Xóa dòng thất bại')) }}><DeleteOutlined style={{fontSize: 11}} /></button>
-                          </Tooltip>
-                        </div>
+                        <div className="w-8 flex-shrink-0" />
                       </div>
                     ) })}
                     <div className="flex items-center gap-2 py-2 border-t border-slate-200 rounded px-2 bg-slate-50/80">
@@ -914,9 +845,8 @@ export default function OrdersPage() {
                       <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>{const lt=Number(l.line_total)||0;const tx=Math.round(lt*(Number(l.tax_rate)||0)/100);return s+lt+tx},0).toLocaleString('vi-VN')}</span>
                       <span className="w-16" />
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-slate-100">
-                      <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); setSelectedLine(null); setProductTargetOrderId(order.id); setProductModalOpen(true) }}>Chọn hàng hóa</Button>
-                      <Button size="small" icon={<PlusOutlined />} onClick={(e) => { e.stopPropagation(); handleAddBlankLine(order).catch(err => message.error(err?.response?.data?.detail || 'Thêm dòng thất bại')) }}>Thêm dòng</Button>
+                    <div className="pt-2 mt-1 border-t border-slate-100 text-center">
+                      <span className="text-[11px] text-slate-400">Vào <strong>Chi tiết</strong> để chỉnh sửa hàng hóa, mapping KH/LH</span>
                     </div>
                   </div>
                 </div>
@@ -1235,7 +1165,7 @@ export default function OrdersPage() {
               <div className="flex justify-end gap-2">
                 <Button onClick={() => setSelectedPricebook(null)}>Đóng</Button>
                 <Button type="primary" onClick={() => handleApplyPricebook(orderId, pb)}>
-                  Áp dụng giá chiết khấu
+                  Áp dụng giá Chính sách giá
                 </Button>
               </div>
             }
@@ -1258,7 +1188,7 @@ export default function OrdersPage() {
                       <th className="px-3 py-2 text-left font-semibold">Tên hàng hóa</th>
                       <th className="px-2 py-2 text-center font-semibold w-20">ĐVT</th>
                       <th className="px-2 py-2 text-right font-semibold w-28">Đơn giá (CK)</th>
-                      <th className="px-2 py-2 text-center font-semibold w-20">Chiết khấu</th>
+                      <th className="px-2 py-2 text-center font-semibold w-20">Chính sách giá</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1281,7 +1211,7 @@ export default function OrdersPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-slate-500">Sản phẩm có dấu ✓ trùng với đơn hàng. Bấm <strong>Áp dụng giá chiết khấu</strong> để tự động nhập đơn giá.</p>
+              <p className="text-xs text-slate-500">Sản phẩm có dấu ✓ trùng với đơn hàng. Bấm <strong>Áp dụng giá Chính sách giá</strong> để tự động nhập đơn giá.</p>
             </div>
           </Modal>
         )

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+﻿import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import {
@@ -48,7 +48,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
     { key: '/contacts', label: 'Liên hệ', icon: <ContactsOutlined /> },
     { key: '/vouchers', label: 'Voucher', icon: <TagsOutlined /> },
-    { key: '/chiet-khau', label: 'Chiết khấu', icon: <PercentageOutlined /> },
+    { key: '/chiet-khau', label: 'Chính sách giá', icon: <PercentageOutlined /> },
     { key: '/mapping', label: 'Mapping HH', icon: <SwapOutlined /> },
     { key: '/mapping-customer', label: 'Mapping KH', icon: <UserSwitchOutlined /> },
     { key: '/mapping-contact', label: 'Mapping LH', icon: <ContactsOutlined /> },

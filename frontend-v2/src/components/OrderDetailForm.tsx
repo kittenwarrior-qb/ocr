@@ -1,8 +1,30 @@
-﻿import { useEffect, useState } from 'react'
-import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin } from 'antd'
-import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+﻿import { useEffect, useState, useMemo } from 'react'
+import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag } from 'antd'
+import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, GiftOutlined, TagsOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
+
+// ── UOM normalization ─────────────────────────────────────────────────────────
+function uomGroup(uom: string): string {
+  const u = (uom || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  if (/^(th[uù]ng|thung|box|cs|carton|ctn)$/.test(u)) return 'thùng'
+  if (/^(chai|bottle|pc|pcs|piece)$/.test(u)) return 'chai'
+  if (/^(lon|can|bi[nh]h?)$/.test(u)) return 'lon'
+  if (/^(b[ìi]nh|binh)$/.test(u)) return 'bình'
+  if (/^(l[oô]c|loc|pack)$/.test(u)) return 'lốc'
+  return u
+}
+function uomDisplay(group: string): string {
+  const map: Record<string,string> = { thùng: 'Thùng', chai: 'Chai', lon: 'Lon', bình: 'Bình', lốc: 'Lốc' }
+  return map[group] || group
+}
+function isSignificantUomChange(from: string, to: string): boolean {
+  const gFrom = uomGroup(from)
+  const gTo   = uomGroup(to)
+  if (!from || !to || gFrom === gTo) return false
+  // chai/lon/bình → thùng/lốc = meaningful (different pricing unit)
+  return gTo === 'thùng' || gTo === 'lốc'
+}
 
 // ── Người thực hiện (executor → MISA owner_name) ────────────────────────────
 const LS_KEY = 'misa_salesperson'
@@ -54,6 +76,8 @@ import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { getProducts } from '@/utils/catalogStore'
+import type { PriceOverride } from '@/components/SelectPopup'
+import ContactSelectPopup, { type Contact as ContactType } from '@/components/ContactSelectPopup'
 import dayjs from 'dayjs'
 
 function EditableCell({ value, type = 'text', onChange, placeholder }: { value: string | number | null | undefined; type?: 'text' | 'number'; onChange: (val: unknown) => void; placeholder?: string }) {
@@ -75,22 +99,38 @@ function InputWithPopup({ value, placeholder, onPopupClick }: { value?: string; 
   )
 }
 
-function ProductModal({ open, suggestName, onSelect, onCancel }: { open: boolean; suggestName: string; onSelect: (p: Product) => void; onCancel: () => void }) {
+function ProductModal({ open, suggestName, onSelect, onCancel, priceOverrides }: { open: boolean; suggestName: string; onSelect: (p: Product) => void; onCancel: () => void; priceOverrides?: Map<string, PriceOverride> }) {
   const [query, setQuery] = useState('')
   const results = query.trim() ? searchProducts(query) : suggestName ? matchProduct(suggestName, 20).map(r => r.product) : searchProducts('')
   return (
     <Modal title="Chọn hàng hóa" open={open} onCancel={onCancel} width="90vw" style={{ maxWidth: 1000 }} footer={null} zIndex={1200}>
       <Input.Search placeholder="Tìm theo tên hoặc mã hàng hóa..." value={query} onChange={e => setQuery(e.target.value)} className="mb-3" allowClear autoFocus />
       {suggestName && !query && <div className="mb-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded">Gợi ý: <strong>{suggestName}</strong></div>}
+      {priceOverrides && priceOverrides.size > 0 && (
+        <div className="mb-2 text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded flex items-center gap-1">
+          <TagsOutlined /><span>Hàng nền vàng có giá chiết khấu áp dụng cho khách hàng này</span>
+        </div>
+      )}
       <AntTable size="small" pagination={{ pageSize: 10, size: 'small' }} dataSource={results} rowKey="code"
         scroll={{ x: 'max-content' }}
+        rowClassName={(r: any) => priceOverrides?.has(r.code) ? '!bg-amber-50' : ''}
         onRow={record => ({ onClick: () => onSelect(record as Product), className: 'cursor-pointer hover:bg-blue-50' })}
         columns={[
           { title: 'Mã hàng hóa', dataIndex: 'code', width: 120 },
           { title: 'Tên hàng hóa', dataIndex: 'name', width: 280 },
           { title: 'Loại HH', dataIndex: 'product_type', width: 110 },
           { title: 'ĐVT', dataIndex: 'uom', width: 80 },
-          { title: 'Đơn giá', dataIndex: 'price', width: 120, render: (v: number) => v ? v.toLocaleString('vi-VN') : '\u2014' },
+          {
+            title: 'Đơn giá', dataIndex: 'price', width: 140,
+            render: (v: number, r: any) => {
+              const ov = priceOverrides?.get(r.code)
+              if (ov) return <span className="flex items-center gap-1">
+                {v ? <span className="line-through text-slate-400 text-[10px]">{v.toLocaleString('vi-VN')}</span> : null}
+                <span className="font-bold text-orange-700 bg-orange-100 border border-orange-300 rounded px-1 text-[11px]">{ov.unit_price.toLocaleString('vi-VN')} \u0111 {'\u2605'}</span>
+              </span>
+              return v ? v.toLocaleString('vi-VN') : '\u2014'
+            }
+          },
           { title: 'Thuế', dataIndex: 'tax_rate', width: 80 },
           { title: 'Tính chất', dataIndex: 'property', width: 140 },
         ]}
@@ -111,12 +151,12 @@ function applyProductToLine(line: OrderLine, product: Product): OrderLine {
   const unitPrice = savedPrice || catalogPrice
   return {
     ...line,
-    ocr_product_code: line.ocr_product_code || product.code,
+    ocr_product_code: product.code,           // luôn dùng code catalog sau khi map
     product_name_original: line.product_name_original || product.name,
-    uom_original: line.uom_original || product.uom,
+    uom_original: product.uom,                // luôn dùng UOM từ catalog
     unit_price: unitPrice,
     tax_rate: productTaxRate(product) !== 0 ? productTaxRate(product) : (line.tax_rate ?? 0),
-    line_total: line.line_total || (unitPrice && quantity ? unitPrice * quantity : 0),
+    line_total: line.line_total,              // giữ nguyên từ PDF
     mapping_status: 'mapped',
   }
 }
@@ -125,22 +165,27 @@ function isSystemLine(line: Partial<OrderLine>): boolean {
   return line.mapping_status === 'overridden'
 }
 
-type PopupType = 'customer' | null
+type PopupType = 'customer' | 'contact' | null
 type CustomerData = Record<string, string>
 
 function contactToCustomerData(contact: Contact, matchedCustomer: CustomerData | null): CustomerData {
   const addr = contact.delivery_address || contact.address || ''
   return {
     ...(matchedCustomer || {}),
+    // Contact là tuyệt đối — override tất cả delivery + phone + email
+    ...(addr ? { invoice_address: addr, invoice_street: addr, delivery_address: addr, delivery_street: addr } : {}),
+    ...(contact.city ? { invoice_city: contact.city, delivery_city: contact.city } : {}),
+    ...(contact.district ? { invoice_district: contact.district, delivery_district: contact.district } : {}),
+    ...(contact.ward ? { invoice_ward: contact.ward, delivery_ward: contact.ward } : {}),
+    ...(contact.phone || contact.phone_work ? { delivery_phone: contact.phone || contact.phone_work || '' } : {}),
     contact: contact.name,
     contact_code: contact.code,
     contact_phone: contact.phone || contact.phone_work || '',
     contact_email: contact.email || contact.email_personal || '',
-    // Người mua hàng = tên liên hệ được chọn
+    contact_organization: contact.organization || '',
     owner: contact.name,
     invoice_buyer: contact.name,
-    ...(addr && !matchedCustomer ? { invoice_address: addr, delivery_address: addr } : {}),
-    ...(contact.city && !matchedCustomer ? { invoice_city: contact.city } : {}),
+    delivery_receiver: contact.name,
   }
 }
 
@@ -210,6 +255,27 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   const [salesperson, setSalesperson] = useState(getSavedNV)
   const [loading, setLoading] = useState(true)
   const [nextNo, setNextNo] = useState('')
+  const [pricebooks, setPricebooks] = useState<Array<{code:string;name:string;items:Array<{product_code:string;unit_price:number}>}>>([])
+  const [vouchers, setVouchers] = useState<Array<{code:string;name:string;type:string;customers:string[];items:any[];is_active:boolean;multiplier:boolean}>>([])
+  const [selectedVoucher, setSelectedVoucher] = useState<typeof vouchers[0] | null>(null)
+  const [selectedPricebook, setSelectedPricebook] = useState<typeof pricebooks[0] | null>(null)
+  const [pendingChange, setPendingChange] = useState<{
+    lineIdx: number; product: Product
+    uomFrom?: string; uomTo?: string; uomChanged: boolean
+    pbPrice?: number; pbName?: string; currentPrice?: number
+  } | null>(null)
+
+  // Build pricebook price map for product selection
+  const priceOverrides = useMemo(() => {
+    const map = new Map<string, PriceOverride>()
+    for (const pb of pricebooks) {
+      for (const item of pb.items) {
+        if (!map.has(item.product_code))
+          map.set(item.product_code, { unit_price: item.unit_price, pricebook_name: pb.name, pricebook_code: pb.code })
+      }
+    }
+    return map
+  }, [pricebooks])
 
   const setCustField = (key: string, val: string) =>
     setSelectedCustomerData(prev => ({ ...prev, [key]: val }))
@@ -217,6 +283,18 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   useEffect(() => {
     client.get('/misa/sale-orders/next-no').then(r => setNextNo(r.data.next_no)).catch(() => {})
   }, [])
+
+  // Fetch pricebooks + vouchers when customer code is known
+  useEffect(() => {
+    const code = selectedCustomerData.code || selectedCustomerData.customer_code
+    if (!code) { setPricebooks([]); setVouchers([]); return }
+    client.get('/misa/price-books/for-customers', { params: { codes: code } })
+      .then(r => setPricebooks(r.data?.[code] || []))
+      .catch(() => setPricebooks([]))
+    client.get('/vouchers/for-customers', { params: { codes: code } })
+      .then(r => setVouchers(r.data?.[code] || []))
+      .catch(() => setVouchers([]))
+  }, [selectedCustomerData.code, selectedCustomerData.customer_code])
 
   useEffect(() => {
     if (!orderId) return
@@ -385,13 +463,36 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <Form.Item label={<>Ngày đặt hàng <span className="text-red-500">*</span></>} name="order_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
-          <Form.Item label="Khách hàng"><InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} /></Form.Item>
+          <Form.Item label="Khách hàng">
+            <InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} />
+          </Form.Item>
           <Form.Item label="Liên hệ">
             <div className="flex gap-1">
               <Input value={selectedContactName} onChange={e => { setSelectedContactName(e.target.value); setCustField('contact', e.target.value) }} placeholder="Nhập hoặc chọn từ danh sách" className="flex-1" />
-              <Button icon={<SearchOutlined />} onClick={() => setActivePopup('customer')} title="Chọn từ danh sách" />
+              <Button icon={<SearchOutlined />} onClick={() => setActivePopup('contact')} title="Chọn người liên hệ" />
             </div>
           </Form.Item>
+          {/* Address confirm banner when contact has address */}
+          {selectedCustomerData.contact && selectedCustomerData.contact_address && (
+            <div className="col-span-2 bg-blue-50 border border-blue-200 rounded px-3 py-2 text-xs flex items-center justify-between gap-2">
+              <span className="text-blue-700">
+                <strong>LH {selectedCustomerData.contact}</strong> có địa chỉ: {selectedCustomerData.contact_address}
+              </span>
+              <Button size="small" type="primary"
+                onClick={() => {
+                  const addr = selectedCustomerData.contact_address || ''
+                  setCustField('invoice_address', addr)
+                  setCustField('invoice_street', addr)
+                  setCustField('delivery_address', addr)
+                  setCustField('delivery_street', addr)
+                  if (selectedCustomerData.contact_phone) {
+                    setCustField('delivery_phone', selectedCustomerData.contact_phone)
+                  }
+                }}>
+                Áp địa chỉ vào HĐ & GH
+              </Button>
+            </div>
+          )}
           <Form.Item label={<>Hạn thanh toán <span className="text-red-500">*</span></>} name="payment_due"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label={<>Giá trị đơn hàng <span className="text-red-500">*</span></>} name="total_amount"><InputNumber className="w-full" formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v!.replace(/,/g, '') as unknown as number} /></Form.Item>
           <Form.Item label={<>Loại đơn hàng <span className="text-red-500">*</span></>} name="order_type" initialValue="Kênh MT"><Select placeholder="- Chọn -" options={[{ value: 'Kênh MT', label: 'Kênh MT' }, { value: 'Khách lẻ', label: 'Khách lẻ' }, { value: 'B2B', label: 'B2B' }, { value: 'Kênh GT', label: 'Kênh GT' }]} /></Form.Item>
@@ -425,6 +526,40 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <h2 className="text-sm font-semibold text-gray-700">Thông tin hàng hóa</h2>
           <span className="text-xs text-gray-400">{lines.length} dòng</span>
         </div>
+        {/* Voucher + Chính sách giá */}
+        {(vouchers.length > 0 || pricebooks.length > 0) && (
+          <div className="mb-3 border border-slate-200 rounded-lg overflow-hidden text-xs">
+            {vouchers.length > 0 && (
+              <div className="flex items-start gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
+                <span className="text-slate-400 font-medium shrink-0 w-28">Voucher ({vouchers.length})</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {vouchers.map(v => (
+                    <button key={v.code} onClick={() => setSelectedVoucher(v)}
+                      className="inline-flex items-center gap-1 rounded px-2 py-0.5 border border-purple-300 text-purple-700 hover:bg-purple-50 font-mono font-semibold transition-colors">
+                      <TagsOutlined style={{fontSize:10}} />{v.code}
+                      <span className="font-normal text-slate-500 ml-1 max-w-[140px] truncate">{v.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {pricebooks.length > 0 && (
+              <div className="flex items-start gap-2 px-3 py-2">
+                <span className="text-slate-400 font-medium shrink-0 w-28">Chính sách giá ({pricebooks.length})</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {pricebooks.map(pb => (
+                    <button key={pb.code} onClick={() => setSelectedPricebook(pb)}
+                      className="inline-flex items-center gap-1 rounded px-2 py-0.5 border border-orange-300 text-orange-700 hover:bg-orange-50 font-mono font-semibold transition-colors">
+                      <TagsOutlined style={{fontSize:10}} />{pb.code}
+                      <span className="font-normal text-slate-500 ml-1 max-w-[140px] truncate">{pb.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {hasUnmappedItems && (
           <div className="mb-3 flex items-center justify-between text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
             <span className="flex items-center gap-2">
@@ -459,17 +594,51 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 const totalLine = amt + txAmt
                 const isPending = line.mapping_status === 'pending'
                 const systemLine = isSystemLine(line)
+                const conf = (!isPending || systemLine) ? null : (() => {
+                  const r = matchProduct(line.product_name_original, 1)
+                  if (!r.length) return null
+                  return { score: r[0].score, product: r[0].product }
+                })()
+                const pbOv = line.ocr_product_code ? priceOverrides.get(line.ocr_product_code) : undefined
+                const dotColor = systemLine ? 'bg-slate-400' : !isPending ? 'bg-emerald-500'
+                  : conf && conf.score >= 0.85 ? 'bg-emerald-400' : conf && conf.score >= 0.5 ? 'bg-yellow-400' : 'bg-red-400'
                 return (
-                  <tr key={line.id || idx} className={`border-b border-gray-100 hover:bg-blue-50/30 ${isPending ? 'bg-orange-50/50' : ''}`}>
-                    <td className="px-1 py-1 text-center">{isPending && <span className="text-orange-400">⚠</span>}</td>
+                  <tr key={line.id || idx} className={`border-b border-gray-100 hover:bg-blue-50/30 ${isPending ? 'bg-orange-50/30' : ''} ${pbOv ? 'bg-amber-50/40' : ''}`}>
+                    <td className="px-1 py-1 text-center">
+                      <Tooltip title={!isPending ? 'Đã xác nhận' : conf && conf.score >= 0.85 ? 'Gợi ý tốt' : conf ? 'Cần xem lại' : 'Chưa tìm thấy'}>
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
+                      </Tooltip>
+                    </td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
-                    <td className="px-2 py-1 flex items-center gap-1">
-                      {isPending && !systemLine
-                        ? <button className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded px-2 py-0.5 whitespace-nowrap" onClick={() => setProductModalIdx(idx)}><SearchOutlined style={{fontSize:10}} /> Chọn SP</button>
-                        : <>
-                            <EditableCell value={line.ocr_product_code || ''} onChange={v => updateLine(idx, 'ocr_product_code', v)} placeholder="Mã SP" />
-                            {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined /></button>}
-                          </>}
+                    <td className="px-2 py-1">
+                      {isPending && !systemLine ? (
+                        <div className="flex items-center gap-1">
+                          {conf && conf.score >= 0.85 ? (
+                            <Tooltip title={`Xác nhận: ${conf.product.code}`}>
+                              <button className="flex items-center gap-0.5 text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded px-1.5 py-0.5 whitespace-nowrap"
+                                onClick={() => {
+                                  const chg = { uomChanged: isSignificantUomChange(line.uom_original||'', conf!.product.uom), pbPrice: priceOverrides.get(conf!.product.code)?.unit_price, pbName: priceOverrides.get(conf!.product.code)?.pricebook_name, currentPrice: Number(line.unit_price)||0 }
+                                  if (chg.uomChanged || (chg.pbPrice && chg.pbPrice !== chg.currentPrice)) {
+                                    setPendingChange({ lineIdx: idx, product: conf!.product, uomFrom: line.uom_original ?? undefined, uomTo: conf!.product.uom, ...chg })
+                                  } else {
+                                    setLines(prev => prev.map((l,i) => i===idx ? applyProductToLine(l, conf!.product) : l))
+                                  }
+                                }}>
+                                <CheckOutlined style={{fontSize:9}}/>{conf.product.code}
+                              </button>
+                            </Tooltip>
+                          ) : null}
+                          <button className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded px-1.5 py-0.5 whitespace-nowrap" onClick={() => setProductModalIdx(idx)}>
+                            <SearchOutlined style={{fontSize:9}} />Chọn
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-slate-700 text-xs font-semibold">{line.ocr_product_code || '—'}</span>
+                          {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined style={{fontSize:10}}/></button>}
+                          {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
                     <td className="px-2 py-1"><EditableCell value={line.uom_original} onChange={v => updateLine(idx, 'uom_original', v)} placeholder="ĐVT" /></td>
@@ -513,9 +682,6 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <Form.Item label="Tên khách hàng (HĐ)"><Input value={selectedCustomerData.name || ''} onChange={e => { setCustField('name', e.target.value); setSelectedCustomer(e.target.value) }} /></Form.Item>
           <Form.Item label="Mã số thuế"><Input value={selectedCustomerData.tax_code || ''} onChange={e => setCustField('tax_code', e.target.value)} /></Form.Item>
           <Form.Item label="Người mua hàng"><Input value={selectedCustomerData.owner || ''} onChange={e => setCustField('owner', e.target.value)} /></Form.Item>
-          <Form.Item label="Điện thoại"><Input value={selectedCustomerData.phone || ''} onChange={e => setCustField('phone', e.target.value)} /></Form.Item>
-          <Form.Item label="Email"><Input value={selectedCustomerData.email || ''} onChange={e => setCustField('email', e.target.value)} /></Form.Item>
-          <Form.Item label="Lĩnh vực"><Input value={selectedCustomerData.field || ''} onChange={e => setCustField('field', e.target.value)} /></Form.Item>
           <Form.Item label="Địa chỉ (HĐ)"><Input value={selectedCustomerData.invoice_address || ''} onChange={e => setCustField('invoice_address', e.target.value)} /></Form.Item>
           <Form.Item label="Tỉnh/TP (HĐ)"><Input value={selectedCustomerData.invoice_city || ''} onChange={e => setCustField('invoice_city', e.target.value)} /></Form.Item>
           <Form.Item label="Quận/Huyện (HĐ)"><Input value={selectedCustomerData.invoice_district || ''} onChange={e => setCustField('invoice_district', e.target.value)} /></Form.Item>
@@ -548,21 +714,164 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         suggestName={productModalIdx !== null && productModalIdx >= 0 ? lines[productModalIdx]?.product_name_original || '' : ''}
         onSelect={p => {
           if (productModalIdx !== null && productModalIdx >= 0) {
-            setLines(prev => prev.map((line, idx) => idx === productModalIdx ? applyProductToLine(line, p) : line))
+            const line = lines[productModalIdx]
+            const pbOverride = priceOverrides.get(p.code)
+            const uomChanged = isSignificantUomChange(line.uom_original || '', p.uom)
+            const currentPrice = Number(line.unit_price) || 0
+            const pbPrice = pbOverride?.unit_price
+            const priceChanged = !!pbPrice && pbPrice !== currentPrice
+
+            if (uomChanged || priceChanged) {
+              setPendingChange({
+                lineIdx: productModalIdx, product: p,
+                uomFrom: line.uom_original ?? undefined, uomTo: p.uom, uomChanged,
+                pbPrice, pbName: pbOverride?.pricebook_name, currentPrice,
+              })
+              setProductModalIdx(null)
+              return
+            }
+            setLines(prev => prev.map((l, idx) => idx === productModalIdx ? applyProductToLine(l, p) : l))
           } else {
             setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: p.code, product_name_original: p.name, quantity: 1, unit_price: p.price || 0, line_total: p.price || 0, uom_original: p.uom, tax_rate: productTaxRate(p), mapping_status: 'mapped' } as unknown as OrderLine])
           }
           setProductModalIdx(null)
         }}
         onCancel={() => setProductModalIdx(null)}
+        priceOverrides={priceOverrides}
       />
 
-      {/* Customer + Contact popup */}
+      {/* Confirmation popup: UOM change + pricebook price */}
+      {pendingChange && (
+        <Modal
+          open
+          centered
+          title="Xác nhận thay đổi khi map hàng hóa"
+          width={500}
+          onCancel={() => { setPendingChange(null); setProductModalIdx(null) }}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => {
+                // Apply without any changes (keep original UOM + price)
+                setLines(prev => prev.map((l, idx) => idx === pendingChange.lineIdx
+                  ? { ...applyProductToLine(l, pendingChange.product), uom_original: l.uom_original, unit_price: l.unit_price }
+                  : l))
+                setPendingChange(null)
+              }}>Giữ nguyên</Button>
+              <Button type="primary" onClick={() => {
+                // Apply all suggested changes
+                const line = lines[pendingChange.lineIdx]
+                const applied = applyProductToLine(line, pendingChange.product)
+                const finalPrice = pendingChange.pbPrice || applied.unit_price
+                const qty = Number(line.quantity) || 1
+                const finalLineTotal = finalPrice && qty ? finalPrice * qty : applied.line_total
+                setLines(prev => prev.map((l, idx) => idx === pendingChange.lineIdx
+                  ? { ...applied, unit_price: finalPrice, line_total: finalLineTotal }
+                  : l))
+                setPendingChange(null)
+              }}>Áp dụng thay đổi</Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            {pendingChange.uomChanged && (
+              <div className="border border-amber-200 bg-amber-50 rounded p-3">
+                <div className="font-semibold text-amber-800 mb-1">Đổi đơn vị tính</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-red-500 line-through">{pendingChange.uomFrom || '—'}</span>
+                  <span className="text-slate-400">→</span>
+                  <span className="text-emerald-700 font-semibold">{pendingChange.uomTo}</span>
+                </div>
+                <div className="text-xs text-amber-600 mt-1">Lưu ý: đơn vị thay đổi có thể ảnh hưởng đến số lượng và đơn giá</div>
+              </div>
+            )}
+            {pendingChange.pbPrice && pendingChange.pbPrice !== pendingChange.currentPrice && (
+              <div className="border border-orange-200 bg-orange-50 rounded p-3">
+                <div className="font-semibold text-orange-800 mb-1">Áp dụng giá chiết khấu — {pendingChange.pbName}</div>
+                <div className="flex items-center gap-2 text-sm">
+                  {pendingChange.currentPrice ? <>
+                    <span className="text-slate-400 line-through">{pendingChange.currentPrice.toLocaleString('vi-VN')}</span>
+                    <span>→</span>
+                  </> : null}
+                  <span className="text-orange-700 font-bold text-base">{pendingChange.pbPrice.toLocaleString('vi-VN')} đ</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Voucher detail popup */}
+      {selectedVoucher && (
+        <Modal open width={860} centered footer={<Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>}
+          title={<span><TagsOutlined className="mr-2 text-purple-500" />{selectedVoucher.code} — {selectedVoucher.name}</span>}
+          onCancel={() => setSelectedVoucher(null)} zIndex={1300}>
+          <div className="text-xs grid grid-cols-3 gap-2 mb-3 border border-slate-200 rounded px-3 py-2 bg-slate-50">
+            <div><span className="text-slate-500">Loại:</span> {selectedVoucher.type}</div>
+            <div><span className="text-slate-500">Nhân hệ số:</span> {selectedVoucher.multiplier ? 'Có' : 'Không'}</div>
+            <div><span className="text-slate-500">KH:</span> {selectedVoucher.customers?.length ? selectedVoucher.customers.join(', ') : 'Tất cả'}</div>
+          </div>
+          <table className="w-full text-xs border-collapse">
+            <thead><tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-2 py-1.5 text-left">Mua</th><th className="px-2 py-1.5 text-center w-16">ĐVT</th>
+              <th className="px-2 py-1.5 text-right w-16">SL mua</th><th className="px-2 py-1.5 text-left">Tặng</th>
+              <th className="px-2 py-1.5 text-right w-16">SL tặng</th><th className="px-2 py-1.5 text-right w-20">Max/đơn</th>
+            </tr></thead>
+            <tbody>{selectedVoucher.items?.map((it: any, i: number) => (
+              <tr key={i} className="border-b border-slate-100">
+                <td className="px-2 py-1"><span className="font-mono font-semibold">{it.product_code}</span> · {it.product_name}</td>
+                <td className="px-2 py-1 text-center text-slate-500">{it.uom}</td>
+                <td className="px-2 py-1 text-right font-semibold">{it.quantity}</td>
+                <td className="px-2 py-1"><span className="font-mono font-semibold text-emerald-700">{it.gift_product_code}</span> · {it.gift_product_name}</td>
+                <td className="px-2 py-1 text-right font-semibold text-emerald-700">{it.gift_quantity}</td>
+                <td className="px-2 py-1 text-right text-slate-400">{it.max_per_order || '∞'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </Modal>
+      )}
+
+      {/* Pricebook detail popup */}
+      {selectedPricebook && (
+        <Modal open width={760} centered footer={<Button onClick={() => setSelectedPricebook(null)}>Đóng</Button>}
+          title={<span><TagsOutlined className="mr-2 text-orange-500" />{selectedPricebook.code} — {selectedPricebook.name}</span>}
+          onCancel={() => setSelectedPricebook(null)} zIndex={1300}>
+          <table className="w-full text-xs border-collapse">
+            <thead><tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-2 py-1.5 text-left">Mã hàng</th><th className="px-2 py-1.5 text-left">Tên</th>
+              <th className="px-2 py-1.5 text-center w-16">ĐVT</th><th className="px-2 py-1.5 text-right w-28">Đơn giá (CK)</th>
+            </tr></thead>
+            <tbody>{selectedPricebook.items?.map((it: any, i: number) => (
+              <tr key={i} className="border-b border-slate-100">
+                <td className="px-2 py-1 font-mono font-semibold text-blue-600">{it.product_code}</td>
+                <td className="px-2 py-1 text-slate-700">{it.product_name}</td>
+                <td className="px-2 py-1 text-center text-slate-500">{it.uom}</td>
+                <td className="px-2 py-1 text-right font-bold text-orange-700">{it.unit_price?.toLocaleString('vi-VN')} đ</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </Modal>
+      )}
+
+      {/* Customer popup (customer only) */}
       <CustomerContactPopup
-        open={!!activePopup}
+        open={activePopup === 'customer'}
         onSelect={handleCustomerContactResult}
         onCancel={() => setActivePopup(null)}
+        initialTab="customer"
         initialSearch={selectedCustomer || ''}
+      />
+
+      {/* Contact popup (separate, no tabs) */}
+      <ContactSelectPopup
+        open={activePopup === 'contact'}
+        onSelect={(contact, matchedCustomer) => {
+          const result: CustomerContactResult = matchedCustomer
+            ? { type: 'contact', contact: contact as any, customer: matchedCustomer as any }
+            : { type: 'contact', contact: contact as any, customer: null }
+          handleCustomerContactResult(result)
+          setActivePopup(null)
+        }}
+        onCancel={() => setActivePopup(null)}
       />
 
     </div>
