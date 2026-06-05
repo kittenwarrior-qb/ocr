@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Button, Card, Tag, message, Tooltip, Badge, Spin, Modal, Alert, Checkbox, Switch } from 'antd'
+import { Button, Card, Tag, message, Tooltip, Badge, Spin, Modal, Alert, Checkbox, Switch, Input, Select } from 'antd'
 import {
   MailOutlined,
   FilePdfOutlined,
@@ -11,6 +11,8 @@ import {
   EyeOutlined,
   LoadingOutlined,
   ThunderboltOutlined,
+  SearchOutlined,
+  InboxOutlined,
 } from '@ant-design/icons'
 import {
   getEmailOrders,
@@ -24,6 +26,7 @@ import {
   doneAttachment,
   bulkConvert,
   getAttachmentDownloadUrl,
+  getAttachmentViewUrl,
   type EmailOrderListItem,
   type EmailOrder,
   type EmailAttachment,
@@ -90,6 +93,12 @@ export default function EmailOrdersPage() {
 
   // company sidebar — null means "show all companies"
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null)
+
+  // free-text search over sender name / email / subject / recipient
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // filter by recipient mailbox — null means "all recipients"
+  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
 
   // auto-polling (webhook delivers to backend; FE polls our DB to pick up new rows)
   const [autoPoll, setAutoPoll] = useState(true)
@@ -194,13 +203,12 @@ export default function EmailOrdersPage() {
 
       // 2. Not in OCR yet (null) or previously failed → fetch blob and upload
       await convertAttachment(att.id)
-      if (att.download_url) {
-        const res = await fetch(att.download_url)
-        if (!res.ok) throw new Error(`Không tải được file: HTTP ${res.status}`)
-        const blob = await res.blob()
-        const file = new File([blob], att.filename, { type: 'application/pdf' })
-        await uploadBatch([file], true)
-      }
+      const downloadUrl = att.download_url ?? getAttachmentDownloadUrl(att.external_attachment_id ?? att.id)
+      const res = await fetch(downloadUrl)
+      if (!res.ok) throw new Error(`Không tải được file: HTTP ${res.status}`)
+      const blob = await res.blob()
+      const file = new File([blob], att.filename, { type: 'application/pdf' })
+      await uploadBatch([file], true)
       message.success(`Đã gửi "${att.filename}" vào hàng chờ OCR`)
     } catch (e: unknown) {
       setStatusOverride(prev => new Map(prev).set(att.id, 'pending'))
@@ -271,8 +279,8 @@ export default function EmailOrdersPage() {
       if (toUpload.length > 0) {
         const blobs = await Promise.all(
           toUpload.map(async a => {
-            if (!a.download_url) return null
-            const res = await fetch(a.download_url)
+            const url = a.download_url ?? getAttachmentDownloadUrl(a.external_attachment_id ?? a.id)
+            const res = await fetch(url)
             if (!res.ok) return null
             const blob = await res.blob()
             return new File([blob], a.filename, { type: 'application/pdf' })
@@ -303,10 +311,48 @@ export default function EmailOrdersPage() {
     })
   }
 
-  // ---- derive groups from list items (for grouping header) ----
+  // ---- free-text filter over sender name / email / subject / recipient ----
+  const filteredItems = useMemo(() => {
+    let items = listItems
+
+    // filter by recipient mailbox (if one is selected)
+    if (selectedRecipient) {
+      items = items.filter(e => e.recipient_email === selectedRecipient)
+    }
+
+    // free-text search
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      items = items.filter(e =>
+        (e.sender_name ?? '').toLowerCase().includes(q) ||
+        e.sender_email.toLowerCase().includes(q) ||
+        (e.recipient_email ?? '').toLowerCase().includes(q) ||
+        (e.subject ?? '').toLowerCase().includes(q)
+      )
+    }
+    return items
+  }, [listItems, searchQuery, selectedRecipient])
+
+  // distinct recipient mailboxes present in the data (for the filter dropdown)
+  const recipients = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of listItems) {
+      if (e.recipient_email) set.add(e.recipient_email)
+    }
+    return Array.from(set).sort()
+  }, [listItems])
+
+  // if the selected recipient disappears (e.g. after refresh), fall back to "all"
+  useEffect(() => {
+    if (selectedRecipient && !recipients.includes(selectedRecipient)) {
+      setSelectedRecipient(null)
+    }
+  }, [recipients, selectedRecipient])
+
+  // ---- derive groups from filtered items (for grouping header) ----
   const groups = useMemo(
-    () => groupEmailsByDomain(listItems),
-    [listItems]
+    () => groupEmailsByDomain(filteredItems),
+    [filteredItems]
   )
 
   // groups shown in the main panel — filtered by the selected company (if any)
@@ -331,9 +377,31 @@ export default function EmailOrdersPage() {
         <div className="flex items-center gap-2">
           <MailOutlined className="text-blue-600 text-xl" />
           <h1 className="text-lg font-semibold text-gray-800 m-0">Đơn hàng qua Email</h1>
-          {!loading && <Badge count={listItems.length} color="blue" />}
+          {!loading && (
+            <Badge
+              count={searchQuery.trim() ? filteredItems.length : listItems.length}
+              color="blue"
+            />
+          )}
         </div>
         <div className="flex items-center gap-3">
+          <Input
+            allowClear
+            prefix={<SearchOutlined className="text-gray-400" />}
+            placeholder="Tìm theo tên / email / người nhận / tiêu đề"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-72"
+          />
+          <Select
+            allowClear
+            placeholder="Người nhận"
+            value={selectedRecipient}
+            onChange={v => setSelectedRecipient(v ?? null)}
+            options={recipients.map(r => ({ label: r, value: r }))}
+            className="w-56"
+            suffixIcon={<InboxOutlined className="text-gray-400" />}
+          />
           <Tooltip title="Tự động kiểm tra email mới mỗi 60 giây (webhook đẩy về DB)">
             <Switch
               size="small"
@@ -503,6 +571,13 @@ export default function EmailOrdersPage() {
                               <span className="font-medium text-gray-700">{item.sender_name}</span>
                               <span className="text-gray-400">&lt;{item.sender_email}&gt;</span>
                             </div>
+                            {item.recipient_email && (
+                              <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                                <InboxOutlined />
+                                <span>Người nhận:</span>
+                                <span className="text-gray-600">{item.recipient_email}</span>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
                             <span className="text-xs text-gray-400">{formatDate(item.received_at)}</span>
@@ -542,7 +617,8 @@ export default function EmailOrdersPage() {
                               const isPending = status === 'pending'
                               const isProcessing = status === 'processing'
                               const isDone = status === 'done'
-                              const downloadUrl = att.download_url ?? getAttachmentDownloadUrl(att.external_attachment_id ?? att.id)
+                              const extId = att.external_attachment_id ?? att.id
+                              const viewUrl = att.view_url ?? getAttachmentViewUrl(extId)
 
                               return (
                                 <div
@@ -584,7 +660,7 @@ export default function EmailOrdersPage() {
                                         size="small"
                                         icon={<EyeOutlined />}
                                         onClick={() =>
-                                          setPreviewFile({ filename: att.filename, url: downloadUrl })
+                                          setPreviewFile({ filename: att.filename, url: viewUrl })
                                         }
                                       >
                                         Xem
@@ -629,11 +705,20 @@ export default function EmailOrdersPage() {
             </div>
             ))}
 
-            {/* No emails for the selected company */}
+            {/* No emails after filtering */}
             {visibleGroups.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-                <MailOutlined className="text-4xl mb-3" />
-                <p className="text-base">Không có email cho công ty này</p>
+                {searchQuery.trim() ? (
+                  <>
+                    <SearchOutlined className="text-4xl mb-3" />
+                    <p className="text-base">Không tìm thấy email khớp với "{searchQuery.trim()}"</p>
+                  </>
+                ) : (
+                  <>
+                    <MailOutlined className="text-4xl mb-3" />
+                    <p className="text-base">Không có email cho công ty này</p>
+                  </>
+                )}
               </div>
             )}
           </div>

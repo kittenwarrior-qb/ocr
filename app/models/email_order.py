@@ -16,6 +16,7 @@ class EmailOrder(Base):
     external_id = Column(String(500), unique=True, nullable=True)  # message_id from crawl service
     sender_email = Column(String(300), nullable=False)
     sender_name = Column(String(300), nullable=True)
+    recipient_email = Column(String(300), nullable=True)  # the mailbox that received this email
     subject = Column(String(1000), nullable=True)
     received_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -35,6 +36,7 @@ class EmailAttachment(Base):
     filename = Column(String(500), nullable=False)
     file_size = Column(BigInteger, nullable=True)
     download_url = Column(String(1000), nullable=True)  # URL to fetch the PDF from crawl service
+    view_url = Column(String(1000), nullable=True)      # URL to view the PDF inline in the browser
     status = Column(
         SAEnum(*ATTACHMENT_STATUS, name="email_attachment_status_enum"),
         default="pending",

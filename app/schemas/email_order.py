@@ -13,6 +13,7 @@ class EmailAttachmentOut(BaseModel):
     filename: str
     file_size: int | None
     download_url: str | None
+    view_url: str | None
     status: AttachmentStatus
     converted_at: datetime | None
     done_at: datetime | None
@@ -26,6 +27,7 @@ class EmailOrderOut(BaseModel):
     external_id: str | None
     sender_email: str
     sender_name: str | None
+    recipient_email: str | None
     subject: str | None
     received_at: datetime | None
     created_at: datetime
@@ -40,6 +42,7 @@ class EmailOrderListItem(BaseModel):
     external_id: str | None
     sender_email: str
     sender_name: str | None
+    recipient_email: str | None
     subject: str | None
     received_at: datetime | None
     created_at: datetime
@@ -55,6 +58,7 @@ class SyncFromCrawlerIn(BaseModel):
     external_id: str
     sender_email: str
     sender_name: str | None = None
+    recipient_email: str | None = None
     subject: str | None = None
     received_at: datetime | None = None
     attachments: list[SyncAttachmentIn] = []
@@ -65,6 +69,7 @@ class SyncAttachmentIn(BaseModel):
     filename: str
     file_size: int | None = None
     download_url: str | None = None
+    view_url: str | None = None
 
 
 SyncFromCrawlerIn.model_rebuild()
@@ -86,6 +91,7 @@ class WebhookAttachmentIn(BaseModel):
     mime_type: str | None = None
     file_size: int | None = None
     download_url: str | None = None
+    view_url: str | None = None
 
 
 class WebhookEmailReceivedIn(BaseModel):
@@ -94,6 +100,7 @@ class WebhookEmailReceivedIn(BaseModel):
     message_id: str
     sender_email: str
     sender_name: str | None = None
+    recipient_email: str | None = None
     subject: str | None = None
     received_at: datetime | None = None
     attachments: list[WebhookAttachmentIn] = []

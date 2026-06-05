@@ -76,6 +76,8 @@ _MIGRATIONS = [
         done_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )""",
+    "ALTER TABLE email_orders ADD COLUMN IF NOT EXISTS recipient_email VARCHAR(300)",
+    "ALTER TABLE email_attachments ADD COLUMN IF NOT EXISTS view_url VARCHAR(1000)",
     """CREATE TABLE IF NOT EXISTS webhook_logs (
         id SERIAL PRIMARY KEY,
         event VARCHAR(100),

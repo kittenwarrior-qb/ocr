@@ -23,6 +23,7 @@ export interface CrawlerAttachment {
   checksum: string;
   created_at: string;
   download_url: string;
+  view_url: string;
 }
 
 export interface CrawlerEmail {
@@ -69,6 +70,7 @@ export interface EmailAttachment {
   filename: string;
   file_size: number | null;
   download_url: string | null;
+  view_url: string | null;
   status: AttachmentStatus;
   converted_at: string | null;
   done_at: string | null;
@@ -80,6 +82,7 @@ export interface EmailOrder {
   external_id: string | null;
   sender_email: string;
   sender_name: string | null;
+  recipient_email: string | null;
   subject: string | null;
   received_at: string | null;
   created_at: string;
@@ -91,6 +94,7 @@ export interface EmailOrderListItem {
   external_id: string | null;
   sender_email: string;
   sender_name: string | null;
+  recipient_email: string | null;
   subject: string | null;
   received_at: string | null;
   created_at: string;
@@ -133,12 +137,21 @@ export async function getCrawlerEmail(emailId: number): Promise<CrawlerEmail> {
   return data;
 }
 
-export function getAttachmentDownloadUrl(attachmentId: number): string {
-  const base = (
+function emailApiBase(): string {
+  return (
     import.meta.env.VITE_EMAIL_API_URL ||
     "https://email-gateway.longpt.io.vn/api"
   ).replace(/\/$/, "");
-  return `${base}/attachments/${attachmentId}/download`;
+}
+
+/** URL to download the raw file (used to feed the OCR pipeline). */
+export function getAttachmentDownloadUrl(attachmentId: number): string {
+  return `${emailApiBase()}/attachments/${attachmentId}/download`;
+}
+
+/** URL to view the file inline in the browser (used by the PDF preview modal). */
+export function getAttachmentViewUrl(attachmentId: number): string {
+  return `${emailApiBase()}/attachments/${attachmentId}/view`;
 }
 
 // ============================================================
@@ -168,6 +181,7 @@ export async function syncEmailToDB(
     external_id: crawlerEmail.message_id,
     sender_email: crawlerEmail.sender_email,
     sender_name: crawlerEmail.sender_name,
+    recipient_email: crawlerEmail.recipient_email,
     subject: crawlerEmail.subject,
     received_at: crawlerEmail.received_at,
     attachments: (crawlerEmail.attachments ?? []).map((a) => ({
@@ -175,6 +189,7 @@ export async function syncEmailToDB(
       filename: a.filename,
       file_size: a.file_size,
       download_url: a.download_url,
+      view_url: a.view_url,
     })),
   });
   return data;

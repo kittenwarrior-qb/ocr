@@ -49,6 +49,7 @@ def list_email_orders(db: Session, skip: int = 0, limit: int = 50) -> list[dict]
             "external_id": email.external_id,
             "sender_email": email.sender_email,
             "sender_name": email.sender_name,
+            "recipient_email": email.recipient_email,
             "subject": email.subject,
             "received_at": email.received_at,
             "created_at": email.created_at,
@@ -81,6 +82,7 @@ def upsert_from_crawler(db: Session, payload: SyncFromCrawlerIn) -> EmailOrder:
             external_id=payload.external_id,
             sender_email=payload.sender_email,
             sender_name=payload.sender_name,
+            recipient_email=payload.recipient_email,
             subject=payload.subject,
             received_at=_to_utc_naive(payload.received_at),
         )
@@ -115,6 +117,7 @@ def upsert_from_crawler(db: Session, payload: SyncFromCrawlerIn) -> EmailOrder:
             filename=att.filename,
             file_size=att.file_size,
             download_url=att.download_url,
+            view_url=att.view_url,
             status="pending",
         ))
 
@@ -132,6 +135,7 @@ def upsert_from_webhook(db: Session, payload: WebhookEmailReceivedIn) -> EmailOr
         external_id=payload.message_id,
         sender_email=payload.sender_email,
         sender_name=payload.sender_name,
+        recipient_email=payload.recipient_email,
         subject=payload.subject,
         received_at=payload.received_at,
         attachments=[
@@ -140,6 +144,7 @@ def upsert_from_webhook(db: Session, payload: WebhookEmailReceivedIn) -> EmailOr
                 filename=a.filename,
                 file_size=a.file_size,
                 download_url=a.download_url,
+                view_url=a.view_url,
             )
             for a in payload.attachments
         ],
