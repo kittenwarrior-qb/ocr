@@ -25,6 +25,37 @@ def parse_excel_orders(file_path: str) -> list[dict[str, Any]]:
     wb = openpyxl.load_workbook(file_path, data_only=True)
     orders = []
 
+    try:
+        from app.services.excel_order_parser import _is_satori_template, parse_excel_order
+
+        sample_rows = list(wb.active.iter_rows(min_row=1, max_row=25, values_only=True))
+        if _is_satori_template(sample_rows):
+            parsed = parse_excel_order(file_path)
+            lines = [
+                {
+                    "product_name": item.get("product_name"),
+                    "product_code": item.get("product_code"),
+                    "quantity": item.get("quantity"),
+                    "unit_price": item.get("unit_price"),
+                    "uom": item.get("uom"),
+                    "line_total": item.get("line_total"),
+                    "tax_rate": item.get("tax_rate"),
+                    "discount_rate": item.get("discount_rate"),
+                    "discount_amount": item.get("discount_amount"),
+                }
+                for item in parsed.get("items", [])
+                if _to_number(item.get("quantity")) and _to_number(item.get("quantity")) > 0
+            ]
+            sheet_name = wb.active.title
+            wb.close()
+            return [{
+                "sheet_name": sheet_name,
+                "lines": lines,
+                "total_amount": parsed.get("total_amount") or sum(l["line_total"] or 0 for l in lines),
+            }] if lines else []
+    except Exception:
+        pass
+
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
         rows = list(ws.iter_rows(values_only=True))
@@ -63,6 +94,8 @@ def parse_excel_orders(file_path: str) -> list[dict[str, Any]]:
                 "discount_rate": _to_number(_get_cell(row, col_map.get("discount_rate"))),
                 "discount_amount": _to_number(_get_cell(row, col_map.get("discount_amount"))),
             }
+            if not line["quantity"] or line["quantity"] <= 0:
+                continue
             lines.append(line)
 
         if lines:

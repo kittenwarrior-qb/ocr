@@ -254,6 +254,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   const [vouchers, setVouchers] = useState<Array<{code:string;name:string;type:string;customers:string[];items:any[];is_active:boolean;multiplier:boolean}>>([])
   const [selectedVoucher, setSelectedVoucher] = useState<typeof vouchers[0] | null>(null)
   const [selectedPricebook, setSelectedPricebook] = useState<typeof pricebooks[0] | null>(null)
+  const [deletingLineIdx, setDeletingLineIdx] = useState<number | null>(null)
   const [pendingChange, setPendingChange] = useState<{
     lineIdx: number; product: Product
     uomFrom?: string; uomTo?: string; uomChanged: boolean
@@ -431,6 +432,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
 
   const buildSavePayload = (nextLines: OrderLine[]) => {
     const values = form.getFieldsValue()
+    const paymentDue = values.payment_due ? (values.payment_due as dayjs.Dayjs).format('DD/MM/YYYY') : ''
     const meta: Record<string, string> = {
       ...buildExtraData(selectedCustomerData),
       order_type: values.order_type || 'Kênh MT',
@@ -438,6 +440,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       salesperson: salesperson || getSavedNV(),
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
+      payment_due: paymentDue,
     }
     return {
       ...values,
@@ -451,15 +454,134 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     }
   }
 
+  const isUnitPriceDiscountVoucher = (voucher: typeof vouchers[0]) =>
+    (voucher.type || '').toLowerCase().includes('giảm tiền trên đơn giá')
+
+  const findVoucherLine = (nextLines: OrderLine[], item: any) => nextLines.find(line => {
+    if (isSystemLine(line)) return false
+    const codes = new Set([
+      (line as any).product_code_mapped,
+      line.ocr_product_code,
+      (line as any).temp_code,
+      (line as any).product_code,
+    ].filter(Boolean))
+    return codes.has(item.product_code)
+  })
+
+  const voucherAllConditionsMet = (voucher: typeof vouchers[0]) =>
+    !!voucher.items?.length && voucher.items.every(item => {
+      const matchedLine = findVoucherLine(lines, item)
+      return matchedLine && (Number(matchedLine.quantity) || 0) >= Number(item.quantity || 0)
+    })
+
+  const applyVoucher = async (voucher: typeof vouchers[0]) => {
+    const missing: string[] = []
+    const insufficient: string[] = []
+
+    for (const item of voucher.items || []) {
+      const matchedLine = findVoucherLine(lines, item)
+      if (!matchedLine) {
+        missing.push(`${item.product_code} - ${item.product_name}`)
+        continue
+      }
+      const orderedQty = Number(matchedLine.quantity) || 0
+      if (orderedQty < Number(item.quantity || 0)) {
+        insufficient.push(`${item.product_code} (cần ${item.quantity}, có ${orderedQty})`)
+      }
+    }
+
+    if (missing.length || insufficient.length) {
+      const detail: string[] = []
+      if (missing.length) detail.push(`Thiếu sản phẩm:\n• ${missing.join('\n• ')}`)
+      if (insufficient.length) detail.push(`Chưa đủ số lượng:\n• ${insufficient.join('\n• ')}`)
+      message.error({ content: detail.join('\n\n'), duration: 6 })
+      return
+    }
+
+    let nextLines: OrderLine[] = []
+
+    if (isUnitPriceDiscountVoucher(voucher)) {
+      const discountItems = new Map((voucher.items || []).map(item => [item.product_code, item]))
+      let appliedCount = 0
+      let totalDiscount = 0
+
+      nextLines = lines.map(line => {
+        if (isSystemLine(line)) return line
+        const matchedItem = [
+          (line as any).product_code_mapped,
+          line.ocr_product_code,
+          (line as any).temp_code,
+          (line as any).product_code,
+        ].filter(Boolean).map(code => discountItems.get(code as string)).find(Boolean)
+        if (!matchedItem) return line
+
+        const discountAmount = Number((matchedItem as any).discount_amount) || 0
+        if (discountAmount <= 0) return line
+
+        const qty = Number(line.quantity) || 0
+        const currentUnitPrice = Number(line.unit_price) || (qty > 0 ? (Number(line.line_total) || 0) / qty : 0)
+        const nextUnitPrice = Math.max(currentUnitPrice - discountAmount, 0)
+        appliedCount += 1
+        totalDiscount += discountAmount * Math.max(qty, 1)
+        return { ...line, unit_price: nextUnitPrice, line_total: nextUnitPrice * qty }
+      })
+
+      await updateOrder(orderId, buildSavePayload(nextLines))
+      setLines(nextLines)
+      onLocalSaved?.(nextLines)
+      message.success(`Đã trừ ${totalDiscount.toLocaleString('vi-VN')}đ từ ${appliedCount} dòng hàng`)
+      setSelectedVoucher(null)
+      return
+    }
+
+    const giftLines = (voucher.items || []).map((item, idx) => {
+      const matchedLine = findVoucherLine(lines, item)!
+      const orderedQty = Number(matchedLine.quantity) || 0
+      const multiplier = voucher.multiplier ? Math.floor(orderedQty / Number(item.quantity || 1)) : 1
+      let giftQty = multiplier * Number(item.gift_quantity || 0)
+      if (Number(item.max_per_order) > 0) giftQty = Math.min(giftQty, Number(item.max_per_order))
+      return {
+        id: `gift-${voucher.code}-${idx}-${item.gift_product_code}`,
+        temp_code: item.gift_product_code,
+        product_name_original: `[Tặng] ${item.gift_product_name}`,
+        ocr_product_code: item.gift_product_code,
+        product_code_mapped: item.gift_product_code,
+        uom_original: item.gift_uom,
+        quantity: giftQty,
+        unit_price: 0,
+        line_total: 0,
+        tax_rate: 0,
+        mapping_status: 'overridden',
+      } as unknown as OrderLine
+    })
+
+    const giftCodes = new Set(giftLines.map(line => (line as any).temp_code || line.ocr_product_code || ''))
+    const cleanLines = lines.filter(line =>
+      !(isSystemLine(line) && giftCodes.has((line as any).temp_code || line.ocr_product_code || ''))
+    )
+    nextLines = [...cleanLines, ...giftLines]
+    await updateOrder(orderId, buildSavePayload(nextLines))
+    setLines(nextLines)
+    onLocalSaved?.(nextLines)
+    message.success(`Đã thêm ${giftLines.length} dòng tặng hàng`)
+    setSelectedVoucher(null)
+  }
+
   const deleteLine = async (i: number) => {
+    if (deletingLineIdx !== null) return
+    const previousLines = lines
     const nextLines = lines.filter((_, idx) => idx !== i)
     setLines(nextLines)
+    setDeletingLineIdx(i)
     try {
       await updateOrder(orderId, buildSavePayload(nextLines))
-      message.success('Đã xóa dòng')
-      onSaved?.()
+      message.success('Đã xóa dòng và tự lưu')
+      onLocalSaved?.(nextLines)
     } catch (e: any) {
+      setLines(previousLines)
       message.error(e.message || 'Xóa dòng thất bại')
+    } finally {
+      setDeletingLineIdx(null)
     }
   }
 
@@ -519,7 +641,15 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               className="bg-gray-50 text-gray-700 font-medium"
             />
           </Form.Item>
-          <Form.Item label={<>Ngày đặt hàng <span className="text-red-500">*</span></>} name="order_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
+          <Form.Item label={<>Ngày đặt hàng <span className="text-red-500">*</span></>} name="order_date">
+            <DatePicker
+              className="w-full"
+              format="DD/MM/YYYY"
+              onChange={date => {
+                form.setFieldValue('payment_due', date ? date.add(1, 'month') : null)
+              }}
+            />
+          </Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
           <Form.Item label="Khách hàng">
@@ -583,7 +713,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       <div className="mt-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">Thông tin hàng hóa</h2>
-          <span className="text-xs text-gray-400">{lines.length} dòng</span>
+          <span className="text-xs text-gray-400">{lines.length} dòng · xóa dòng sẽ tự lưu</span>
         </div>
         {/* Voucher + Chính sách giá */}
         {(vouchers.length > 0 || pricebooks.length > 0) && (
@@ -708,7 +838,14 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     <td className="px-2 py-1 text-right text-slate-600">{txAmt ? txAmt.toLocaleString('vi-VN') : '—'}</td>
                     <td className="px-2 py-1 text-right font-semibold">{totalLine ? totalLine.toLocaleString('vi-VN') : '—'}</td>
                     <td className="px-2 py-1 text-center">
-                      <button className="text-red-500 hover:text-red-700 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50" onClick={() => deleteLine(idx)} title="Xóa dòng"><DeleteOutlined /></button>
+                      <button
+                        className="text-red-500 hover:text-red-700 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => deleteLine(idx)}
+                        disabled={deletingLineIdx !== null}
+                        title={deletingLineIdx === idx ? 'Đang xóa và tự lưu...' : 'Xóa dòng và tự lưu'}
+                      >
+                        <DeleteOutlined />
+                      </button>
                     </td>
                   </tr>
                 )
@@ -920,7 +1057,19 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
 
       {/* Voucher detail popup */}
       {selectedVoucher && (
-        <Modal open width={860} centered footer={<Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>}
+        <Modal open width={860} centered footer={
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setSelectedVoucher(null)}>Đóng</Button>
+            <Button
+              type="primary"
+              disabled={!voucherAllConditionsMet(selectedVoucher)}
+              title={voucherAllConditionsMet(selectedVoucher) ? '' : 'Chưa đủ điều kiện áp dụng'}
+              onClick={() => applyVoucher(selectedVoucher)}
+            >
+              {isUnitPriceDiscountVoucher(selectedVoucher) ? 'Áp dụng giảm giá' : 'Áp dụng khuyến mại'}
+            </Button>
+          </div>
+        }
           title={<span><TagsOutlined className="mr-2 text-purple-500" />{selectedVoucher.code} — {selectedVoucher.name}</span>}
           onCancel={() => setSelectedVoucher(null)} zIndex={1300}>
           <div className="text-xs grid grid-cols-3 gap-2 mb-3 border border-slate-200 rounded px-3 py-2 bg-slate-50">

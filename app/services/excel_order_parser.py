@@ -83,6 +83,23 @@ def _parse_satori_template(ws) -> dict:
         flat = ' '.join(_str(c) for c in row if c is not None)
         vals = [_str(c) for c in row]
 
+        label = (vals[1] if len(vals) > 1 else '').lower()
+        value = vals[3] if len(vals) > 3 else ''
+        right_label = (vals[8] if len(vals) > 8 else '').lower()
+        right_value = vals[9] if len(vals) > 9 else ''
+
+        if 'bên mua' in label and value and not result['customer_name']:
+            result['customer_name'] = value
+        if 'mst' in right_label and right_value and not result['customer_tax_code']:
+            m = re.search(r'\d{10,13}', right_value)
+            result['customer_tax_code'] = m.group(0) if m else right_value
+        if 'người liên hệ' in label and value and not result['recipient_name']:
+            result['recipient_name'] = value
+        if 'địa chỉ giao hàng' in label and value and not result['delivery_address']:
+            result['delivery_address'] = value
+        elif 'địa chỉ giao dịch' in label and value and not result['delivery_address']:
+            result['delivery_address'] = value
+
         # Customer name: "Bên mua : <name>"
         m = re.search(r'Bên mua\s*:\s*(.+)', flat, re.I)
         if m and not result['customer_name']:
