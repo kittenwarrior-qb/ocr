@@ -1,14 +1,15 @@
 """
-Parse Excel purchase order files into the same extracted-data structure as OCR.
-Supports KingKong-style phiếu đặt nhập hàng and similar formats.
+Parse Excel purchase order files into extracted-data structure matching OCR output.
+
+Supports:
+1. Satori internal template (ĐƠN ĐẶT HÀNG kênh GT) — fixed layout
+2. KingKong/generic purchase order Excel — auto-detect
 """
 import re
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 
 def _clean_num(val) -> float:
-    """Convert cell value to float, handling Vietnamese number format."""
     if val is None:
         return 0.0
     s = str(val).replace(',', '').replace(' ', '').strip()
@@ -28,7 +29,6 @@ def _parse_date(val) -> str | None:
     if not val:
         return None
     s = _str(val)
-    # "18/05/2026 13:39" or "18/05/2026"
     m = re.search(r'(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})', s)
     if m:
         d, mo, y = m.group(1), m.group(2), m.group(3)
@@ -36,110 +36,201 @@ def _parse_date(val) -> str | None:
     return None
 
 
-def _rows_to_flat(ws) -> list[list]:
-    """Get all non-empty rows as list of cell values."""
-    rows = []
-    for row in ws.iter_rows(values_only=True):
-        rows.append([v for v in row])
-    return rows
+def _is_satori_template(rows: list) -> bool:
+    """Detect Satori internal order template by checking header structure."""
+    flat = ' '.join(
+        _str(c) for row in rows[:20] for c in row if c is not None
+    ).lower()
+    return (
+        'satori' in flat and
+        'đơn đặt hàng' in flat and
+        'bên mua' in flat and
+        ('đại lý' in flat or 'npp' in flat or 'nhà phân phối' in flat or 'kênh gt' in flat)
+    )
 
 
-def parse_excel_order(file_path: str) -> dict:
+def _parse_satori_template(ws) -> dict:
     """
-    Parse a purchase order Excel file.
-    Returns extracted data dict matching OCR output structure.
+    Parse Satori fixed-format order template.
+    Columns (0-indexed row values):
+      0=CK_group, 1=STT, 2=product_name, 3=spec, 4=uom,
+      5=qty_ordered, 6=qty_promo, 7=qty_total,
+      8=unit_price, 9=line_total_pretax,
+      10=tax_rate, 11=tax_amount, 12=line_total_with_tax
+    Header:
+      R12: Bên mua / MST
+      R13: Người liên hệ / Điện thoại
+      R14: Địa chỉ giao dịch
+      R15: Địa chỉ giao hàng
+    Data rows: after header row containing 'STT' and 'Số lượng'
     """
-    import openpyxl
-    wb = openpyxl.load_workbook(file_path, data_only=True)
-    ws = wb.active
-
-    rows = _rows_to_flat(ws)
+    rows = list(ws.iter_rows(values_only=True))
     result = {
         "document_type": "purchase_order",
         "customer_name": None,
         "customer_tax_code": None,
         "order_number": None,
         "order_date": None,
-        "delivery_address": None,
         "recipient_name": None,
+        "delivery_address": None,
         "items": [],
         "total_amount": None,
         "tax_amount": None,
     }
 
-    # ── Pass 1: extract header metadata ─────────────────────────────────────
-    for row in rows:
+    # ── Header metadata ────────────────────────────────────────────────────────
+    for row in rows[:20]:
         flat = ' '.join(_str(c) for c in row if c is not None)
+        vals = [_str(c) for c in row]
 
-        # Company name (often in first few rows standalone)
-        if not result['customer_name']:
-            for cell in row:
-                s = _str(cell)
-                if re.search(r'CÔNG TY|TNHH|CỬA HÀNG|SIÊU THỊ|MART|STORE', s, re.I) and len(s) > 5:
-                    result['customer_name'] = s
-                    break
+        # Customer name: "Bên mua : <name>"
+        m = re.search(r'Bên mua\s*:\s*(.+)', flat, re.I)
+        if m and not result['customer_name']:
+            name = m.group(1).strip()
+            # Remove MST part if present
+            name = re.sub(r'\s*MST\s*:.*', '', name).strip()
+            if name:
+                result['customer_name'] = name
 
-        # PO number — "Mã phiếu: OT..." or "Số đơn: ..."
-        m = re.search(r'(?:Mã phiếu|Số đơn|PO|Order)[:\s]+([A-Z0-9\-_/]+)', flat, re.I)
-        if m and not result['order_number']:
-            result['order_number'] = m.group(1).strip()
-
-        # Date
-        m = re.search(r'(?:Ngày|Date)[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{4})', flat, re.I)
-        if m and not result['order_date']:
-            result['order_date'] = _parse_date(m.group(1))
-
-        # Tax code
-        m = re.search(r'MST[:\s]+(\d{10,13})', flat, re.I)
+        # Tax code: "MST : <code>"
+        m = re.search(r'MST\s*:\s*(\d{10,13})', flat, re.I)
         if m and not result['customer_tax_code']:
             result['customer_tax_code'] = m.group(1).strip()
 
-        # Invoice company (more reliable customer name)
-        m = re.search(r'(?:Thông tin xuất hóa đơn|Tên công ty|Invoice)[:\s]*$', flat, re.I)
-        if m:
-            # Next non-empty cell value in same or next row
-            for cell in row:
-                s = _str(cell)
-                if re.search(r'CÔNG TY|TNHH|CỬA HÀNG|SIÊU THỊ|MART|CO\.,', s, re.I) and len(s) > 5:
-                    result['customer_name'] = s
-                    break
-        # Also grab company name from the value column next to label
-        for i, cell in enumerate(row):
-            s = _str(cell)
-            if re.search(r'(?:Thông tin xuất hóa đơn|Tên công ty)', s, re.I):
-                for j in range(i+1, len(row)):
-                    v = _str(row[j])
-                    if v and re.search(r'CÔNG TY|TNHH|MART|CO\.,', v, re.I):
-                        result['customer_name'] = v
-                        break
+        # Contact: "Người liên hệ : <name>"
+        m = re.search(r'Người liên hệ\s*:\s*([^Đ][^\t\n]+)', flat, re.I)
+        if m and not result['recipient_name']:
+            result['recipient_name'] = m.group(1).strip().split('\t')[0].strip()
 
         # Delivery address
-        for i, cell in enumerate(row):
+        m = re.search(r'Địa chỉ giao hàng\s*:\s*(.+)', flat, re.I)
+        if m and not result['delivery_address']:
+            result['delivery_address'] = m.group(1).strip()
+        elif not result['delivery_address']:
+            m = re.search(r'Địa chỉ giao dịch\s*:\s*(.+)', flat, re.I)
+            if m:
+                result['delivery_address'] = m.group(1).strip()
+
+    # ── Find data rows: after row with 'STT' and 'Số lượng' ──────────────────
+    data_start = None
+    for idx, row in enumerate(rows):
+        flat = ' '.join(_str(c) for c in row if c is not None).lower()
+        if 'stt' in flat and ('số lượng' in flat or 'lượng') and 'tên hàng' in flat:
+            data_start = idx + 2  # skip header + col number row
+            break
+
+    if data_start is None:
+        return result
+
+    # ── Extract items with quantity > 0 ──────────────────────────────────────
+    for row in rows[data_start:]:
+        vals = list(row)
+        if not any(v is not None for v in vals):
+            continue
+
+        # Check if this is a valid product row (col 1 = sequential number)
+        stt_val = _str(vals[1] if len(vals) > 1 else '')
+        try:
+            stt = int(float(stt_val))
+        except (ValueError, TypeError):
+            # Might be total row — capture total
+            flat = ' '.join(_str(v) for v in vals if v is not None).lower()
+            if 'tổng tiền' in flat and len(vals) > 12:
+                total = _clean_num(vals[12] if len(vals) > 12 else None)
+                if total > 0:
+                    result['total_amount'] = total
+            continue
+
+        product_name = _str(vals[2] if len(vals) > 2 else '')
+        if not product_name:
+            continue
+
+        uom = _str(vals[4] if len(vals) > 4 else '')
+        qty_ordered = _clean_num(vals[5] if len(vals) > 5 else None)
+        unit_price = _clean_num(vals[8] if len(vals) > 8 else None)
+        line_total_pretax = _clean_num(vals[9] if len(vals) > 9 else None)
+        tax_rate_raw = _clean_num(vals[10] if len(vals) > 10 else None)
+        line_total_withtax = _clean_num(vals[12] if len(vals) > 12 else None)
+
+        # Only include rows where quantity was filled in (> 0)
+        if qty_ordered <= 0:
+            continue
+
+        # Tax rate: stored as 0.08 → convert to 8
+        tax_rate = tax_rate_raw * 100 if tax_rate_raw < 1 else tax_rate_raw
+
+        result['items'].append({
+            "product_name": product_name,
+            "product_code": "",
+            "quantity": qty_ordered,
+            "uom": uom,
+            "unit_price": unit_price if unit_price > 0 else None,
+            "line_total": line_total_pretax if line_total_pretax > 0 else None,
+            "tax_rate": tax_rate,
+        })
+
+    # Compute total if not found
+    if not result['total_amount'] and result['items']:
+        pre_tax = sum(i['line_total'] or 0 for i in result['items'])
+        tax = sum((i['line_total'] or 0) * (i['tax_rate'] or 0) / 100 for i in result['items'])
+        result['total_amount'] = pre_tax + tax
+
+    return result
+
+
+def _parse_generic(ws) -> dict:
+    """Generic parser for other Excel PO formats (KingKong, etc.)."""
+    rows = list(ws.iter_rows(values_only=True))
+    result = {
+        "document_type": "purchase_order",
+        "customer_name": None, "customer_tax_code": None,
+        "order_number": None, "order_date": None,
+        "delivery_address": None, "recipient_name": None,
+        "items": [], "total_amount": None, "tax_amount": None,
+    }
+
+    # Metadata pass
+    for row in rows:
+        flat = ' '.join(_str(c) for c in row if c is not None)
+        m = re.search(r'(?:Mã phiếu|Số đơn|PO|Order)[:\s]+([A-Z0-9\-_/]+)', flat, re.I)
+        if m and not result['order_number']:
+            result['order_number'] = m.group(1).strip()
+        m = re.search(r'(?:Ngày|Date)[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{4})', flat, re.I)
+        if m and not result['order_date']:
+            result['order_date'] = _parse_date(m.group(1))
+        m = re.search(r'MST[:\s]+(\d{10,13})', flat, re.I)
+        if m and not result['customer_tax_code']:
+            result['customer_tax_code'] = m.group(1).strip()
+        # Customer name
+        for cell in row:
             s = _str(cell)
-            if re.search(r'(?:Địa chỉ kho nhận|Địa chỉ giao|Địa chỉ|Address)\s*$', s, re.I):
+            if re.search(r'CÔNG TY|TNHH|MART|STORE|CO\.,', s, re.I) and len(s) > 5:
+                if not result['customer_name']:
+                    result['customer_name'] = s
+                    break
+        # Delivery address
+        for i, cell in enumerate(row):
+            if re.search(r'Địa chỉ giao hàng|Địa chỉ kho nhận|Ship to', _str(cell), re.I):
                 for j in range(i+1, len(row)):
                     v = _str(row[j])
-                    if v and len(v) > 10 and not re.search(r'ĐT:|Tel:|Email:', v, re.I):
+                    if v and len(v) > 10:
                         result['delivery_address'] = v
                         break
 
-    # ── Pass 2: find items table ─────────────────────────────────────────────
-    header_row_idx = None
-    col_map = {}  # column name → column index
-
+    # Find header row
+    header_idx = None
+    col_map: dict = {}
     for idx, row in enumerate(rows):
         flat_lower = ' '.join(_str(c).lower() for c in row if c is not None)
-        if ('stt' in flat_lower or 'sản phẩm' in flat_lower or 'product' in flat_lower.lower()) \
-           and ('số lượng' in flat_lower or 'quantity' in flat_lower or 'sl' in flat_lower):
-            header_row_idx = idx
-            # Map columns
+        if ('sản phẩm' in flat_lower or 'tên hàng' in flat_lower) and \
+           ('số lượng' in flat_lower or 'qty' in flat_lower or 'sl' in flat_lower):
+            header_idx = idx
             for ci, cell in enumerate(row):
                 s = _str(cell).lower().strip()
-                if re.search(r'mã hàng|product.?code|item.?code|barcode', s):
+                if re.search(r'mã hàng|product.?code|barcode', s):
                     col_map['product_code'] = ci
-                elif re.search(r'tên|sản phẩm|product.?name|description|diễn giải', s):
-                    if 'product_name' not in col_map:
-                        col_map['product_name'] = ci
+                elif re.search(r'tên|sản phẩm|product.?name', s) and 'product_name' not in col_map:
+                    col_map['product_name'] = ci
                 elif re.search(r'số lượng|sl|qty|quantity', s):
                     col_map['quantity'] = ci
                 elif re.search(r'đvt|đơn vị|unit', s):
@@ -152,25 +243,15 @@ def parse_excel_order(file_path: str) -> dict:
                     col_map['line_total'] = ci
             break
 
-    # ── Pass 3: extract items ────────────────────────────────────────────────
-    if header_row_idx is not None:
-        for row in rows[header_row_idx + 1:]:
-            # Stop at summary/total rows
+    if header_idx is not None:
+        for row in rows[header_idx + 1:]:
             flat = ' '.join(_str(c) for c in row if c is not None)
-            if re.search(r'thuế suất|tổng tiền|cần trả|giảm giá|tổng cộng|total', flat, re.I):
-                # Capture total if present
+            if re.search(r'tổng tiền|tổng cộng|cần trả', flat, re.I):
                 for cell in row:
                     n = _clean_num(cell)
                     if n > 100000 and not result['total_amount']:
                         result['total_amount'] = n
                 continue
-
-            # Must have a sequential number in first real column (1.0, 2.0, ...)
-            first_vals = [_str(c) for c in row if c is not None]
-            if not first_vals:
-                continue
-
-            # Check if first numeric cell looks like a row index
             row_num = None
             for cell in row[:3]:
                 try:
@@ -184,39 +265,39 @@ def parse_excel_order(file_path: str) -> dict:
                 continue
 
             def col_val(key):
-                idx = col_map.get(key)
-                return row[idx] if idx is not None and idx < len(row) else None
+                idx2 = col_map.get(key)
+                return row[idx2] if idx2 is not None and idx2 < len(row) else None
 
-            product_code = _str(col_val('product_code'))
-            product_name = _str(col_val('product_name'))
             qty = _clean_num(col_val('quantity'))
-            uom = _str(col_val('uom'))
-            unit_price = _clean_num(col_val('unit_price'))
-            tax_rate = _clean_num(col_val('tax_rate'))
-            line_total = _clean_num(col_val('line_total'))
-
-            if not product_name and not qty:
+            if qty <= 0:
                 continue
 
-            # Compute line total if missing
-            if not line_total and unit_price and qty:
-                line_total = unit_price * qty
+            unit_price = _clean_num(col_val('unit_price'))
+            line_total = _clean_num(col_val('line_total'))
+            tax_rate_raw = _clean_num(col_val('tax_rate'))
+            tax_rate = tax_rate_raw * 100 if tax_rate_raw < 1 else tax_rate_raw
 
             result['items'].append({
-                "product_code": product_code,
-                "product_name": product_name,
+                "product_code": _str(col_val('product_code')),
+                "product_name": _str(col_val('product_name')),
                 "quantity": qty,
-                "uom": uom,
-                "unit_price": unit_price,
-                "tax_rate": tax_rate,
-                "line_total": line_total,
+                "uom": _str(col_val('uom')),
+                "unit_price": unit_price or None,
+                "line_total": line_total or None,
+                "tax_rate": tax_rate or None,
             })
 
-    # Compute total from items if not found
-    if not result['total_amount'] and result['items']:
-        subtotal = sum(i['line_total'] for i in result['items'])
-        tax = sum(i['line_total'] * i['tax_rate'] / 100 for i in result['items'])
-        result['total_amount'] = subtotal + tax
-        result['tax_amount'] = tax
-
     return result
+
+
+def parse_excel_order(file_path: str) -> dict:
+    """Parse a purchase order Excel file — auto-detect format."""
+    import openpyxl
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    ws = wb.active
+
+    rows = list(ws.iter_rows(min_row=1, max_row=min(ws.max_row, 25), values_only=True))
+    if _is_satori_template(rows):
+        return _parse_satori_template(ws)
+    else:
+        return _parse_generic(ws)

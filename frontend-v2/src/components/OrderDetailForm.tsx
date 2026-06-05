@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
-import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag } from 'antd'
-import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, GiftOutlined, TagsOutlined } from '@ant-design/icons'
+import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip } from 'antd'
+import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
 
@@ -13,10 +13,6 @@ function uomGroup(uom: string): string {
   if (/^(b[ìi]nh|binh)$/.test(u)) return 'bình'
   if (/^(l[oô]c|loc|pack)$/.test(u)) return 'lốc'
   return u
-}
-function uomDisplay(group: string): string {
-  const map: Record<string,string> = { thùng: 'Thùng', chai: 'Chai', lon: 'Lon', bình: 'Bình', lốc: 'Lốc' }
-  return map[group] || group
 }
 function isSignificantUomChange(from: string, to: string): boolean {
   const gFrom = uomGroup(from)
@@ -77,7 +73,7 @@ import CustomerContactPopup, { type CustomerContactResult, type Contact } from '
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
 import { getProducts } from '@/utils/catalogStore'
 import type { PriceOverride } from '@/components/SelectPopup'
-import ContactSelectPopup, { type Contact as ContactType } from '@/components/ContactSelectPopup'
+import ContactSelectPopup from '@/components/ContactSelectPopup'
 import dayjs from 'dayjs'
 
 function EditableCell({ value, type = 'text', onChange, placeholder }: { value: string | number | null | undefined; type?: 'text' | 'number'; onChange: (val: unknown) => void; placeholder?: string }) {
@@ -112,7 +108,7 @@ function ProductModal({ open, suggestName, onSelect, onCancel, priceOverrides }:
         </div>
       )}
       <AntTable size="small" pagination={{ pageSize: 10, size: 'small' }} dataSource={results} rowKey="code"
-        scroll={{ x: 'max-content' }}
+        scroll={{ x: 900, y: 360 }}
         rowClassName={(r: any) => priceOverrides?.has(r.code) ? '!bg-amber-50' : ''}
         onRow={record => ({ onClick: () => onSelect(record as Product), className: 'cursor-pointer hover:bg-blue-50' })}
         columns={[
@@ -126,7 +122,7 @@ function ProductModal({ open, suggestName, onSelect, onCancel, priceOverrides }:
               const ov = priceOverrides?.get(r.code)
               if (ov) return <span className="flex items-center gap-1">
                 {v ? <span className="line-through text-slate-400 text-[10px]">{v.toLocaleString('vi-VN')}</span> : null}
-                <span className="font-bold text-orange-700 bg-orange-100 border border-orange-300 rounded px-1 text-[11px]">{ov.unit_price.toLocaleString('vi-VN')} \u0111 {'\u2605'}</span>
+                <span className="font-bold text-orange-700 bg-orange-100 border border-orange-300 rounded px-1 text-[11px]">{ov.unit_price.toLocaleString('vi-VN')} {'đ'} {'★'}</span>
               </span>
               return v ? v.toLocaleString('vi-VN') : '\u2014'
             }
@@ -144,8 +140,6 @@ function productTaxRate(product: Product): number {
 }
 
 function applyProductToLine(line: OrderLine, product: Product): OrderLine {
-  const quantity = Number(line.quantity) || 1
-  // Ưu tiên giá đã lưu (từ OCR/user edit), chỉ dùng giá catalog khi chưa có
   const savedPrice = Number(line.unit_price) || 0
   const catalogPrice = Number(product.price) || 0
   const unitPrice = savedPrice || catalogPrice
@@ -574,7 +568,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-1 py-2 w-6"></th>
                 <th className="px-2 py-2 text-left w-8">STT</th>
-                <th className="px-2 py-2 text-left w-28">Mã hàng hóa</th>
+                <th className="px-2 py-2 text-left w-36">Mã hàng hóa</th>
                 <th className="px-2 py-2 text-left min-w-[140px]">Diễn giải</th>
                 <th className="px-2 py-2 text-left w-12">ĐVT</th>
                 <th className="px-2 py-2 text-right w-12">SL</th>
