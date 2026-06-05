@@ -359,6 +359,66 @@ def _normalize_extracted_amounts(data: dict) -> dict:
     return data
 
 
+def extract_from_excel_text(file_path: str) -> dict:
+    """
+    Extract order data from Excel by converting to text table and sending to AI.
+    Used for non-Satori-template Excel files where direct parsing is unreliable.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    ws = wb.active
+
+    # Build text table representation
+    lines = []
+    for row in ws.iter_rows(values_only=True):
+        if not any(v is not None for v in row):
+            continue
+        cols = [str(v).strip() if v is not None else '' for v in row]
+        # Skip rows that are entirely empty strings
+        if not any(cols):
+            continue
+        lines.append('\t'.join(cols))
+
+    table_text = '\n'.join(lines[:200])  # cap at 200 rows
+
+    prompt = f"""You are extracting purchase order data from an Excel spreadsheet (tab-separated text).
+
+{GENERIC_FULL_PROMPT}
+
+Here is the Excel content (tab-separated):
+
+{table_text}
+
+Return valid JSON only (no markdown):"""
+
+    # Call AI as text-only (no image)
+    api_key, model = _get_ocr_credentials()
+    import httpx, json as _json
+
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 4096,
+        "temperature": 0.1,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://satori.vn",
+    }
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(f"{OPENROUTER_BASE_URL}/chat/completions", json=payload, headers=headers)
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"]
+
+    try:
+        result = _extract_json(raw)
+        return _normalize_extracted_amounts(result)
+    except Exception:
+        return {"items": [], "_raw": raw, "_parse_error": True}
+
+
 def extract_full_document(file_path: str, system_prompt: str | None = None) -> dict:
     """Pass 2: trích xuất toàn bộ dữ liệu với prompt của template (hoặc generic)."""
     prompt = system_prompt or GENERIC_FULL_PROMPT

@@ -55,12 +55,23 @@ def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> 
     db.commit()
 
     try:
-        # ── Excel files: parse directly, no OCR needed ───────────────────────
+        # ── Excel files: Satori template → direct parse, others → AI ─────────
         file_ext = Path(raw.file_path).suffix.lower() if raw.file_path else ""
         if file_ext in (".xlsx", ".xls"):
-            from app.services.excel_order_parser import parse_excel_order
-            extracted = parse_excel_order(raw.file_path)
-            raw.ocr_raw_text = f"Excel: {raw.file_name}"
+            from app.services.excel_order_parser import parse_excel_order, _is_satori_template
+            import openpyxl as _opx
+            _wb = _opx.load_workbook(raw.file_path, data_only=True)
+            _rows = list(_wb.active.iter_rows(min_row=1, max_row=25, values_only=True))
+
+            if _is_satori_template(_rows):
+                extracted = parse_excel_order(raw.file_path)
+                raw.ocr_raw_text = f"Excel (Satori template): {raw.file_name}"
+            else:
+                # Unknown Excel → send to AI as text table for safety
+                from app.services.ocr_service import extract_from_excel_text
+                extracted = extract_from_excel_text(raw.file_path)
+                raw.ocr_raw_text = f"Excel (AI extracted): {raw.file_name}"
+
             raw.extracted_data = extracted
             raw.document_type = extracted.get("document_type") or "purchase_order"
             result = _build_processed_document(db, raw, extracted)
