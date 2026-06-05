@@ -1,0 +1,26 @@
+﻿Fetching promotions from MISA...
+docker-compose : Traceback (most recent call last):
+At line:1 char:1
++ docker-compose exec backend python /app/__fetch_vouchers.py 2>&1 | Ou ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "/app/__fetch_vouchers.py", line 143, in <module>
+    main()
+  File "/app/__fetch_vouchers.py", line 121, in main
+    promos = fetch_all_promotions()
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/__fetch_vouchers.py", line 24, in fetch_all_promotions
+    resp = misa_client.list_promotions(page=page, page_size=50)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/services/misa_client.py", line 139, in list_promotions
+    return self._get("/api/v2/Promotions", {
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/services/misa_client.py", line 62, in _get
+    resp.raise_for_status()
+  File "/usr/local/lib/python3.11/site-packages/httpx/_models.py", line 763, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Server error '500 Internal Server Error' for url 
+'https://crmconnect.misa.vn/api/v2/Promotions?page=0&pageSize=50&orderBy=modified_date&isDescending=true'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500

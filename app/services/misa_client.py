@@ -132,6 +132,19 @@ class MisaClient:
     def delete_customers(self, ids: list[int]) -> Any:
         return self._delete("/api/v2/Customers", ids)
 
+    # ── Promotions ───────────────────────────────────────────────────────────
+
+    def list_promotions(self, page: int = 0, page_size: int = 50,
+                        order_by: str = "modified_date", is_descending: bool = True) -> Any:
+        return self._get("/api/v2/Promotions", {
+            "page": page, "pageSize": page_size,
+            "orderBy": order_by, "isDescending": is_descending,
+        })
+
+    def get_promotion_items(self, promotion_id: int) -> Any:
+        """Get detail items (bought + gift) for a specific promotion."""
+        return self._get("/api/v2/PromotionItems", {"promotionId": promotion_id})
+
     # ── Products ─────────────────────────────────────────────────────────────
 
     def list_products(self, page: int = 0, page_size: int = 10,
