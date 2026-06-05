@@ -3,12 +3,32 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.sys_config import SysConfig
-from app.schemas.settings import PrefixUpdate, SMTPUpdate, SysConfigOut
+from app.schemas.settings import MisaSettingsUpdate, PrefixUpdate, SMTPUpdate, SysConfigOut
 from app.services.document_service import get_dashboard_stats
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_user", "smtp_password", "notification_email")
+MISA_APP_ID_KEY = "misa_app_id"
+MISA_SECRET_KEY = "misa_client_secret"
+
+
+def _get_config(db: Session, key: str) -> SysConfig | None:
+    return db.query(SysConfig).filter(SysConfig.config_key == key).first()
+
+
+def _upsert_config(db: Session, key: str, value: str):
+    row = _get_config(db, key)
+    if row:
+        row.config_value = value
+    else:
+        db.add(SysConfig(config_key=key, config_value=value, last_number=0))
+
+
+def _mask_secret(value: str) -> str:
+    if not value:
+        return ""
+    return f"{value[:6]}...{value[-4:]}" if len(value) > 12 else "***"
 
 
 @router.get("/configs", response_model=list[SysConfigOut])
@@ -94,6 +114,59 @@ def update_ocr_settings(body: dict = Body(...), db: Session = Depends(get_db)):
             db.add(SysConfig(config_key="openrouter_model", config_value=body["model"], last_number=0))
     db.commit()
     return {"message": "OCR settings updated"}
+
+
+@router.get("/misa")
+def get_misa_settings(db: Session = Depends(get_db)):
+    """Get MISA credential status. Secret is never returned raw."""
+    from app.config import settings as env_settings
+
+    app_id_row = _get_config(db, MISA_APP_ID_KEY)
+    secret_row = _get_config(db, MISA_SECRET_KEY)
+    app_id = app_id_row.config_value if app_id_row else env_settings.APP_ID
+    secret = secret_row.config_value if secret_row else env_settings.MISA_CLIENT_SECRET
+    return {
+        "app_id": app_id,
+        "client_secret_masked": _mask_secret(secret),
+        "has_client_secret": bool(secret),
+    }
+
+
+@router.get("/misa/secret")
+def get_misa_secret(db: Session = Depends(get_db)):
+    """Return current MISA secret for admin copy action."""
+    from app.config import settings as env_settings
+
+    secret_row = _get_config(db, MISA_SECRET_KEY)
+    secret = secret_row.config_value if secret_row else env_settings.MISA_CLIENT_SECRET
+    if not secret:
+        raise HTTPException(status_code=404, detail="Chưa có Secret MISA")
+    return {"client_secret": secret}
+
+
+@router.patch("/misa")
+def update_misa_settings(body: MisaSettingsUpdate, db: Session = Depends(get_db)):
+    """Update MISA app id and/or secret. Blank secret means keep existing secret."""
+    updated = []
+    if body.app_id is not None:
+        app_id = body.app_id.strip()
+        if not app_id:
+            raise HTTPException(status_code=400, detail="APP ID không được để trống")
+        _upsert_config(db, MISA_APP_ID_KEY, app_id)
+        updated.append("app_id")
+
+    if body.client_secret is not None and body.client_secret.strip():
+        _upsert_config(db, MISA_SECRET_KEY, body.client_secret.strip())
+        updated.append("client_secret")
+
+    if not updated:
+        raise HTTPException(status_code=400, detail="Không có thay đổi để lưu")
+
+    db.commit()
+
+    from app.services.misa_client import misa_client
+    misa_client.invalidate_token()
+    return {"message": "MISA settings updated", "updated": updated}
 
 
 @router.get("/dashboard")

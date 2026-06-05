@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import {
   ContactsOutlined,
-  FileTextOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   OrderedListOutlined,
@@ -18,7 +17,7 @@ import {
   HistoryOutlined,
 } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import OrdersPage from './pages/Orders'
 import SaleOrdersPage from './pages/SaleOrders'
@@ -32,10 +31,43 @@ import CustomerMappingPage from './pages/CustomerMapping'
 import ContactMappingPage from './pages/ContactMapping'
 import SettingsPage from './pages/Settings'
 import POHistoryPage from './pages/POHistory'
+import client from './api/client'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 })
+
+const FIXED_ACCOUNTS = [
+  {
+    code: 'MONGTHUY',
+    initials: 'MT',
+    name: 'Hà Mộng Thúy',
+    email: 'sa-mt@satoricompany.vn',
+  },
+  {
+    code: 'DUYANHTEST',
+    initials: 'DA',
+    name: 'Duy Ánh',
+    email: 'huynhduyanh01011996@gmail.com',
+  },
+  {
+    code: 'NGOCTHANG',
+    initials: 'NT',
+    name: 'Ngọc Thắng',
+    email: '',
+  },
+  {
+    code: 'NGOCNHI',
+    initials: 'NN',
+    name: 'Ngọc Nhi',
+    email: '',
+  },
+]
+
+function initialsFromCode(code: string) {
+  const cleaned = code.trim().replace(/[^a-zA-Z0-9]/g, '')
+  return (cleaned.slice(0, 2) || '??').toUpperCase()
+}
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const navigate = useNavigate()
@@ -88,12 +120,90 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   )
 }
 
+function AccountSwitcher() {
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [appId, setAppId] = useState('')
+  const mappedAccount = FIXED_ACCOUNTS.find(account => account.code === appId)
+  const selected = mappedAccount || {
+    code: appId || 'MISA',
+    initials: initialsFromCode(appId || 'MISA'),
+    name: appId || 'MISA',
+    email: '',
+  }
+
+  const loadCurrentAccount = () => {
+    client.get('/settings/misa').then(r => {
+      setAppId((r.data.app_id || '').trim())
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    loadCurrentAccount()
+    window.addEventListener('misa-settings-updated', loadCurrentAccount)
+    return () => window.removeEventListener('misa-settings-updated', loadCurrentAccount)
+  }, [])
+
+  const goToSettings = () => {
+    setOpen(false)
+    navigate('/settings')
+  }
+
+  return (
+    <div className="fixed top-3 right-4 z-[60]">
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        className="h-10 w-10 rounded-full border border-gray-300 bg-white text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+        title={selected.name}
+      >
+        {selected.initials}
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Đóng chọn tài khoản"
+            className="fixed inset-0 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 mt-3 w-72 rounded-lg bg-white shadow-lg border border-gray-100">
+            <div className="absolute -top-2 right-5 h-4 w-4 rotate-45 bg-white border-l border-t border-gray-100" />
+            <div className="relative p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
+                  {selected.initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-gray-900">{selected.name}</div>
+                  <div className="truncate text-xs text-gray-500">{selected.email || selected.code}</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={goToSettings}
+                className="mt-4 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <SettingOutlined />
+                <span>Cài đặt</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
     <div className="min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <AccountSwitcher />
       <main className={`transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />

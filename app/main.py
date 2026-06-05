@@ -78,7 +78,9 @@ async def lifespan(app: FastAPI):
         import time
         time.sleep(10)
         try:
-            if not _settings.APP_ID or not _settings.MISA_CLIENT_SECRET:
+            from app.services.misa_client import misa_client
+            app_id, client_secret = misa_client.get_credentials()
+            if not app_id or not client_secret:
                 return
             from app.models.partner import Partner
             db2 = SessionLocal()

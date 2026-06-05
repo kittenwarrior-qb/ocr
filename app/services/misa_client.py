@@ -9,6 +9,8 @@ import httpx
 from app.config import settings
 
 MISA_BASE_URL = "https://crmconnect.misa.vn"
+MISA_APP_ID_KEY = "misa_app_id"
+MISA_SECRET_KEY = "misa_client_secret"
 
 
 class MisaClient:
@@ -19,13 +21,42 @@ class MisaClient:
         self._token_exp: float = 0
         self._lock = threading.Lock()
 
+    def get_credentials(self) -> tuple[str, str]:
+        app_id = settings.APP_ID
+        client_secret = settings.MISA_CLIENT_SECRET
+        try:
+            from app.database import SessionLocal
+            from app.models.sys_config import SysConfig
+
+            db = SessionLocal()
+            try:
+                rows = (
+                    db.query(SysConfig)
+                    .filter(SysConfig.config_key.in_([MISA_APP_ID_KEY, MISA_SECRET_KEY]))
+                    .all()
+                )
+                values = {row.config_key: row.config_value for row in rows}
+                app_id = values.get(MISA_APP_ID_KEY) or app_id
+                client_secret = values.get(MISA_SECRET_KEY) or client_secret
+            finally:
+                db.close()
+        except Exception:
+            pass
+        return app_id.strip(), client_secret.strip()
+
+    def invalidate_token(self):
+        with self._lock:
+            self._token = None
+            self._token_exp = 0
+
     def _refresh_token(self) -> str:
-        if not settings.APP_ID or not settings.MISA_CLIENT_SECRET:
+        app_id, client_secret = self.get_credentials()
+        if not app_id or not client_secret:
             raise RuntimeError("MISA credentials not configured (APP_ID, MISA_CLIENT_SECRET)")
 
         resp = httpx.post(
             f"{MISA_BASE_URL}/api/v2/Account",
-            json={"client_id": settings.APP_ID, "client_secret": settings.MISA_CLIENT_SECRET},
+            json={"client_id": app_id, "client_secret": client_secret},
             timeout=30,
         )
         resp.raise_for_status()
@@ -52,9 +83,10 @@ class MisaClient:
             return self._refresh_token()
 
     def _headers(self) -> dict:
+        app_id, _ = self.get_credentials()
         return {
             "Authorization": f"Bearer {self._get_token()}",
-            "Clientid": settings.APP_ID,
+            "Clientid": app_id,
         }
 
     def _get(self, path: str, params: Optional[dict] = None) -> Any:

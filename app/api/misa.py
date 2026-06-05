@@ -65,7 +65,12 @@ def get_pricebook(pb_code: str):
 def refresh_token():
     """Kiểm tra kết nối và refresh token MISA."""
     _call(misa_client.get_token_info)
-    return {"success": True, "message": "Token refreshed successfully"}
+    app_id, _ = misa_client.get_credentials()
+    return {
+        "success": True,
+        "app_id": app_id,
+        "message": f"Token refreshed successfully for {app_id}",
+    }
 
 
 # ── Contacts ─────────────────────────────────────────────────────────────────

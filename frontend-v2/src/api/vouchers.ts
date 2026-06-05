@@ -9,6 +9,7 @@ export interface VoucherItem {
   gift_product_name: string
   gift_quantity: number
   gift_uom: string
+  discount_amount?: number
   max_per_order: number
   max_per_customer: number
   max_total: number

@@ -24,3 +24,8 @@ class SMTPUpdate(BaseModel):
     smtp_user: Optional[str] = None
     smtp_password: Optional[str] = None
     notification_email: Optional[str] = None
+
+
+class MisaSettingsUpdate(BaseModel):
+    app_id: Optional[str] = None
+    client_secret: Optional[str] = None

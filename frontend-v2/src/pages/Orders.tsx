@@ -119,6 +119,10 @@ function orderLineSubtotal(order: SessionOrder): number {
   return order.lines.reduce((sum, line) => sum + (Number(line.line_total) || 0), 0)
 }
 
+function isUnitPriceDiscountVoucher(voucher: Voucher): boolean {
+  return (voucher.type || '').toLowerCase().includes('giảm tiền trên đơn giá')
+}
+
 function orderTaxAmount(order: SessionOrder, preferOcr = false): number {
   if (preferOcr) return Number(order.ocr_tax_amount ?? order.tax_amount) || 0
   return Number(order.tax_amount) || 0
@@ -379,6 +383,39 @@ export default function OrdersPage() {
       if (missing.length) lines.push(`Thiếu sản phẩm:\n• ${missing.join('\n• ')}`)
       if (insufficient.length) lines.push(`Chưa đủ số lượng:\n• ${insufficient.join('\n• ')}`)
       message.error({ content: lines.join('\n\n'), duration: 6 })
+      return
+    }
+
+    if (isUnitPriceDiscountVoucher(voucher)) {
+      const discountItems = new Map(voucher.items.map(item => [item.product_code, item]))
+      let appliedCount = 0
+      let totalDiscount = 0
+      const discountedLines = order.lines.map(line => {
+        if (line.mapping_status === 'overridden') return line
+        const matchedItem = [line.product_code_mapped, line.ocr_product_code, line.temp_code]
+          .filter(Boolean)
+          .map(code => discountItems.get(code as string))
+          .find(Boolean)
+        if (!matchedItem) return line
+
+        const discountAmount = Number(matchedItem.discount_amount) || 0
+        if (discountAmount <= 0) return line
+
+        const qty = Number(line.quantity) || 0
+        const currentUnitPrice = Number(line.unit_price) || (qty > 0 ? (Number(line.line_total) || 0) / qty : 0)
+        const nextUnitPrice = Math.max(currentUnitPrice - discountAmount, 0)
+        appliedCount += 1
+        totalDiscount += discountAmount * Math.max(qty, 1)
+        return {
+          ...line,
+          unit_price: nextUnitPrice,
+          line_total: nextUnitPrice * qty,
+        }
+      })
+
+      await saveOrderLines(order, discountedLines)
+      message.success(`Đã trừ ${totalDiscount.toLocaleString('vi-VN')}đ từ ${appliedCount} dòng hàng`)
+      setSelectedVoucher(null)
       return
     }
 
@@ -1054,6 +1091,7 @@ export default function OrdersPage() {
       {selectedVoucher && (() => {
         const { voucher: sv, orderId: svOrderId } = selectedVoucher
         const svOrder = sessionDetail?.orders.find(o => o.id === svOrderId)
+        const isDiscountVoucher = isUnitPriceDiscountVoucher(sv)
         // Chỉ tính dòng hàng thật (bỏ qua dòng tặng đã thêm trước đó)
         const orderProductQty = new Map<string, number>()
         for (const l of svOrder?.lines || []) {
@@ -1086,7 +1124,7 @@ export default function OrdersPage() {
                   title={allMet ? '' : 'Chưa đủ điều kiện — xem các dòng đỏ'}
                   onClick={() => handleApplyVoucher(svOrderId, sv)}
                 >
-                  Áp dụng khuyến mại
+                  {isDiscountVoucher ? 'Áp dụng giảm giá' : 'Áp dụng khuyến mại'}
                 </Button>
               </div>
             )
@@ -1115,9 +1153,15 @@ export default function OrdersPage() {
                     <th className="px-2 py-2 text-right font-semibold w-20">SL cần mua</th>
                     <th className="px-2 py-2 text-right font-semibold w-20">SL đơn</th>
                     <th className="px-2 py-2 text-center font-semibold w-16">Đủ?</th>
-                    <th className="px-3 py-2 text-left font-semibold">Hàng hóa tặng</th>
-                    <th className="px-2 py-2 text-right font-semibold w-20">SL tặng</th>
-                    <th className="px-2 py-2 text-right font-semibold w-20">Max/đơn</th>
+                    {isDiscountVoucher ? (
+                      <th className="px-2 py-2 text-right font-semibold w-32">Số tiền giảm</th>
+                    ) : (
+                      <>
+                        <th className="px-3 py-2 text-left font-semibold">Hàng hóa tặng</th>
+                        <th className="px-2 py-2 text-right font-semibold w-20">SL tặng</th>
+                        <th className="px-2 py-2 text-right font-semibold w-20">Max/đơn</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1134,19 +1178,29 @@ export default function OrdersPage() {
                         <td className="px-2 py-2 text-right font-semibold">{item.quantity}</td>
                         <td className="px-2 py-2 text-right font-semibold">{orderedQty || '—'}</td>
                         <td className="px-2 py-2 text-center">{met ? <span className="text-emerald-600 font-bold">✓</span> : <span className="text-red-400">✗</span>}</td>
-                        <td className="px-3 py-2 text-slate-700"><span className="font-mono font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
-                        <td className="px-2 py-2 text-right font-semibold text-emerald-700">{met ? giftQty : '—'}</td>
-                        <td className="px-2 py-2 text-right text-slate-400">{item.max_per_order || '∞'}</td>
+                        {isDiscountVoucher ? (
+                          <td className="px-2 py-2 text-right font-semibold text-purple-700">
+                            {met ? Number(item.discount_amount || 0).toLocaleString('vi-VN') : '—'}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2 text-slate-700"><span className="font-mono font-semibold">{item.gift_product_code}</span> · {item.gift_product_name}</td>
+                            <td className="px-2 py-2 text-right font-semibold text-emerald-700">{met ? giftQty : '—'}</td>
+                            <td className="px-2 py-2 text-right text-slate-400">{item.max_per_order || '∞'}</td>
+                          </>
+                        )}
                       </tr>
                     )
                   })}
                   {!sv.items?.length && (
-                    <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm</td></tr>
+                    <tr><td colSpan={isDiscountVoucher ? 6 : 8} className="px-3 py-8 text-center text-slate-400">Không có sản phẩm</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-500">Dòng xanh = đủ điều kiện. Bấm <strong>Áp dụng</strong> để thêm hàng tặng (giá 0đ) vào đơn.</p>
+              <p className="text-xs text-slate-500">
+                Dòng xanh = đủ điều kiện. Bấm <strong>Áp dụng</strong> để {isDiscountVoucher ? 'trừ trực tiếp số tiền giảm trên đơn giá của dòng hàng.' : 'thêm hàng tặng (giá 0đ) vào đơn.'}
+              </p>
           </div>
         </Modal>
         )
