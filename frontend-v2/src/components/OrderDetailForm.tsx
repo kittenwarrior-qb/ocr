@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
-import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip } from 'antd'
+import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag } from 'antd'
 import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
@@ -247,6 +247,10 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [selectedCustomerData, setSelectedCustomerData] = useState<CustomerData>({})
   const [selectedContactName, setSelectedContactName] = useState('')
+  // "fuzzy" = hệ thống tự ghép theo tên/địa chỉ khi OCR — CHƯA chắc đúng, cần kế toán
+  // tự kiểm tra; "tax_code"/"manual" = đáng tin cậy (khớp MST hoặc người dùng tự chọn)
+  const [customerMatchType, setCustomerMatchType] = useState('')
+  const [contactMatchType, setContactMatchType] = useState('')
   const [salesperson, setSalesperson] = useState(getSavedNV)
   const [loading, setLoading] = useState(true)
   const [nextNo, setNextNo] = useState('')
@@ -321,6 +325,8 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         contact: String(extra?.contact || ''),
       })
       setSelectedContactName(String(extra?.contact || ''))
+      setCustomerMatchType(String(extra?.customer_match_type || ''))
+      setContactMatchType(String(extra?.contact_match_type || ''))
       if (extra?.salesperson) setSalesperson(String(extra.salesperson))
       // Chỉ fill thông tin cho MAPPED lines từ catalog. Pending lines giữ nguyên.
       const allProducts = getProducts()
@@ -441,6 +447,8 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       credit_days: selectedCustomerData.credit_days || '',
       contact: selectedContactName || selectedCustomerData.contact || '',
       payment_due: paymentDue,
+      customer_match_type: customerMatchType,
+      contact_match_type: contactMatchType,
     }
     return {
       ...values,
@@ -602,6 +610,8 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       setSelectedCustomerData({ ...d, ...prevExtra, contact: selectedContactName })
       setSelectedContactName('')
       form.setFieldValue('partner_id', result.customer.code)
+      // Người dùng vừa tự chọn KH từ danh sách — coi là đã xác nhận thủ công
+      setCustomerMatchType('manual')
     } else {
       // Contact selected: only update contact name, keep customer unchanged unless there's a match
       const matchedData = result.customer ? toCustomerData(result.customer as unknown as Record<string, unknown>) : null
@@ -611,11 +621,14 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         setSelectedCustomer(matchedData.name || '')
         setSelectedCustomerData({ ...merged, ...prevExtra })
         form.setFieldValue('partner_id', result.customer!.code)
+        setCustomerMatchType('manual')
       } else {
         // No company match — only set contact, keep current customer data
         setSelectedCustomerData(prev => ({ ...prev, contact: result.contact.name }))
       }
       setSelectedContactName(result.contact.name)
+      // Người dùng vừa tự chọn LH từ danh sách — coi là đã xác nhận thủ công
+      setContactMatchType('manual')
     }
     setActivePopup(null)
   }
@@ -652,12 +665,20 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           </Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
-          <Form.Item label="Khách hàng">
+          <Form.Item label={<span className="flex items-center gap-1.5">Khách hàng{customerMatchType === 'fuzzy' && (
+            <Tooltip title="Hệ thống tự động ghép theo tên/MST trên chứng từ — vui lòng kiểm tra lại trước khi tin tưởng số liệu">
+              <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
+            </Tooltip>
+          )}</span>}>
             <InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} />
           </Form.Item>
-          <Form.Item label="Liên hệ">
+          <Form.Item label={<span className="flex items-center gap-1.5">Liên hệ{contactMatchType === 'fuzzy' && (
+            <Tooltip title="Hệ thống tự động ghép theo tên công ty/địa chỉ giao hàng — vui lòng kiểm tra lại trước khi tin tưởng số liệu">
+              <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
+            </Tooltip>
+          )}</span>}>
             <div className="flex gap-1">
-              <Input value={selectedContactName} onChange={e => { setSelectedContactName(e.target.value); setCustField('contact', e.target.value) }} placeholder="Nhập hoặc chọn từ danh sách" className="flex-1" />
+              <Input value={selectedContactName} onChange={e => { setSelectedContactName(e.target.value); setCustField('contact', e.target.value); setContactMatchType('manual') }} placeholder="Nhập hoặc chọn từ danh sách" className="flex-1" />
               <Button icon={<SearchOutlined />} onClick={() => setActivePopup('contact')} title="Chọn người liên hệ" />
             </div>
           </Form.Item>
@@ -753,7 +774,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <div className="mb-3 flex items-center justify-between text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
             <span className="flex items-center gap-2">
               <ExclamationCircleOutlined />
-              <span><strong>{unmappedLines.length}</strong>/{lines.filter(l => !isSystemLine(l)).length} dòng chưa map hàng hóa — nhấn <SearchOutlined /> trên từng dòng để chọn</span>
+              <span><strong>{unmappedLines.length}</strong>/{lines.filter(l => !isSystemLine(l)).length} dòng chưa map hàng hóa — dùng nút <SearchOutlined /> ở cột thao tác để chọn</span>
             </span>
           </div>
         )}
@@ -772,7 +793,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 <th className="px-2 py-2 text-center w-16">Thuế</th>
                 <th className="px-2 py-2 text-right w-22">Tiền thuế</th>
                 <th className="px-2 py-2 text-right w-22">Tổng tiền</th>
-                <th className="px-2 py-2 text-center w-10"></th>
+                <th className="px-2 py-2 text-center w-24"></th>
               </tr>
             </thead>
             <tbody>
@@ -800,34 +821,26 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     </td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1">
-                      {isPending && !systemLine ? (
-                        <div className="flex items-center gap-1">
-                          {conf && conf.score >= 0.85 ? (
-                            <Tooltip title={`Xác nhận: ${conf.product.code}`}>
-                              <button className="flex items-center gap-0.5 text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded px-1.5 py-0.5 whitespace-nowrap"
-                                onClick={() => {
-                                  const chg = { uomChanged: isSignificantUomChange(line.uom_original||'', conf!.product.uom), pbPrice: priceOverrides.get(conf!.product.code)?.unit_price, pbName: priceOverrides.get(conf!.product.code)?.pricebook_name, currentPrice: Number(line.unit_price)||0 }
-                                  if (chg.uomChanged || (chg.pbPrice && chg.pbPrice !== chg.currentPrice)) {
-                                    setPendingChange({ lineIdx: idx, product: conf!.product, uomFrom: line.uom_original ?? undefined, uomTo: conf!.product.uom, ...chg })
-                                  } else {
-                                    setLines(prev => prev.map((l,i) => i===idx ? applyProductToLine(l, conf!.product) : l))
-                                  }
-                                }}>
-                                <CheckOutlined style={{fontSize:9}}/>{conf.product.code}
-                              </button>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {isPending && !systemLine ? (
+                          conf ? (
+                            <Tooltip title={`Gợi ý map: ${conf.product.code} - ${Math.round(conf.score * 100)}%`}>
+                              <span className={`font-mono text-xs font-semibold truncate ${
+                                conf.score >= 0.85 ? 'text-emerald-700'
+                                  : conf.score >= 0.5 ? 'text-amber-600'
+                                  : 'text-red-500'
+                              }`}>
+                                {conf.product.code}
+                              </span>
                             </Tooltip>
-                          ) : null}
-                          <button className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded px-1.5 py-0.5 whitespace-nowrap" onClick={() => setProductModalIdx(idx)}>
-                            <SearchOutlined style={{fontSize:9}} />Chọn
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono text-slate-700 text-xs font-semibold">{line.ocr_product_code || '—'}</span>
-                          {!systemLine && <button className="text-blue-400 hover:text-blue-600 shrink-0" onClick={() => setProductModalIdx(idx)}><SearchOutlined style={{fontSize:10}}/></button>}
-                          {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
-                        </div>
-                      )}
+                          ) : (
+                            <span className="font-mono text-xs text-red-400">—</span>
+                          )
+                        ) : (
+                          <span className="font-mono text-slate-900 text-xs font-semibold truncate">{line.ocr_product_code || '—'}</span>
+                        )}
+                        {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
+                      </div>
                     </td>
                     <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
                     <td className="px-2 py-1"><EditableCell value={line.uom_original} onChange={v => updateLine(idx, 'uom_original', v)} placeholder="ĐVT" /></td>
@@ -837,15 +850,44 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     <td className="px-2 py-1 text-center"><EditableCell value={line.tax_rate} type="number" onChange={v => updateLine(idx, 'tax_rate', v)} placeholder="%" /></td>
                     <td className="px-2 py-1 text-right text-slate-600">{txAmt ? txAmt.toLocaleString('vi-VN') : '—'}</td>
                     <td className="px-2 py-1 text-right font-semibold">{totalLine ? totalLine.toLocaleString('vi-VN') : '—'}</td>
-                    <td className="px-2 py-1 text-center">
+                    <td className="px-2 py-1">
+                      <div className="flex items-center justify-end gap-1">
+                        {isPending && !systemLine && conf && conf.score >= 0.85 && (
+                          <Tooltip title={`Xác nhận map ${conf.product.code}`}>
+                            <button
+                              className="inline-flex h-7 w-7 items-center justify-center rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                              onClick={() => {
+                                const chg = { uomChanged: isSignificantUomChange(line.uom_original||'', conf!.product.uom), pbPrice: priceOverrides.get(conf!.product.code)?.unit_price, pbName: priceOverrides.get(conf!.product.code)?.pricebook_name, currentPrice: Number(line.unit_price)||0 }
+                                if (chg.uomChanged || (chg.pbPrice && chg.pbPrice !== chg.currentPrice)) {
+                                  setPendingChange({ lineIdx: idx, product: conf!.product, uomFrom: line.uom_original ?? undefined, uomTo: conf!.product.uom, ...chg })
+                                } else {
+                                  setLines(prev => prev.map((l,i) => i===idx ? applyProductToLine(l, conf!.product) : l))
+                                }
+                              }}
+                            >
+                              <CheckOutlined style={{fontSize:12}} />
+                            </button>
+                          </Tooltip>
+                        )}
+                        {!systemLine && (
+                          <Tooltip title={isPending ? 'Chọn hàng hóa để map' : 'Đổi hàng hóa đã map'}>
+                            <button
+                              className="inline-flex h-7 w-7 items-center justify-center rounded border border-blue-200 text-blue-500 hover:bg-blue-50"
+                              onClick={() => setProductModalIdx(idx)}
+                            >
+                              <SearchOutlined style={{fontSize:12}} />
+                            </button>
+                          </Tooltip>
+                        )}
                       <button
-                        className="text-red-500 hover:text-red-700 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded border border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => deleteLine(idx)}
                         disabled={deletingLineIdx !== null}
                         title={deletingLineIdx === idx ? 'Đang xóa và tự lưu...' : 'Xóa dòng và tự lưu'}
                       >
                         <DeleteOutlined />
                       </button>
+                      </div>
                     </td>
                   </tr>
                 )

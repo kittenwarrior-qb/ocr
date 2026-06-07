@@ -386,7 +386,13 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
         order.extra_data = body.extra_data
         flag_modified(order, "extra_data")
         customer_code = body.extra_data.get("customer_code") if isinstance(body.extra_data, dict) else None
+        contact_code = body.extra_data.get("contact_code") if isinstance(body.extra_data, dict) else None
+        # Người dùng chủ động chọn/sửa khách hàng hoặc liên hệ trong form đơn
+        # = đã xác nhận thủ công. Đánh dấu "manual" để FE không còn hiển thị
+        # cảnh báo "tự động ghép — chưa xác nhận" cho field tương ứng nữa.
         if customer_code:
+            order.extra_data["customer_match_type"] = "manual"
+            flag_modified(order, "extra_data")
             partner = db.query(Partner).filter(Partner.code == customer_code, Partner.partner_type == "customer").first()
             if partner:
                 order.partner_id = partner.id
@@ -403,6 +409,9 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
                     upsert_company(db, ocr_company, customer_code, customer_name, "name", "auto_learn")
                 if ocr_address and len(ocr_address) > 15:
                     upsert_company(db, ocr_address, customer_code, customer_name, "address", "auto_learn")
+        if contact_code:
+            order.extra_data["contact_match_type"] = "manual"
+            flag_modified(order, "extra_data")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
         kept_line_ids: set[str] = set()

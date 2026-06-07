@@ -201,6 +201,10 @@ function buildCustomerExtraData(customer: Customer, contact?: Contact | string):
     contact_email: contactEmail,
     contact_organization: contactOrg,
     contact_address: contactDeliveryAddress,
+    // Người dùng chủ động chọn từ danh sách = đã xác nhận thủ công, không còn
+    // là "tự động ghép — chưa xác nhận" nữa.
+    customer_match_type: 'manual',
+    contact_match_type: contactName ? 'manual' : '',
   }
 }
 
@@ -455,6 +459,41 @@ export default function OrdersPage() {
     await saveOrderLines(order, [...cleanLines, ...giftLines])
     message.success(`Đã thêm ${giftLines.length} dòng tặng hàng`)
     setSelectedVoucher(null)
+  }
+
+  // Map mã tạm → sản phẩm sẽ ÁP DỤNG NGƯỢC LẠI cho mọi đơn nháp/đang xử lý đang
+  // dùng mã tạm này (kể cả ghi đè đơn giá đã sửa tay). Hỏi xác nhận trước, kèm
+  // số đơn bị ảnh hưởng, để tránh map nhầm rồi mới phát hiện hàng loạt đơn đổi.
+  const confirmAndMapProduct = async (line: SessionLine, product: Product) => {
+    let impact: { order_count: number; bill_count: number } | null = null
+    try {
+      const { data } = await client.get(`/mappings/${encodeURIComponent(line.temp_code || '')}/impact`)
+      impact = data
+    } catch { /* không lấy được số liệu ảnh hưởng — vẫn cho xác nhận, chỉ là không hiện số */ }
+
+    const affected = (impact?.order_count || 0) + (impact?.bill_count || 0)
+    Modal.confirm({
+      title: 'Xác nhận map sản phẩm',
+      content: (
+        <div className="text-sm space-y-1">
+          <div>Mã tạm <strong className="font-mono">{line.temp_code}</strong> ("{line.product_name_original}") sẽ được map thành:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{product.code}</span>
+            <span className="text-slate-600 ml-2">— {product.name}</span>
+          </div>
+          {affected > 0 ? (
+            <div className="text-amber-600 text-xs mt-1">
+              ⚠ Áp dụng sẽ cập nhật lại <strong>{affected}</strong> đơn/hóa đơn nháp đang dùng mã tạm này
+              (kể cả đơn giá đã sửa tay sẽ bị ghi đè theo giá trong danh mục nếu có).
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500 mt-1">Chưa có đơn nháp nào khác đang dùng mã tạm này.</div>
+          )}
+        </div>
+      ),
+      okText: 'Xác nhận map', cancelText: 'Xem lại', width: 480,
+      onOk: () => handleMapProduct(line, product),
+    })
   }
 
   const handleMapProduct = async (line: SessionLine, product: Product) => {
@@ -827,12 +866,22 @@ export default function OrdersPage() {
                       {order.extra_data?.contact
                         ? <><span className="font-semibold text-slate-700">{order.extra_data.contact}</span>{order.extra_data.contact_phone ? <span className="text-slate-400 ml-1">· {order.extra_data.contact_phone}</span> : null}</>
                         : <span className="text-slate-300 italic">Chưa có LH</span>}
+                      {order.extra_data?.contact_match_type === 'fuzzy' && (
+                        <Tooltip title="Hệ thống tự động ghép — vui lòng kiểm tra lại trong Chi tiết trước khi tin tưởng số liệu">
+                          <Tag color="orange" className="text-[10px] leading-4 m-0 ml-1">Tự động ghép</Tag>
+                        </Tooltip>
+                      )}
                     </span>
                     <span className="text-slate-200">|</span>
                     <span className="min-w-0 truncate">
                       {order.extra_data?.customer_code
                         ? <><span className="font-semibold text-emerald-700">{order.extra_data.customer_name}</span><span className="text-slate-400 ml-1 font-mono">{order.extra_data.customer_code}</span></>
                         : <span className="text-amber-500 italic">Chưa chọn KH — vào Chi tiết để chọn</span>}
+                      {order.extra_data?.customer_match_type === 'fuzzy' && (
+                        <Tooltip title="Hệ thống tự động ghép theo tên/MST — vui lòng kiểm tra lại trong Chi tiết trước khi tin tưởng số liệu">
+                          <Tag color="orange" className="text-[10px] leading-4 m-0 ml-1">Tự động ghép</Tag>
+                        </Tooltip>
+                      )}
                     </span>
                   </div>
 
@@ -951,7 +1000,7 @@ export default function OrdersPage() {
         onSelect={r => {
           const product = r as unknown as Product
           if (selectedLine) {
-            handleMapProduct(selectedLine, product)
+            confirmAndMapProduct(selectedLine, product)
             return
           }
           const order = sessionDetail?.orders.find(o => o.id === productTargetOrderId)

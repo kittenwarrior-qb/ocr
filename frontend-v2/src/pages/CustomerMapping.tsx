@@ -70,12 +70,32 @@ export default function CustomerMappingPage() {
   const [mstEdit, setMstEdit] = useState<MstRow | null>(null)
   const [mstForm] = Form.useForm()
 
-  const saveMst = async () => {
-    const v = await mstForm.validateFields()
+  const commitSaveMst = async (v: any) => {
     try {
       await client.post('/company-aliases/mst', v)
       message.success('Đã lưu'); setMstModal(false); mstForm.resetFields(); mst.reload()
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi') }
+  }
+
+  // Yêu cầu xem lại trước khi lưu — gán nhầm MST sẽ khiến đơn của KH này bị
+  // ghép vào đúng KH khác ngay lập tức ở những lần OCR sau.
+  const saveMst = async () => {
+    const v = await mstForm.validateFields()
+    Modal.confirm({
+      title: 'Xác nhận mapping MST',
+      content: (
+        <div className="text-sm space-y-1">
+          <div>MST <strong className="font-mono">{v.tax_code}</strong> sẽ được gán cho khách hàng:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{v.customer_code}</span>
+            {v.customer_name ? <span className="text-slate-600 ml-2">— {v.customer_name}</span> : null}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">Các đơn hàng có MST này sẽ tự động được nhận diện là khách hàng trên — kiểm tra kỹ trước khi xác nhận.</div>
+        </div>
+      ),
+      okText: 'Xác nhận lưu', cancelText: 'Xem lại', width: 480,
+      onOk: () => commitSaveMst(v),
+    })
   }
 
   const deleteMst = (tax_code: string) => {
@@ -105,13 +125,34 @@ export default function CustomerMappingPage() {
   const [aliasEdit, setAliasEdit] = useState<CompanyAliasRow | null>(null)
   const [aliasForm] = Form.useForm()
 
-  const saveAlias = async () => {
-    const v = await aliasForm.validateFields()
+  const commitSaveAlias = async (v: any) => {
     try {
       await client.post('/company-aliases', { ...v, alias_type: aliasModal, source: aliasEdit?.source || 'manual' })
       message.success('Đã lưu'); setAliasModal(null); aliasForm.resetFields(); setAliasEdit(null)
       if (aliasModal === 'name') names.reload(); else addrs.reload()
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi') }
+  }
+
+  // Yêu cầu xem lại trước khi lưu — alias tên/địa chỉ sai sẽ khiến OCR ghép
+  // nhầm KH ngay từ lần xử lý chứng từ tiếp theo, không có cảnh báo nào khác.
+  const saveAlias = async () => {
+    const v = await aliasForm.validateFields()
+    const typeLabel = aliasModal === 'name' ? 'tên công ty' : 'địa chỉ'
+    Modal.confirm({
+      title: `Xác nhận mapping ${typeLabel}`,
+      content: (
+        <div className="text-sm space-y-1">
+          <div>Khi OCR gặp {typeLabel} <strong>"{v.external_key}"</strong>, hệ thống sẽ tự động gán thành khách hàng:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{v.customer_code}</span>
+            {v.customer_name ? <span className="text-slate-600 ml-2">— {v.customer_name}</span> : null}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">Kiểm tra kỹ trước khi xác nhận — mapping sai sẽ ảnh hưởng đến việc nhận diện khách hàng của các đơn sau này.</div>
+        </div>
+      ),
+      okText: 'Xác nhận lưu', cancelText: 'Xem lại', width: 480,
+      onOk: () => commitSaveAlias(v),
+    })
   }
 
   const deleteAlias = (id: string, type: 'name' | 'address', label: string) => {

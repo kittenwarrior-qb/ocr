@@ -150,8 +150,13 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
         ocr_company_address = extracted.get("company_address") or None
         ocr_delivery_address = extracted.get("delivery_address") or order.description
         ocr_recipient_name = extracted.get("recipient_name") or order.recipient_name
-        ocr_total_amount = extracted.get("total_amount") if extracted.get("total_amount") is not None else order.total_amount
-        ocr_tax_amount = extracted.get("tax_amount") if extracted.get("tax_amount") is not None else order.tax_amount
+        # VND không có phần thập phân — số lẻ kiểu 4060141.1999999997 chỉ là
+        # nhiễu làm tròn từ công thức thuế trong Excel gốc, làm tròn về số
+        # nguyên để khớp với số người dùng thấy trên file, không đổi giá trị gốc.
+        _ocr_total_raw = extracted.get("total_amount") if extracted.get("total_amount") is not None else order.total_amount
+        _ocr_tax_raw = extracted.get("tax_amount") if extracted.get("tax_amount") is not None else order.tax_amount
+        ocr_total_amount = round(float(_ocr_total_raw)) if _ocr_total_raw is not None else None
+        ocr_tax_amount = round(float(_ocr_tax_raw)) if _ocr_tax_raw is not None else None
 
         orders_out.append({
             "id": str(order.id),
@@ -173,8 +178,8 @@ def get_session_details(session_id: UUID, db: Session = Depends(get_db)):
             "ocr_company_address": ocr_company_address,
             "ocr_delivery_address": ocr_delivery_address,
             "ocr_recipient_name": ocr_recipient_name,
-            "ocr_total_amount": float(ocr_total_amount) if ocr_total_amount else None,
-            "ocr_tax_amount": float(ocr_tax_amount) if ocr_tax_amount else None,
+            "ocr_total_amount": ocr_total_amount,
+            "ocr_tax_amount": ocr_tax_amount,
             "status": order.status,
             "pending_count": pending,
             "mapped_count": mapped,

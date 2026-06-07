@@ -95,8 +95,7 @@ export default function ProductMappingPage() {
     return () => clearTimeout(t)
   }, [aliasSearch, aliasPage, activeTab, loadAlias])
 
-  const handleSaveAlias = async () => {
-    const values = await form.validateFields()
+  const commitSaveAlias = async (values: any) => {
     setSaving(true)
     try {
       await client.post('/sku-aliases', { ...values, source: editItem?.source || 'manual' })
@@ -105,6 +104,28 @@ export default function ProductMappingPage() {
       loadAlias(aliasSearch, aliasPage); reloadAliases()
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lưu thất bại') }
     setSaving(false)
+  }
+
+  // Luôn yêu cầu xem lại nội dung mapping trước khi ghi vào DB — tránh việc bấm
+  // OK ngay khi vừa nhập xong dẫn tới lưu nhầm (mapping sai sẽ khiến OCR nhận
+  // diện sai sản phẩm cho mọi đơn sau này).
+  const handleSaveAlias = async () => {
+    const values = await form.validateFields()
+    Modal.confirm({
+      title: 'Xác nhận mapping sản phẩm',
+      content: (
+        <div className="text-sm space-y-1">
+          <div>Khi OCR gặp <strong>"{values.external_key}"</strong>{values.customer_code ? <> (của KH <span className="font-mono">{values.customer_code}</span>)</> : ' (của mọi khách hàng)'}, hệ thống sẽ tự động gán thành:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{values.product_code}</span>
+            {values.product_name ? <span className="text-slate-600 ml-2">— {values.product_name}</span> : null}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">Vui lòng kiểm tra đúng mã hàng trước khi xác nhận — mapping sai sẽ ảnh hưởng đến việc nhận diện sản phẩm của các đơn sau này.</div>
+        </div>
+      ),
+      okText: 'Xác nhận lưu', cancelText: 'Xem lại', width: 480,
+      onOk: () => commitSaveAlias(values),
+    })
   }
 
   const handleDeleteAlias = (id: string, label: string) => {

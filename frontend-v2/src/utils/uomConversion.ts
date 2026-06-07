@@ -54,6 +54,11 @@ export function unitsPerBox(product?: Partial<Product> | null, fallbackName = ''
   if (/\b(1500ml|1\.500ml|1\.5l|1 5l)\b/.test(text)) return 12
   if (/\b450ml\b/.test(text)) return 20
   if (/\b(5l|5000ml)\b/.test(text) && !text.includes('binh')) return 4
+  // Hikari 250ml có nhiều quy cách lốc khác nhau (6/12/24 chai/lốc) — phải khớp
+  // số lượng trong tên TRƯỚC khi rơi vào quy tắc chung "250ml → 24" (theo bảng
+  // giá niêm yết 012/TBGT052026/SATORI), nếu không sẽ tính sai cho lốc 6/12.
+  if (/\b250ml\b/.test(text) && /\b6 chai loc\b/.test(text)) return 6
+  if (/\b250ml\b/.test(text) && /\b12 chai loc\b/.test(text)) return 12
   if (/\b(250ml|350ml|500ml)\b/.test(text)) return 24
   if (text.includes('juice') || text.includes('24lon')) return 24
 

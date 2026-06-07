@@ -84,6 +84,16 @@ def list_all_mappings(skip: int = 0, limit: int = 100, db: Session = Depends(get
     return _enrich_mappings(db, mappings)
 
 
+@router.get("/{temp_code}/impact")
+def get_temp_code_impact(temp_code: str, db: Session = Depends(get_db)):
+    """
+    Trả về số đơn/hóa đơn (chưa xuất) sẽ bị cập nhật RETROACTIVE nếu áp dụng
+    mapping temp_code này — để FE hiển thị cảnh báo phạm vi ảnh hưởng cho người
+    dùng xác nhận trước khi map (map sai sẽ ghi đè dữ liệu hàng loạt đơn cũ).
+    """
+    return mapping_service.count_temp_code_impact(db, temp_code)
+
+
 @router.post("/{temp_code}/map")
 def map_temp_code(
     temp_code: str,

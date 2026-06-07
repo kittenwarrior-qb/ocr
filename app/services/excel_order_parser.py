@@ -61,20 +61,90 @@ def _is_satori_template(rows: list) -> bool:
     )
 
 
+# Cột bắt buộc phải xác định được vị trí — thiếu bất kỳ cột nào trong số này
+# thì KHÔNG được tự ý đoán: phải raise lỗi để người dùng kiểm tra lại file,
+# tuyệt đối không trích xuất "đại khái" rồi đưa ra số liệu sai.
+_SATORI_REQUIRED_COLUMNS = (
+    "stt", "product_name", "uom", "qty_ordered",
+    "unit_price", "line_total_pretax", "tax_rate", "line_total_with_tax",
+)
+
+# Mỗi field khớp với nhãn cột thực tế trong dòng tiêu đề bằng cách so khớp
+# (các) cụm từ đã chuẩn hoá — không phụ thuộc vào vị trí cột trong file.
+# Thứ tự các cụm trong mỗi tuple = độ ưu tiên thử khớp.
+_SATORI_COLUMN_LABEL_PATTERNS: dict[str, tuple[str, ...]] = {
+    "stt": ("stt",),
+    "product_name": ("ten hang hoa", "ten hang"),
+    "spec": ("quy cach",),
+    "uom": ("don vi tinh", "dvt"),
+    "qty_ordered": ("so luong hang dat", "luong hang dat", "luong dat hang"),
+    "qty_promo": ("so luong khuyen mai", "luong khuyen mai"),
+    "qty_total": ("tong san luong", "tong so luong"),
+    "unit_price": ("don gia ban", "don gia"),
+    "line_total_pretax": ("thanh tien chua", "thanh tien chua thue", "thanh tien chua gtgt"),
+    "tax_rate": ("muc thue suat", "thue suat"),
+    "tax_amount": ("tien thue",),
+    "line_total_with_tax": ("tong tien gom", "tong tien gom gtgt", "tong tien sau thue"),
+}
+
+
+def _map_satori_columns(header_row: tuple) -> dict[str, int]:
+    """
+    Xác định vị trí (index) thực tế của từng cột nghiệp vụ bằng cách so khớp
+    nhãn đã chuẩn hoá trong dòng tiêu đề — KHÔNG dựa vào số thứ tự cột cố định.
+
+    Nhờ vậy nếu gặp 1 file cùng mẫu Satori nhưng các cột bị xê dịch / chèn thêm /
+    đổi thứ tự, parser vẫn đọc đúng cột vì tra theo tên, không theo vị trí.
+
+    Nếu không khớp được đủ các cột bắt buộc (_SATORI_REQUIRED_COLUMNS), raise
+    ValueError thay vì đọc đại — tránh việc âm thầm trả về dữ liệu sai lệch
+    (đây chính là rủi ro "đúng định dạng nhưng khác vị trí cột" mà ta cần chặn).
+    """
+    cells_norm = [_norm(c) for c in header_row]
+    col_map: dict[str, int] = {}
+    used_indices: set[int] = set()
+
+    for field, patterns in _SATORI_COLUMN_LABEL_PATTERNS.items():
+        for pattern in patterns:
+            found = None
+            for ci, cell_norm in enumerate(cells_norm):
+                if ci in used_indices:
+                    continue
+                if pattern in cell_norm:
+                    found = ci
+                    break
+            if found is not None:
+                col_map[field] = found
+                used_indices.add(found)
+                break
+
+    missing = [f for f in _SATORI_REQUIRED_COLUMNS if f not in col_map]
+    if missing:
+        raise ValueError(
+            "File Excel có vẻ đúng mẫu Satori (kênh GT) nhưng không xác định "
+            f"được vị trí cột cho: {', '.join(missing)}. "
+            "Để tránh trích xuất sai dữ liệu, hệ thống sẽ KHÔNG tự đoán vị trí cột — "
+            "vui lòng kiểm tra lại tiêu đề cột trong file gốc (có thể tên cột đã đổi "
+            "hoặc bị thiếu) trước khi nhập."
+        )
+
+    return col_map
+
+
 def _parse_satori_template(ws) -> dict:
     """
     Parse Satori fixed-format order template.
-    Columns (0-indexed row values):
-      0=CK_group, 1=STT, 2=product_name, 3=spec, 4=uom,
-      5=qty_ordered, 6=qty_promo, 7=qty_total,
-      8=unit_price, 9=line_total_pretax,
-      10=tax_rate, 11=tax_amount, 12=line_total_with_tax
+
+    Vị trí cột nghiệp vụ KHÔNG được hardcode — được xác định động từ nhãn cột
+    thực tế trong dòng tiêu đề (xem _map_satori_columns), nên nếu gặp file cùng
+    mẫu nhưng các cột bị xê dịch vị trí, parser vẫn đọc đúng dữ liệu 100% thay
+    vì âm thầm đọc nhầm cột.
     Header:
       R12: Bên mua / MST
       R13: Người liên hệ / Điện thoại
       R14: Địa chỉ giao dịch
       R15: Địa chỉ giao hàng
-    Data rows: after header row containing 'STT' and 'Số lượng'
+    Data rows: after header row containing 'STT' và 'Số lượng'
     """
     rows = list(ws.iter_rows(values_only=True))
     result = {
@@ -140,20 +210,26 @@ def _parse_satori_template(ws) -> dict:
             if m:
                 result['delivery_address'] = m.group(1).strip()
 
-    # ── Find data rows: after row with 'STT' and 'Số lượng' ──────────────────
-    data_start = None
+    # ── Find header row: row containing 'STT' + 'Số lượng' + 'Tên hàng' ──────
+    header_row_idx = None
     for idx, row in enumerate(rows):
         normalized = _norm(' '.join(_str(c) for c in row if c is not None))
         if 'stt' in normalized and ('so luong' in normalized or 'luong' in normalized) and ('ten hang' in normalized or 'ten hang hoa' in normalized):
-            data_start = idx + 2  # skip header + col number row
-            break
-        flat = ' '.join(_str(c) for c in row if c is not None).lower()
-        if 'stt' in flat and ('số lượng' in flat or 'lượng') and 'tên hàng' in flat:
-            data_start = idx + 2  # skip header + col number row
+            header_row_idx = idx
             break
 
-    if data_start is None:
+    if header_row_idx is None:
         return result
+
+    # Vị trí cột được tra theo NHÃN trong dòng tiêu đề — không hardcode index,
+    # nên nếu file cùng mẫu nhưng cột bị xê dịch, vẫn đọc đúng cột. Nếu không
+    # khớp đủ cột bắt buộc, _map_satori_columns raise lỗi rõ ràng thay vì đoán.
+    col_map = _map_satori_columns(rows[header_row_idx])
+    data_start = header_row_idx + 2  # skip label row + column-number row
+
+    def col_val(vals: list, field: str):
+        idx2 = col_map.get(field)
+        return vals[idx2] if idx2 is not None and idx2 < len(vals) else None
 
     # ── Extract items with quantity > 0 ──────────────────────────────────────
     for row in rows[data_start:]:
@@ -161,29 +237,28 @@ def _parse_satori_template(ws) -> dict:
         if not any(v is not None for v in vals):
             continue
 
-        # Check if this is a valid product row (col 1 = sequential number)
-        stt_val = _str(vals[1] if len(vals) > 1 else '')
+        # Check if this is a valid product row (cột STT = số thứ tự)
+        stt_val = _str(col_val(vals, 'stt'))
         try:
             stt = int(float(stt_val))
         except (ValueError, TypeError):
-            # Might be total row — capture total
+            # Might be total row — capture total from "Tổng tiền gồm GTGT" column
             flat = ' '.join(_str(v) for v in vals if v is not None).lower()
-            if 'tổng tiền' in flat and len(vals) > 12:
-                total = _clean_num(vals[12] if len(vals) > 12 else None)
+            if 'tổng tiền' in flat:
+                total = _clean_num(col_val(vals, 'line_total_with_tax'))
                 if total > 0:
                     result['total_amount'] = total
             continue
 
-        product_name = _str(vals[2] if len(vals) > 2 else '')
+        product_name = _str(col_val(vals, 'product_name'))
         if not product_name:
             continue
 
-        uom = _str(vals[4] if len(vals) > 4 else '')
-        qty_ordered = _clean_num(vals[5] if len(vals) > 5 else None)
-        unit_price = _clean_num(vals[8] if len(vals) > 8 else None)
-        line_total_pretax = _clean_num(vals[9] if len(vals) > 9 else None)
-        tax_rate_raw = _clean_num(vals[10] if len(vals) > 10 else None)
-        line_total_withtax = _clean_num(vals[12] if len(vals) > 12 else None)
+        uom = _str(col_val(vals, 'uom'))
+        qty_ordered = _clean_num(col_val(vals, 'qty_ordered'))
+        unit_price = _clean_num(col_val(vals, 'unit_price'))
+        line_total_pretax = _clean_num(col_val(vals, 'line_total_pretax'))
+        tax_rate_raw = _clean_num(col_val(vals, 'tax_rate'))
 
         # Only include rows where quantity was filled in (> 0)
         if qty_ordered <= 0:

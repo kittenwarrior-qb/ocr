@@ -161,20 +161,24 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
 
     delivery_address_text = data.get("delivery_address")
     matched_contact = None
+    partner_match_type = ""
+    contact_match_type = ""
 
     if doc_type == "purchase_order":
-        partner = mapping_service.find_existing_partner(db, partner_name, tax_code, partner_type)
-        matched_contact = mapping_service.find_best_contact(
+        partner, partner_match_type = mapping_service.find_existing_partner(db, partner_name, tax_code, partner_type)
+        matched_contact, contact_match_type = mapping_service.find_best_contact(
             db,
             partner.legal_name if partner else partner_name,
             delivery_address_text,
             data.get("recipient_name"),
         )
-        contact_partner = mapping_service.find_customer_for_contact(db, matched_contact)
+        contact_partner, contact_partner_match_type = mapping_service.find_customer_for_contact(db, matched_contact)
         if contact_partner and not partner:
             partner = contact_partner
+            partner_match_type = contact_partner_match_type
         elif contact_partner and partner and contact_partner.id != partner.id:
             matched_contact = None
+            contact_match_type = ""
         if matched_contact:
             delivery_address_text = matched_contact.delivery_address or matched_contact.address or delivery_address_text
         address = mapping_service.find_existing_address(db, partner.id if partner else None, delivery_address_text)
@@ -187,7 +191,10 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
     if doc_type == "purchase_order":
         is_satori = "satori template" in (raw.ocr_raw_text or "").lower()
         channel = _detect_order_channel(raw, data, is_satori=is_satori)
-        return _create_order(db, raw, partner, address, data, items, matched_contact, partner_name, delivery_address_text, channel)
+        return _create_order(
+            db, raw, partner, address, data, items, matched_contact, partner_name, delivery_address_text, channel,
+            partner_match_type=partner_match_type, contact_match_type=contact_match_type,
+        )
     else:
         return _create_bill(db, raw, partner, address, data, items)
 
@@ -201,6 +208,39 @@ def _parse_date(val) -> date | None:
         return date.fromisoformat(str(val)[:10])
     except Exception:
         return None
+
+
+# Tên file nội bộ thường có ngày đặt hàng ở cuối, dạng "DD.MM.YY"/"DD.MM.YYYY"/
+# "DD-MM-YYYY", vd "ĐƠN ĐẶT HÀNG - KÊNH GT - ĐẠI LÝ BÌNH MINH - 05.06.26.xlsx".
+_FILENAME_DATE_RE = re.compile(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})")
+
+
+def _date_from_filename(file_name: str | None) -> date | None:
+    """Suy ra ngày đặt hàng từ tên file khi Excel không in sẵn ngày."""
+    if not file_name:
+        return None
+    for d_s, m_s, y_s in _FILENAME_DATE_RE.findall(Path(file_name).stem):
+        day, month, year = int(d_s), int(m_s), int(y_s)
+        if year < 100:
+            year += 2000
+        try:
+            return date(year, month, day)
+        except ValueError:
+            continue
+    return None
+
+
+# VND không có đơn vị thập phân — số có phần lẻ (vd 4060141.1999999997) chỉ là
+# nhiễu làm tròn từ công thức tính thuế trong file gốc, không phải số tiền thật.
+# Làm tròn về số nguyên để khớp với số người dùng nhìn thấy trên Excel/Misa,
+# KHÔNG tính toán lại — chỉ bỏ phần nhiễu thập phân của chính giá trị gốc.
+def _round_vnd(val):
+    if val is None:
+        return None
+    try:
+        return round(float(val))
+    except (TypeError, ValueError):
+        return val
 
 
 def _first_partner_address(partner: Partner | None, address_type: str) -> PartnerAddress | None:
@@ -258,6 +298,8 @@ def _build_order_extra_data(
     fallback_name: str = "",
     fallback_address: str | None = None,
     order_type: str = "Kênh MT",
+    partner_match_type: str = "",
+    contact_match_type: str = "",
 ) -> dict[str, str]:
     billing = _first_partner_address(partner, "billing")
     branch = _first_partner_address(partner, "branch")
@@ -306,6 +348,12 @@ def _build_order_extra_data(
         "delivery_ward": (contact.ward if contact else "") or "",
         "delivery_street": delivery_address,
         "order_type": order_type,
+        # match_type "fuzzy" = hệ thống tự đoán theo tên/địa chỉ — CHƯA chắc đúng,
+        # FE cần hiển thị rõ để kế toán tự kiểm tra lại trước khi tin tưởng số liệu.
+        # "tax_code" = khớp chính xác theo MST — đáng tin cậy.
+        # "" = không tìm thấy / chưa gán.
+        "customer_match_type": partner_match_type,
+        "contact_match_type": contact_match_type,
         "contact": (contact.name if contact else "") or "",
         "contact_code": (contact.code if contact else "") or "",
         "contact_phone": contact_phone,
@@ -328,24 +376,29 @@ def _create_order(
     fallback_partner_name: str = "",
     fallback_address: str | None = None,
     order_type: str = "Kênh MT",
+    partner_match_type: str = "",
+    contact_match_type: str = "",
 ) -> dict:
     missing = _check_missing_order_fields(data, partner, address, items)
-    extra_data = _build_order_extra_data(partner, address, contact, fallback_partner_name, fallback_address, order_type)
+    extra_data = _build_order_extra_data(
+        partner, address, contact, fallback_partner_name, fallback_address, order_type,
+        partner_match_type=partner_match_type, contact_match_type=contact_match_type,
+    )
     order = ProcessedOrder(
         raw_document_id=raw.id,
         partner_id=partner.id if partner else None,
         delivery_address_id=address.id if address else None,
         order_number=generate_order_number(db),
         po_number=data.get("order_number"),
-        order_date=_parse_date(data.get("order_date")),
+        order_date=_parse_date(data.get("order_date")) or _date_from_filename(raw.file_name),
         delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
         recipient_name=data.get("recipient_name") or fallback_partner_name,
         description=data.get("delivery_address") or data.get("description") or fallback_address,
-        total_amount=data.get("total_amount"),
-        discount_amount=data.get("discount_amount"),
-        tax_amount=data.get("tax_amount"),
+        total_amount=_round_vnd(data.get("total_amount")),
+        discount_amount=_round_vnd(data.get("discount_amount")),
+        tax_amount=_round_vnd(data.get("tax_amount")),
         missing_fields=missing,
         extra_data=extra_data,
         status="draft",
@@ -371,15 +424,15 @@ def _create_bill(db: Session, raw, partner, address, data: dict, items: list) ->
         partner_id=partner.id,
         delivery_address_id=address.id if address else None,
         invoice_number=data.get("order_number") or data.get("invoice_number"),
-        invoice_date=_parse_date(data.get("order_date") or data.get("invoice_date")),
+        invoice_date=_parse_date(data.get("order_date") or data.get("invoice_date")) or _date_from_filename(raw.file_name),
         delivery_date=_parse_date(data.get("delivery_date")),
         currency=data.get("currency") or "VND",
         payment_method=data.get("payment_method"),
         recipient_name=data.get("recipient_name"),
         description=data.get("description"),
-        total_amount=data.get("total_amount"),
-        discount_amount=data.get("discount_amount"),
-        tax_amount=data.get("tax_amount"),
+        total_amount=_round_vnd(data.get("total_amount")),
+        discount_amount=_round_vnd(data.get("discount_amount")),
+        tax_amount=_round_vnd(data.get("tax_amount")),
         missing_fields=missing,
         status="draft",
     )

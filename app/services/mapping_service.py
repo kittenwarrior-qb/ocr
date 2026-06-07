@@ -144,13 +144,21 @@ def find_existing_partner(
     legal_name: str | None,
     tax_code: str | None,
     partner_type: str,
-) -> Partner | None:
+) -> tuple[Partner | None, str]:
+    """
+    Trả về (partner, match_type).
+    match_type:
+      "tax_code" — khớp chính xác theo MST (đáng tin cậy, không cần xác nhận lại)
+      "fuzzy"    — chỉ khớp gần đúng theo tên (máy đoán — UI cần hiển thị rõ để
+                   kế toán tự kiểm tra, KHÔNG coi là đã xác nhận)
+      ""         — không tìm thấy
+    """
     if tax_code:
         mst = db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first()
         if mst:
             partner = db.query(Partner).filter(Partner.id == mst.partner_id).first()
             if partner:
-                return partner
+                return partner, "tax_code"
 
         partner = (
             db.query(Partner)
@@ -162,23 +170,25 @@ def find_existing_partner(
             .first()
         )
         if partner:
-            return partner
+            return partner, "tax_code"
 
     if not legal_name:
-        return None
+        return None, ""
 
     query_tokens = _distinctive_partner_tokens(legal_name)
     if not query_tokens:
-        return None
+        return None, ""
 
     all_partners = db.query(Partner).filter(Partner.partner_type == partner_type, Partner.is_active == True).all()
     candidates = [{"id": str(p.id), "name": p.legal_name or "", "obj": p} for p in all_partners]
     match = fuzzy_match(legal_name, candidates, key="name", threshold=70)
     if not match:
-        return None
+        return None, ""
 
     target_tokens = _distinctive_partner_tokens(match["obj"].legal_name)
-    return match["obj"] if query_tokens & target_tokens else None
+    if query_tokens & target_tokens:
+        return match["obj"], "fuzzy"
+    return None, ""
 
 
 def find_existing_address(
@@ -203,10 +213,15 @@ def find_best_contact(
     company_name: str | None,
     address_text: str | None = None,
     recipient_name: str | None = None,
-) -> Contact | None:
+) -> tuple[Contact | None, str]:
+    """
+    Trả về (contact, match_type). Việc ghép liên hệ luôn dựa trên fuzzy-score
+    (tên công ty / địa chỉ / người nhận), nên match_type luôn là "fuzzy" khi
+    tìm thấy — UI cần hiển thị rõ đây là máy đoán, chưa phải xác nhận của người dùng.
+    """
     contacts = db.query(Contact).all()
     if not contacts:
-        return None
+        return None, ""
 
     company_norm = _normalize_text(company_name)
     recipient_norm = _normalize_text(recipient_name)
@@ -245,16 +260,19 @@ def find_best_contact(
             best_score = score
             best_contact = contact
 
-    return best_contact if best_score >= 78 else None
+    if best_contact and best_score >= 78:
+        return best_contact, "fuzzy"
+    return None, ""
 
 
 def find_customer_for_contact(
     db: Session,
     contact: Contact | None,
     partners: list[Partner] | None = None,
-) -> Partner | None:
+) -> tuple[Partner | None, str]:
+    """Trả về (partner, match_type) — luôn "fuzzy" khi tìm thấy (suy ra từ contact.organization)."""
     if not contact or not contact.organization:
-        return None
+        return None, ""
 
     org = contact.organization
     org_norm = _normalize_text(org)
@@ -274,7 +292,9 @@ def find_customer_for_contact(
                 best_score = score
                 best_partner = partner
 
-    return best_partner if best_score >= 72 else None
+    if best_partner and best_score >= 72:
+        return best_partner, "fuzzy"
+    return None, ""
 
 
 # ── Address ───────────────────────────────────────────────────────────────────
@@ -344,6 +364,30 @@ def resolve_temp_code(db: Session, product_code: str | None, product_name: str) 
     ))
     db.flush()
     return temp_code, product_id
+
+
+def count_temp_code_impact(db: Session, temp_code: str) -> dict:
+    """
+    Đếm số đơn/hóa đơn (chưa xuất) sẽ bị map_temp_code_to_product() cập nhật
+    NGƯỢC LẠI nếu áp dụng mapping này — kể cả ghi đè đơn giá đã sửa tay.
+    Dùng để hiển thị cảnh báo phạm vi ảnh hưởng cho người dùng TRƯỚC khi áp dụng,
+    tránh map nhầm rồi mới phát hiện hàng loạt đơn bị thay đổi không mong muốn.
+    """
+    order_count = (
+        db.query(OrderLine.processed_order_id)
+        .join(ProcessedOrder, OrderLine.processed_order_id == ProcessedOrder.id)
+        .filter(OrderLine.temp_code == temp_code, ProcessedOrder.status.notin_(["exported"]))
+        .distinct()
+        .count()
+    )
+    bill_count = (
+        db.query(BillLine.processed_bill_id)
+        .join(ProcessedBill, BillLine.processed_bill_id == ProcessedBill.id)
+        .filter(BillLine.temp_code == temp_code, ProcessedBill.status.notin_(["exported"]))
+        .distinct()
+        .count()
+    )
+    return {"order_count": order_count, "bill_count": bill_count}
 
 
 def map_temp_code_to_product(db: Session, temp_code: str, product_id: UUID) -> int:
@@ -435,13 +479,11 @@ def _recalculate_affected_documents(db: Session, temp_code: str) -> None:
     )
     for order in orders:
         _update_document_status(db, order, order.lines)
-        # Recalculate total_amount = sum(line_total + tax) for all lines
-        total = sum(
-            float(l.line_total or 0) * (1 + float(l.tax_rate or 0) / 100)
-            for l in order.lines
-        )
-        if total > 0:
-            order.total_amount = round(total, 2)
+        # KHÔNG tự tính lại total_amount ở đây — đây là dữ liệu gốc từ chứng từ
+        # gốc của khách hàng, ghi đè bằng số tự suy ra (sum line_total * thuế)
+        # sẽ tạo ra một con số khác với file gốc và gây mất đồng bộ dữ liệu.
+        # Giữ nguyên total_amount đã trích xuất; việc tính lại (nếu cần) nên do
+        # người dùng chủ động thực hiện sau khi đã rà soát/xác nhận xong mapping.
 
     bills = (
         db.query(ProcessedBill)

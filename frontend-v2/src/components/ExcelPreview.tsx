@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Spin, Select } from 'antd'
+import { Spin, Select, Button, Tooltip } from 'antd'
+import { ZoomInOutlined, ZoomOutOutlined, UndoOutlined } from '@ant-design/icons'
 import * as XLSX from 'xlsx'
 
 interface Props { url: string; fileName?: string }
+
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 2.5
+const ZOOM_STEP = 0.1
 
 export default function ExcelPreview({ url, fileName }: Props) {
   const [sheetNames, setSheetNames] = useState<string[]>([])
@@ -10,6 +15,17 @@ export default function ExcelPreview({ url, fileName }: Props) {
   const [htmlMap, setHtmlMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [zoom, setZoom] = useState(1)
+
+  const zoomIn = () => setZoom(z => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))
+  const zoomOut = () => setZoom(z => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))
+  const zoomReset = () => setZoom(1)
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    if (e.deltaY < 0) zoomIn(); else zoomOut()
+  }
 
   useEffect(() => {
     if (!url) return
@@ -35,23 +51,38 @@ export default function ExcelPreview({ url, fileName }: Props) {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {sheetNames.length > 1 && (
-        <div className="px-3 py-1.5 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
-          <span className="text-xs text-slate-500 shrink-0">Sheet:</span>
-          <Select size="small" value={activeSheet} onChange={setActiveSheet}
-            options={sheetNames.map(n => ({ value: n, label: n }))} className="w-48" />
+      <div className="px-3 py-1.5 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
+        {sheetNames.length > 1 && (
+          <>
+            <span className="text-xs text-slate-500 shrink-0">Sheet:</span>
+            <Select size="small" value={activeSheet} onChange={setActiveSheet}
+              options={sheetNames.map(n => ({ value: n, label: n }))} className="w-48" />
+          </>
+        )}
+        <div className="flex items-center gap-1 ml-auto">
+          <Tooltip title="Thu nhỏ">
+            <Button size="small" icon={<ZoomOutOutlined />} onClick={zoomOut} disabled={zoom <= ZOOM_MIN} />
+          </Tooltip>
+          <span className="text-xs text-slate-500 w-10 text-center select-none">{Math.round(zoom * 100)}%</span>
+          <Tooltip title="Phóng to">
+            <Button size="small" icon={<ZoomInOutlined />} onClick={zoomIn} disabled={zoom >= ZOOM_MAX} />
+          </Tooltip>
+          <Tooltip title="Khôi phục 100%">
+            <Button size="small" icon={<UndoOutlined />} onClick={zoomReset} disabled={zoom === 1} />
+          </Tooltip>
         </div>
-      )}
-      <div className="flex-1 overflow-auto">
+      </div>
+      <div className="flex-1 overflow-auto" onWheel={handleWheel}>
         <style>{`
           .xl-wrap table { border-collapse: collapse; font-size: 11px; font-family: Calibri,Arial,sans-serif; min-width: max-content; }
           .xl-wrap td, .xl-wrap th { border: 1px solid #bbb; padding: 2px 6px; white-space: nowrap; vertical-align: middle; }
           .xl-wrap td:empty, .xl-wrap th:empty { min-width: 20px; }
         `}</style>
-        <div className="xl-wrap p-2"
+        <div className="xl-wrap p-2 origin-top-left"
+          style={{ transform: `scale(${zoom})`, width: zoom !== 1 ? `${100 / zoom}%` : undefined }}
           dangerouslySetInnerHTML={{ __html: htmlMap[activeSheet] || '' }} />
       </div>
-      <div className="px-3 py-1 border-t border-slate-100 text-[10px] text-slate-400 bg-slate-50 shrink-0">{fileName}</div>
+      <div className="px-3 py-1 border-t border-slate-100 text-[10px] text-slate-400 bg-slate-50 shrink-0">{fileName} · giữ Ctrl + cuộn chuột để zoom</div>
     </div>
   )
 }

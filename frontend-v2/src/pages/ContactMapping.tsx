@@ -64,13 +64,34 @@ export default function ContactMappingPage() {
 
   const reload = () => load(search, page, typeFilter)
 
-  const save = async () => {
-    const v = await form.validateFields()
+  const commitSave = async (v: any) => {
     try {
       await client.post('/contact-aliases', { ...v, source: editing?.source || 'manual' })
       message.success('Đã lưu')
       setModalOpen(false); form.resetFields(); setEditing(null); reload()
     } catch (e: any) { message.error(e?.response?.data?.detail || 'Lỗi') }
+  }
+
+  // Yêu cầu xem lại trước khi lưu — alias liên hệ sai sẽ khiến OCR ghép nhầm
+  // người nhận hàng/địa chỉ giao cho các đơn sau này.
+  const save = async () => {
+    const v = await form.validateFields()
+    const typeLabel = TYPE_LABELS[v.alias_type] || v.alias_type
+    Modal.confirm({
+      title: 'Xác nhận mapping liên hệ',
+      content: (
+        <div className="text-sm space-y-1">
+          <div>Khi OCR gặp {typeLabel.toLowerCase()} <strong>"{v.external_key}"</strong>, hệ thống sẽ tự động gán thành liên hệ:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{v.contact_code}</span>
+            {v.contact_name ? <span className="text-slate-600 ml-2">— {v.contact_name}</span> : null}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">Kiểm tra kỹ trước khi xác nhận — mapping sai sẽ ảnh hưởng đến việc nhận diện người nhận hàng/địa chỉ giao của các đơn sau này.</div>
+        </div>
+      ),
+      okText: 'Xác nhận lưu', cancelText: 'Xem lại', width: 480,
+      onOk: () => commitSave(v),
+    })
   }
 
   const del = (row: AliasRow) => {
