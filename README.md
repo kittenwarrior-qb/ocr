@@ -1,92 +1,69 @@
 # MISA API
 
-OCR đơn hàng từ PDF, map sản phẩm/khách hàng, xuất Excel, đẩy lên MISA CRM.
+OCR đơn hàng từ PDF/Excel, map sản phẩm/khách hàng, xuất Excel và đẩy lên MISA CRM.
 
----
-
-## Cấu hình
+## Cấu Hình
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Các biến bắt buộc:
+MISA App ID và Secret ưu tiên nhập trong tab Cài đặt của app. Biến `.env` chỉ là fallback/bootstrap khi DB chưa có cấu hình.
 
-```env
-APP_ID=SATORICRMM
-MISA_CLIENT_SECRET="..."
-OPENROUTER_API_KEY=sk-or-...
-```
+## Docker Compose
 
----
+Repo chỉ dùng 2 file compose:
 
-## Chạy lần đầu
+- `docker-compose.yml`: bản VPS, không chạy Caddy riêng. Frontend/backend join vào network Caddy ngoài qua `CADDY_NETWORK`.
+- `docker-compose-dev.yml`: bản dev/test độc lập, có Caddy riêng.
+
+Chạy trên VPS:
 
 ```bash
-docker-compose up -d
+docker compose up -d --build
+```
+
+Chạy bản dev có Caddy riêng:
+
+```bash
+docker compose -f docker-compose-dev.yml up -d --build
+```
+
+Nếu VPS dùng Caddy chung của project khác, Caddyfile bên ngoài nên trỏ tới:
+
+```caddy
+ocr2.quocbui.dev {
+    handle /api/* {
+        reverse_proxy misa-api2-backend-1:8000
+    }
+
+    handle /* {
+        reverse_proxy misa-api2-frontend-1:80
+    }
+}
+```
+
+## Sync Dữ Liệu MISA
+
+```bash
 chmod +x sync.sh
-sleep 10 && ./sync.sh all
+./sync.sh all
+./sync.sh customers
+./sync.sh products
+./sync.sh contacts
 ```
 
----
-
-## Sync dữ liệu từ MISA
-
-```bash
-./sync.sh all          # tất cả
-./sync.sh customers    # chỉ khách hàng
-./sync.sh products     # chỉ hàng hóa
-./sync.sh contacts     # chỉ liên hệ
-```
-
-Sync là upsert — chạy bao nhiêu lần cũng an toàn, tự tạo mới / cập nhật.
-
----
-
-## Reset DB và sync lại
-
-```bash
-docker-compose down -v && docker-compose up -d && sleep 10 && ./sync.sh all
-```
-
----
-
-## Đổi MISA account (APP_ID mới)
-
-```bash
-nano .env   # sửa APP_ID + MISA_CLIENT_SECRET
-docker-compose down -v && docker-compose up -d && sleep 10 && ./sync.sh all
-```
-
----
-
-## Cập nhật code
+## Cập Nhật Code
 
 ```bash
 git pull
-docker-compose up -d --build backend frontend
+docker compose up -d --build
 ```
 
----
-
-## Dữ liệu tĩnh (quản lý thủ công)
-
-Hai file trong `data/` không có API MISA nên quản lý thủ công:
-
-| File | Nội dung |
-|---|---|
-| `data/pricebooks.json` | Bảng giá / chiết khấu theo khách hàng |
-| `data/vouchers.json` | Chương trình khuyến mãi tặng hàng |
-
----
-
-## Logs & debug
+## Logs
 
 ```bash
-docker-compose logs -f backend
-docker-compose logs -f --tail=50
-
-# Kiểm tra kết nối MISA
-curl http://localhost/api/v1/misa/account/token
+docker compose logs -f backend
+docker compose logs -f --tail=80
 ```

@@ -1,3 +1,5 @@
+name: misa-api2
+
 services:
   db:
     image: postgres:15-alpine
@@ -7,12 +9,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_HOST_AUTH_METHOD: trust
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -35,33 +35,28 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - caddy
 
   frontend:
     build:
       context: ./frontend-v2
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "3000:80"
+    expose:
+      - "80"
     depends_on:
       - backend
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
+    networks:
+      - default
+      - caddy
 
 volumes:
   pgdata:
   uploads:
-  caddy_data:
-  caddy_config:
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-coin-em_emcoin-network}
