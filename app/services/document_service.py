@@ -1,3 +1,4 @@
+import re
 import shutil
 import logging
 from datetime import datetime, date
@@ -66,6 +67,8 @@ def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> 
             if _is_satori_template(_rows):
                 extracted = parse_excel_order(raw.file_path)
                 raw.ocr_raw_text = f"Excel (Satori template): {raw.file_name}"
+                if not extracted.get("items"):
+                    raise ValueError("File không có dòng sản phẩm nào có số lượng > 0. Kiểm tra lại cột 'Số lượng hàng đặt'.")
             else:
                 # Unknown Excel → send to AI as text table for safety
                 from app.services.ocr_service import extract_from_excel_text
@@ -182,7 +185,9 @@ def _build_processed_document(db: Session, raw: RawDocument, data: dict) -> dict
     items = data.get("items") or []
 
     if doc_type == "purchase_order":
-        return _create_order(db, raw, partner, address, data, items, matched_contact, partner_name, delivery_address_text)
+        is_satori = "satori template" in (raw.ocr_raw_text or "").lower()
+        channel = _detect_order_channel(raw, data, is_satori=is_satori)
+        return _create_order(db, raw, partner, address, data, items, matched_contact, partner_name, delivery_address_text, channel)
     else:
         return _create_bill(db, raw, partner, address, data, items)
 
@@ -204,12 +209,55 @@ def _first_partner_address(partner: Partner | None, address_type: str) -> Partne
     return next((a for a in partner.addresses if a.address_type == address_type), None)
 
 
+_GT_HINT_RE = re.compile(r"k[eê]nh\s*gt|general\s*trade", re.I)
+_MT_HINT_RE = re.compile(r"k[eê]nh\s*mt|modern\s*trade", re.I)
+# Siêu thị / chuỗi bán lẻ thường đặt hàng qua kênh MT (Modern Trade)
+_MT_RETAILER_RE = re.compile(
+    r"big[\s\-]*c|circle[\s\-]*k|co\.?op[\s\-]*(mart|food)|e[\s\-]*mart|family[\s\-]*mart|gs[\s\-]*25|"
+    r"king[\s\-]*food|king[\s\-]*kong|lotte|mega[\s\-]*market|menas|ministop|mr\.?[\s\-]*diy|"
+    r"sat[rạ][\s\-]*foods?|seven|7[\s\-]*eleven|win[\s\-]*mart|\bwin\b",
+    re.I,
+)
+
+
+def _detect_order_channel(raw: RawDocument, data: dict, is_satori: bool = False) -> str:
+    """
+    Phân biệt Kênh GT (General Trade — đại lý/NPP đặt hàng nội bộ qua mẫu Satori)
+    và Kênh MT (Modern Trade — chuỗi siêu thị/cửa hàng tiện lợi).
+
+    Chỉ dựa trên các tín hiệu có sẵn trong nguồn (tên file, text OCR thô, tên khách
+    hàng) — KHÔNG suy luận/tính toán — để tránh gán sai kênh.
+    """
+    haystack = " ".join(
+        str(v) for v in (
+            raw.file_name,
+            raw.ocr_raw_text,
+            data.get("customer_name"),
+            data.get("vendor_name"),
+            data.get("recipient_name"),
+        ) if v
+    )
+
+    if _GT_HINT_RE.search(haystack):
+        return "Kênh GT"
+    if _MT_HINT_RE.search(haystack):
+        return "Kênh MT"
+    # Mẫu Satori nội bộ ("ĐƠN ĐẶT HÀNG kênh GT") luôn là đơn đại lý/NPP — kênh GT
+    if is_satori:
+        return "Kênh GT"
+    # Tên khách hàng/file trùng chuỗi bán lẻ đã biết → kênh MT
+    if _MT_RETAILER_RE.search(haystack):
+        return "Kênh MT"
+    return "Kênh MT"
+
+
 def _build_order_extra_data(
     partner: Partner | None,
     address: PartnerAddress | None,
     contact: Contact | None,
     fallback_name: str = "",
     fallback_address: str | None = None,
+    order_type: str = "Kênh MT",
 ) -> dict[str, str]:
     billing = _first_partner_address(partner, "billing")
     branch = _first_partner_address(partner, "branch")
@@ -257,7 +305,7 @@ def _build_order_extra_data(
         "delivery_district": (contact.district if contact else "") or "",
         "delivery_ward": (contact.ward if contact else "") or "",
         "delivery_street": delivery_address,
-        "order_type": "Kênh MT",
+        "order_type": order_type,
         "contact": (contact.name if contact else "") or "",
         "contact_code": (contact.code if contact else "") or "",
         "contact_phone": contact_phone,
@@ -279,9 +327,10 @@ def _create_order(
     contact: Contact | None = None,
     fallback_partner_name: str = "",
     fallback_address: str | None = None,
+    order_type: str = "Kênh MT",
 ) -> dict:
     missing = _check_missing_order_fields(data, partner, address, items)
-    extra_data = _build_order_extra_data(partner, address, contact, fallback_partner_name, fallback_address)
+    extra_data = _build_order_extra_data(partner, address, contact, fallback_partner_name, fallback_address, order_type)
     order = ProcessedOrder(
         raw_document_id=raw.id,
         partner_id=partner.id if partner else None,
@@ -349,6 +398,14 @@ def _create_bill(db: Session, raw, partner, address, data: dict, items: list) ->
 def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLine]:
     lines = []
     for item in items:
+        quantity = item.get("quantity")
+        try:
+            quantity_num = float(quantity)
+        except (TypeError, ValueError):
+            quantity_num = 0
+        if quantity_num <= 0:
+            continue
+
         product_name = item.get("product_name") or "Unknown"
         temp_code, product_id = mapping_service.resolve_temp_code(
             db, item.get("product_code"), product_name
@@ -357,7 +414,6 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
         unit_price = item.get("unit_price")
         line_total = item.get("line_total")
         tax_rate = item.get("tax_rate")
-        quantity = item.get("quantity")
         line = OrderLine(
             processed_order_id=order_id,
             temp_code=temp_code,
@@ -370,7 +426,7 @@ def _build_order_lines(db: Session, order_id: UUID, items: list) -> list[OrderLi
             discount_amount=item.get("discount_amount"),
             tax_rate=tax_rate,
             line_total=line_total,
-            uom_original=item.get("unit"),
+            uom_original=item.get("unit") or item.get("uom"),
             mapping_status="pending"  # Always pending — user must confirm,
         )
         db.add(line)
@@ -450,7 +506,7 @@ def _check_missing_order_fields(data: dict, partner, address, items: list) -> li
             # REQUIRED item fields
             if item.get("quantity") is None:
                 missing.append(f"Dòng {i}: Số lượng — BẮT BUỘC")
-            if not item.get("unit"):
+            if not (item.get("unit") or item.get("uom")):
                 missing.append(f"Dòng {i}: Đơn vị tính — BẮT BUỘC")
             if item.get("line_total") is None:
                 missing.append(f"Dòng {i}: Thành tiền — BẮT BUỘC")

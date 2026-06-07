@@ -876,10 +876,10 @@ export default function OrdersPage() {
                       <span className="text-xs text-emerald-700 flex-1 uppercase tracking-wide font-bold">Tổng tiền theo PDF</span>
                       <span className="w-10" /><span className="w-8" />
                       <span className="w-20" />
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-slate-500 w-20 text-right">{order.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0).toLocaleString('vi-VN')}</span>
                       <span className="w-16" />
                       <span className="text-xs text-slate-600 w-[72px] text-right">{order.lines.reduce((s,l)=>{const r=Number(l.tax_rate)||0;return s+Math.round((Number(l.line_total)||0)*r/100)},0).toLocaleString('vi-VN')}</span>
-                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{order.lines.reduce((s,l)=>{const lt=Number(l.line_total)||0;const tx=Math.round(lt*(Number(l.tax_rate)||0)/100);return s+lt+tx},0).toLocaleString('vi-VN')}</span>
+                      <span className="text-xs text-emerald-700 w-20 text-right font-bold">{Number(order.total_amount||0).toLocaleString('vi-VN')}</span>
                       <span className="w-16" />
                     </div>
                     <div className="pt-2 mt-1 border-t border-slate-100 text-center">

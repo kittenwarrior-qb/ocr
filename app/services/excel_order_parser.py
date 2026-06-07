@@ -7,6 +7,7 @@ Supports:
 """
 import re
 from pathlib import Path
+import unicodedata
 
 
 def _clean_num(val) -> float:
@@ -25,6 +26,15 @@ def _str(val) -> str:
     return str(val).strip()
 
 
+def _norm(val) -> str:
+    text = _str(val).lower()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("đ", "d")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _parse_date(val) -> str | None:
     if not val:
         return None
@@ -38,14 +48,16 @@ def _parse_date(val) -> str | None:
 
 def _is_satori_template(rows: list) -> bool:
     """Detect Satori internal order template by checking header structure."""
-    flat = ' '.join(
-        _str(c) for row in rows[:20] for c in row if c is not None
-    ).lower()
+    normalized = _norm(' '.join(
+        _str(c) for row in rows[:25] for c in row if c is not None
+    ))
     return (
-        'satori' in flat and
-        'đơn đặt hàng' in flat and
-        'bên mua' in flat and
-        ('đại lý' in flat or 'npp' in flat or 'nhà phân phối' in flat or 'kênh gt' in flat)
+        'satori' in normalized and
+        'don dat hang' in normalized and
+        'ben mua' in normalized and
+        'stt' in normalized and
+        ('ten hang' in normalized or 'ten hang hoa' in normalized) and
+        ('so luong' in normalized or 'luong hang dat' in normalized)
     )
 
 
@@ -131,6 +143,10 @@ def _parse_satori_template(ws) -> dict:
     # ── Find data rows: after row with 'STT' and 'Số lượng' ──────────────────
     data_start = None
     for idx, row in enumerate(rows):
+        normalized = _norm(' '.join(_str(c) for c in row if c is not None))
+        if 'stt' in normalized and ('so luong' in normalized or 'luong' in normalized) and ('ten hang' in normalized or 'ten hang hoa' in normalized):
+            data_start = idx + 2  # skip header + col number row
+            break
         flat = ' '.join(_str(c) for c in row if c is not None).lower()
         if 'stt' in flat and ('số lượng' in flat or 'lượng') and 'tên hàng' in flat:
             data_start = idx + 2  # skip header + col number row
@@ -186,11 +202,9 @@ def _parse_satori_template(ws) -> dict:
             "tax_rate": tax_rate,
         })
 
-    # Compute total if not found
-    if not result['total_amount'] and result['items']:
-        pre_tax = sum(i['line_total'] or 0 for i in result['items'])
-        tax = sum((i['line_total'] or 0) * (i['tax_rate'] or 0) / 100 for i in result['items'])
-        result['total_amount'] = pre_tax + tax
+    # Không tự tính total_amount nếu file không in sẵn — số tự tính có thể sai
+    # (thiếu dòng khuyến mãi/chiết khấu không tính thuế, v.v.). Giữ null để user
+    # biết cần kiểm tra lại file gốc thay vì tin vào một con số suy diễn.
 
     return result
 

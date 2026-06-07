@@ -136,8 +136,8 @@ IMPORTANT:
 - Skip rows with no quantity AND no price (e.g. free-goods placeholder rows)
 - If a field is missing use null, but try your best to find REQUIRED fields
 - MULTI-PAGE: The document may span multiple pages. Extract ALL items from ALL pages, not just the first page.
-- If total_amount is NOT explicitly printed on the document, calculate it as the SUM of all items[].line_total (plus tax if applicable)
-- NEVER use only items from the first page to calculate total — always include ALL pages
+- If total_amount is NOT explicitly printed anywhere on the document (header or footer/grand-total row), leave it null. Do NOT sum items[].line_total to derive it — a derived total is not the source-of-truth value and may be wrong (missing pages, tax, discounts, promo lines).
+- When scanning for the printed total_amount, check ALL pages (it is often on the last page) — but never compute it yourself
 
 NUMBER FORMAT RULES (CRITICAL):
 - Vietnamese documents use dots (.) as THOUSAND separators, NOT decimal points. Example: "1.076.328" means 1076328, NOT 1076.328
