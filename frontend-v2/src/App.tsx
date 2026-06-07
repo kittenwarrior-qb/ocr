@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import {
   ContactsOutlined,
+  MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   OrderedListOutlined,
@@ -31,6 +32,7 @@ import CustomerMappingPage from './pages/CustomerMapping'
 import ContactMappingPage from './pages/ContactMapping'
 import SettingsPage from './pages/Settings'
 import POHistoryPage from './pages/POHistory'
+import EmailOrdersPage from './pages/EmailOrders'
 import client from './api/client'
 import { FIXED_MISA_ACCOUNTS } from './config/misaAccounts'
 
@@ -49,6 +51,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
   const items = [
     { key: '/orders', label: 'Tải File', icon: <UploadOutlined /> },
+    { key: '/email-orders', label: 'Đơn qua Email', icon: <MailOutlined /> },
     { key: '/products', label: 'Hàng hóa', icon: <ShoppingOutlined /> },
     { key: '/sale-orders', label: 'Đơn hàng', icon: <OrderedListOutlined /> },
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
@@ -181,6 +184,7 @@ function AppLayout() {
       <main className={`pr-16 transition-all duration-200 ${collapsed ? 'ml-14' : 'ml-52'}`}>
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/email-orders" element={<EmailOrdersPage />} />
           <Route path="/sale-orders" element={<SaleOrdersPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/customers" element={<CustomersPage />} />

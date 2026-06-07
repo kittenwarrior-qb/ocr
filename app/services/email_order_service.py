@@ -1,0 +1,247 @@
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+
+def _to_utc_naive(dt: datetime | None) -> datetime | None:
+    """
+    Normalize an incoming datetime to a naive UTC datetime for storage.
+    - tz-aware → convert to UTC, then drop tzinfo
+    - naive    → assumed to already be UTC, returned as-is
+    This guarantees the DB always holds UTC, so the frontend can safely
+    treat tz-less serialized values as UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+from app.models.email_order import EmailOrder, EmailAttachment, WebhookLog
+from app.schemas.email_order import (
+    SyncFromCrawlerIn,
+    SyncAttachmentIn,
+    WebhookEmailReceivedIn,
+)
+
+
+def list_email_orders(db: Session, skip: int = 0, limit: int = 50) -> list[dict]:
+    from sqlalchemy import case
+    rows = (
+        db.query(
+            EmailOrder,
+            func.count(EmailAttachment.id).label("attachment_count"),
+            func.sum(case((EmailAttachment.status == "pending", 1), else_=0)).label("pending_count"),
+            func.sum(case((EmailAttachment.status == "done", 1), else_=0)).label("done_count"),
+        )
+        .outerjoin(EmailAttachment, EmailAttachment.email_id == EmailOrder.id)
+        .group_by(EmailOrder.id)
+        .order_by(EmailOrder.received_at.desc().nullslast())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for email, att_count, pending, done in rows:
+        result.append({
+            "id": email.id,
+            "external_id": email.external_id,
+            "sender_email": email.sender_email,
+            "sender_name": email.sender_name,
+            "recipient_email": email.recipient_email,
+            "subject": email.subject,
+            "received_at": email.received_at,
+            "created_at": email.created_at,
+            "attachment_count": att_count or 0,
+            "pending_count": int(pending or 0),
+            "done_count": int(done or 0),
+        })
+    return result
+
+
+def get_email_order(db: Session, email_id: int) -> EmailOrder | None:
+    return db.query(EmailOrder).filter(EmailOrder.id == email_id).first()
+
+
+def upsert_from_crawler(db: Session, payload: SyncFromCrawlerIn) -> EmailOrder:
+    """
+    Upsert an email + its attachments coming from the external crawler service.
+
+    Race-safe: if two webhook deliveries for the same message_id arrive almost
+    simultaneously, both may pass the initial SELECT and try to INSERT. The
+    unique constraint on `external_id` makes the second INSERT raise
+    IntegrityError; we catch it, roll back, and re-select the row the other
+    request committed.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    email = db.query(EmailOrder).filter(EmailOrder.external_id == payload.external_id).first()
+    if not email:
+        email = EmailOrder(
+            external_id=payload.external_id,
+            sender_email=payload.sender_email,
+            sender_name=payload.sender_name,
+            recipient_email=payload.recipient_email,
+            subject=payload.subject,
+            received_at=_to_utc_naive(payload.received_at),
+        )
+        db.add(email)
+        try:
+            db.flush()
+        except IntegrityError:
+            # Another concurrent request inserted the same email first.
+            db.rollback()
+            email = (
+                db.query(EmailOrder)
+                .filter(EmailOrder.external_id == payload.external_id)
+                .first()
+            )
+            if email is None:
+                # Extremely unlikely; surface the original problem instead of looping.
+                raise
+
+    existing_ext_ids = {
+        a.external_attachment_id
+        for a in db.query(EmailAttachment.external_attachment_id)
+        .filter(EmailAttachment.email_id == email.id)
+        .all()
+    }
+
+    for att in payload.attachments:
+        if att.external_attachment_id in existing_ext_ids:
+            continue
+        db.add(EmailAttachment(
+            email_id=email.id,
+            external_attachment_id=att.external_attachment_id,
+            filename=att.filename,
+            file_size=att.file_size,
+            download_url=att.download_url,
+            view_url=att.view_url,
+            status="pending",
+        ))
+
+    db.commit()
+    db.refresh(email)
+    return email
+
+
+def upsert_from_webhook(db: Session, payload: WebhookEmailReceivedIn) -> EmailOrder:
+    """
+    Map an incoming `email.received` webhook payload onto our DB model.
+    Reuses upsert_from_crawler so the upsert/dedup logic lives in one place.
+    """
+    mapped = SyncFromCrawlerIn(
+        external_id=payload.message_id,
+        sender_email=payload.sender_email,
+        sender_name=payload.sender_name,
+        recipient_email=payload.recipient_email,
+        subject=payload.subject,
+        received_at=payload.received_at,
+        attachments=[
+            SyncAttachmentIn(
+                external_attachment_id=a.id,
+                filename=a.filename,
+                file_size=a.file_size,
+                download_url=a.download_url,
+                view_url=a.view_url,
+            )
+            for a in payload.attachments
+        ],
+    )
+    return upsert_from_crawler(db, mapped)
+
+
+def log_webhook_received(db: Session, event: str | None, external_id: str | None, payload: dict) -> int:
+    """Persist an incoming webhook immediately and return its log id."""
+    log = WebhookLog(
+        event=event,
+        external_id=external_id,
+        payload=payload,
+        status="received",
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log.id
+
+
+def _finish_webhook_log(
+    db: Session, log_id: int, status: str, email_id: int | None = None, error: str | None = None
+) -> None:
+    log = db.query(WebhookLog).filter(WebhookLog.id == log_id).first()
+    if not log:
+        return
+    log.status = status
+    log.email_id = email_id
+    log.error = error
+    log.processed_at = datetime.utcnow()
+    db.commit()
+
+
+def process_webhook(log_id: int, payload: WebhookEmailReceivedIn) -> None:
+    """
+    Background worker: process a previously-logged webhook payload.
+    Opens its own DB session (background tasks must not reuse the request session).
+    Updates the WebhookLog row with the final outcome.
+    """
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        if payload.event != "email.received":
+            _finish_webhook_log(db, log_id, "ignored")
+            return
+        email = upsert_from_webhook(db, payload)
+        _finish_webhook_log(db, log_id, "processed", email_id=email.id)
+    except Exception as e:  # noqa: BLE001 — log any failure for later inspection
+        db.rollback()
+        _finish_webhook_log(db, log_id, "failed", error=str(e))
+    finally:
+        db.close()
+
+
+def list_webhook_logs(db: Session, skip: int = 0, limit: int = 50) -> list[WebhookLog]:
+    return (
+        db.query(WebhookLog)
+        .order_by(WebhookLog.received_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def set_attachment_processing(db: Session, attachment_id: int) -> EmailAttachment | None:
+    att = db.query(EmailAttachment).filter(EmailAttachment.id == attachment_id).first()
+    if not att or att.status != "pending":
+        return att
+    att.status = "processing"
+    att.converted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(att)
+    return att
+
+
+def set_attachment_done(db: Session, attachment_id: int) -> EmailAttachment | None:
+    att = db.query(EmailAttachment).filter(EmailAttachment.id == attachment_id).first()
+    if not att or att.status != "processing":
+        return att
+    att.status = "done"
+    att.done_at = datetime.utcnow()
+    db.commit()
+    db.refresh(att)
+    return att
+
+
+def bulk_set_processing(db: Session, attachment_ids: list[int]) -> list[EmailAttachment]:
+    atts = (
+        db.query(EmailAttachment)
+        .filter(EmailAttachment.id.in_(attachment_ids), EmailAttachment.status == "pending")
+        .all()
+    )
+    now = datetime.utcnow()
+    for att in atts:
+        att.status = "processing"
+        att.converted_at = now
+    db.commit()
+    return atts
