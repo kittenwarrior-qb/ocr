@@ -65,6 +65,19 @@ export interface MatchResult {
   score: number
 }
 
+function parseTaxRate(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const n = Number(String(value).replace('%', '').replace(',', '.').trim())
+  return Number.isFinite(n) ? n : null
+}
+
+function taxScoreAdjustment(product: Product, expectedTaxRate?: unknown): number {
+  const expected = parseTaxRate(expectedTaxRate)
+  const actual = parseTaxRate(product.tax_rate)
+  if (expected == null || actual == null) return 0
+  return Math.abs(expected - actual) < 0.01 ? 0.25 : -0.35
+}
+
 /**
  * Check alias cache with priority:
  *   1. (norm, customerCode)  — customer-specific
@@ -87,35 +100,39 @@ function checkAlias(ocrName: string, customerCode = ''): Product | null {
   return null
 }
 
-export function matchProduct(ocrName: string, topN = 5, customerCode = ''): MatchResult[] {
+export function matchProduct(ocrName: string, topN = 5, customerCode = '', expectedTaxRate?: unknown): MatchResult[] {
   if (!ocrName?.trim()) return []
 
   // 1. Check alias dictionary (exact, customer-aware) — score 1.0
   const aliasHit = checkAlias(ocrName, customerCode)
   if (aliasHit) {
-    const rest = matchProduct_fuzzy(ocrName, topN - 1).filter(r => r.product.code !== aliasHit.code)
-    return [{ product: aliasHit, score: 1.0 }, ...rest].slice(0, topN)
+    const rest = matchProduct_fuzzy(ocrName, topN - 1, expectedTaxRate).filter(r => r.product.code !== aliasHit.code)
+    return [{ product: aliasHit, score: 1.0 + taxScoreAdjustment(aliasHit, expectedTaxRate) }, ...rest]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN)
   }
 
-  return matchProduct_fuzzy(ocrName, topN)
+  return matchProduct_fuzzy(ocrName, topN, expectedTaxRate)
 }
 
-function matchProduct_fuzzy(ocrName: string, topN: number): MatchResult[] {
+function matchProduct_fuzzy(ocrName: string, topN: number, expectedTaxRate?: unknown): MatchResult[] {
   const products = getProducts()
   const results: MatchResult[] = products.map(p => {
     const sub = substringScore(ocrName, p.name)
     const overlap = wordOverlapScore(ocrName, p.name)
     const codeMatch = normalize(ocrName).includes(normalize(p.code)) ? 0.5 : 0
-    const score = Math.max(sub, overlap * 0.9, codeMatch) + productSpecificScore(ocrName, p.name)
+    const score = Math.max(sub, overlap * 0.9, codeMatch)
+      + productSpecificScore(ocrName, p.name)
+      + taxScoreAdjustment(p, expectedTaxRate)
     return { product: p, score }
   })
   return results.filter(r => r.score > 0.2).sort((a, b) => b.score - a.score).slice(0, topN)
 }
 
-export function getBestMatch(ocrName: string, threshold = 0.5, customerCode = ''): Product | null {
+export function getBestMatch(ocrName: string, threshold = 0.5, customerCode = '', expectedTaxRate?: unknown): Product | null {
   const aliasHit = checkAlias(ocrName, customerCode)
-  if (aliasHit) return aliasHit
-  const results = matchProduct_fuzzy(ocrName, 1)
+  if (aliasHit && taxScoreAdjustment(aliasHit, expectedTaxRate) >= 0) return aliasHit
+  const results = matchProduct_fuzzy(ocrName, 1, expectedTaxRate)
   if (!results.length || results[0].score < threshold) return null
   return results[0].product
 }

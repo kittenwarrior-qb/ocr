@@ -361,7 +361,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     if ((field === 'uom_original' || field === 'quantity') && current) {
       const products = getProducts()
       const product = products.find(p => p.code === current.ocr_product_code || p.code === (current as any).product_code || p.code === (current as any).product_code_mapped)
-        || matchProduct(current.product_name_original || '', 1)[0]?.product
+        || matchProduct(current.product_name_original || '', 1, '', current.tax_rate)[0]?.product
       const nextLine = { ...current, [field]: value } as OrderLine
       const conversion = getUomConversion({
         quantity: nextLine.quantity,
@@ -805,7 +805,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 const isPending = line.mapping_status === 'pending'
                 const systemLine = isSystemLine(line)
                 const conf = (!isPending || systemLine) ? null : (() => {
-                  const r = matchProduct(line.product_name_original, 1)
+                  const r = matchProduct(line.product_name_original, 1, '', line.tax_rate)
                   if (!r.length) return null
                   return { score: r[0].score, product: r[0].product }
                 })()

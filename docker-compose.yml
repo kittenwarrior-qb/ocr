@@ -1,4 +1,4 @@
-name: misa-api2
+name: misa2
 
 services:
   db:

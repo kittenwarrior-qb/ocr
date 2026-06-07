@@ -225,6 +225,7 @@ def import_excel_to_orders(db: Session, file_path: str, file_name: str) -> dict:
                 db,
                 line_data.get("product_code"),
                 line_data["product_name"],
+                line_data.get("tax_rate"),
             )
             mapping_status = "mapped" if product_id else "pending"
             if not product_id:

@@ -35,11 +35,11 @@ Nếu VPS dùng Caddy chung của project khác, Caddyfile bên ngoài nên tr�
 ```caddy
 ocr2.quocbui.dev {
     handle /api/* {
-        reverse_proxy misa-api2-backend-1:8000
+        reverse_proxy misa2-backend-1:8000
     }
 
     handle /* {
-        reverse_proxy misa-api2-frontend-1:80
+        reverse_proxy misa2-frontend-1:80
     }
 }
 ```

@@ -48,7 +48,7 @@ import client from '@/api/client'
 type Confidence = 'confirmed' | 'suggest' | 'medium' | 'low' | 'none'
 function getConfidence(line: SessionLine): { level: Confidence; suggestion: Product | null } {
   if (line.mapping_status === 'mapped') return { level: 'confirmed', suggestion: null }
-  const results = matchProduct(line.product_name_original, 3)
+  const results = matchProduct(line.product_name_original, 3, '', line.tax_rate)
   if (!results.length) return { level: 'none', suggestion: null }
   if (results[0].score >= 0.85) return { level: 'suggest', suggestion: results[0].product }
   if (results[0].score >= 0.5) return { level: 'medium', suggestion: results[0].product }
@@ -79,7 +79,7 @@ function getProductSearchHint(line: SessionLine): string {
   // 1. Chỉ dùng product_code_mapped nếu đã xác nhận thật (không dùng cho pending)
   if (line.mapping_status === 'mapped' && line.product_code_mapped) return line.product_code_mapped
   // 2. Fuzzy match theo tên SP (bỏ qua product_code_mapped của pending lines)
-  const results = matchProduct(line.product_name_original, 1)
+  const results = matchProduct(line.product_name_original, 1, '', line.tax_rate)
   if (results.length && results[0].score > 0.2) return results[0].product.code
   // 3. Fallback: tên SP
   return line.product_name_original || ''

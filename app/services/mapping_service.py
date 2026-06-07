@@ -68,7 +68,24 @@ def _address_match_score(query: str | None, target: str | None) -> int:
     return max(0, min(score, 100))
 
 
-def _product_match_score(query: str, target: str) -> int:
+def _parse_tax_rate(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(str(value).replace("%", "").replace(",", ".").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _tax_match_adjustment(expected_tax_rate, product_tax_rate) -> int:
+    expected = _parse_tax_rate(expected_tax_rate)
+    actual = _parse_tax_rate(product_tax_rate)
+    if expected is None or actual is None:
+        return 0
+    return 18 if abs(expected - actual) < 0.01 else -25
+
+
+def _product_match_score(query: str, target: str, expected_tax_rate=None, product_tax_rate=None) -> int:
     from thefuzz import fuzz
 
     q = _normalize_product_name(query)
@@ -91,6 +108,7 @@ def _product_match_score(query: str, target: str) -> int:
         score -= 60
     if "vo binh" not in q and "vo binh" in t:
         score -= 35
+    score += _tax_match_adjustment(expected_tax_rate, product_tax_rate)
     return max(0, min(score, 100))
 
 
@@ -331,7 +349,7 @@ def find_or_create_address(
 
 # ── Temp-code / product ───────────────────────────────────────────────────────
 
-def resolve_temp_code(db: Session, product_code: str | None, product_name: str) -> tuple[str, UUID | None]:
+def resolve_temp_code(db: Session, product_code: str | None, product_name: str, tax_rate=None) -> tuple[str, UUID | None]:
     """Returns (temp_code, product_id_or_None). Creates TempCodeMapping if new."""
     if product_code and product_code.strip():
         temp_code = product_code.strip()
@@ -350,7 +368,7 @@ def resolve_temp_code(db: Session, product_code: str | None, product_name: str) 
     product_id = None
     if product_name and product_name.strip():
         all_products = db.query(Product).filter(Product.is_active == True).all()
-        scored = [(_product_match_score(product_name, p.display_name or ""), p) for p in all_products]
+        scored = [(_product_match_score(product_name, p.display_name or "", tax_rate, p.tax_rate), p) for p in all_products]
         scored.sort(key=lambda item: item[0], reverse=True)
         if scored and scored[0][0] >= 82:
             product_id = scored[0][1].id
