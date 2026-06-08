@@ -213,10 +213,13 @@ def list_webhook_logs(db: Session, skip: int = 0, limit: int = 50) -> list[Webho
 
 def set_attachment_processing(db: Session, attachment_id: int) -> EmailAttachment | None:
     att = db.query(EmailAttachment).filter(EmailAttachment.id == attachment_id).first()
-    if not att or att.status != "pending":
-        return att
+    # Allow converting from any status: "pending" (first time), "processing"
+    # (re-run while still working) or "done" (re-convert after an error).
+    if not att:
+        return None
     att.status = "processing"
     att.converted_at = datetime.utcnow()
+    att.done_at = None
     db.commit()
     db.refresh(att)
     return att
@@ -236,12 +239,16 @@ def set_attachment_done(db: Session, attachment_id: int) -> EmailAttachment | No
 def bulk_set_processing(db: Session, attachment_ids: list[int]) -> list[EmailAttachment]:
     atts = (
         db.query(EmailAttachment)
-        .filter(EmailAttachment.id.in_(attachment_ids), EmailAttachment.status == "pending")
+        .filter(
+            EmailAttachment.id.in_(attachment_ids),
+            EmailAttachment.status.in_(("pending", "done")),
+        )
         .all()
     )
     now = datetime.utcnow()
     for att in atts:
         att.status = "processing"
         att.converted_at = now
+        att.done_at = None
     db.commit()
     return atts

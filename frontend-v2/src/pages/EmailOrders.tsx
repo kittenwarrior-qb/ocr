@@ -186,9 +186,24 @@ export default function EmailOrdersPage() {
   }
 
   // ---- single convert ----
+  // Allowed from any status: "pending" (first time), "processing" (re-run while
+  // still working) or "done" (re-convert after an error).
   async function handleConvert(att: EmailAttachment) {
-    if (att.status !== 'pending') return
+    const current = statusOverride.get(att.id) ?? att.status
+    const wasDone = current === 'done'
     setStatusOverride(prev => new Map(prev).set(att.id, 'processing'))
+    // Re-converting a done file frees up its slot in the done count
+    if (wasDone) {
+      setListItems(prev =>
+        prev.map(e =>
+          e.id !== att.email_id ? e : {
+            ...e,
+            done_count: Math.max(0, e.done_count - 1),
+            pending_count: e.pending_count + 1,
+          }
+        )
+      )
+    }
     try {
       // 1. Check if this filename already exists in OCR
       const statusMap = await checkFilenames([att.filename])
@@ -211,7 +226,19 @@ export default function EmailOrdersPage() {
       await uploadBatch([file], true)
       message.success(`Đã gửi "${att.filename}" vào hàng chờ OCR`)
     } catch (e: unknown) {
-      setStatusOverride(prev => new Map(prev).set(att.id, 'pending'))
+      // revert to the status it had before we started
+      setStatusOverride(prev => new Map(prev).set(att.id, wasDone ? 'done' : 'pending'))
+      if (wasDone) {
+        setListItems(prev =>
+          prev.map(em =>
+            em.id !== att.email_id ? em : {
+              ...em,
+              done_count: em.done_count + 1,
+              pending_count: Math.max(0, em.pending_count - 1),
+            }
+          )
+        )
+      }
       message.error(e instanceof Error ? e.message : `Không thể convert "${att.filename}"`)
     }
   }
@@ -688,6 +715,18 @@ export default function EmailOrdersPage() {
                                           onClick={() => handleDone(att)}
                                         >
                                           Done
+                                        </Button>
+                                      </Tooltip>
+                                    )}
+
+                                    {(isProcessing || isDone) && (
+                                      <Tooltip title="Convert lại file này (dùng khi kết quả OCR bị lỗi)">
+                                        <Button
+                                          size="small"
+                                          icon={<ReloadOutlined />}
+                                          onClick={() => handleConvert(att)}
+                                        >
+                                          Convert lại
                                         </Button>
                                       </Tooltip>
                                     )}
