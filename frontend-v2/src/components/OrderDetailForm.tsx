@@ -968,7 +968,26 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               setProductModalIdx(null)
               return
             }
-            setLines(prev => prev.map((l, idx) => idx === productModalIdx ? applyProductToLine(l, p) : l))
+            // Yêu cầu xác nhận trước khi map — giống popup chọn khách hàng/liên hệ,
+            // tránh map nhầm sản phẩm chỉ vì lỡ tay click vào dòng kết quả tìm kiếm.
+            const lineIdx = productModalIdx
+            const lineLabel = line.product_name_original || '(dòng chưa có tên)'
+            setProductModalIdx(null)
+            Modal.confirm({
+              title: 'Xác nhận map sản phẩm',
+              content: (
+                <div className="text-sm space-y-1">
+                  <div>Map dòng <strong>"{lineLabel}"</strong> sang sản phẩm trong danh mục:</div>
+                  <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+                    <span className="font-mono font-bold text-blue-700">{p.code}</span>
+                    <span className="text-slate-600 ml-2">— {p.name}</span>
+                  </div>
+                </div>
+              ),
+              okText: 'Xác nhận map', cancelText: 'Xem lại', width: 460,
+              onOk: () => setLines(prev => prev.map((l, idx) => idx === lineIdx ? applyProductToLine(l, p) : l)),
+            })
+            return
           } else {
             setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: p.code, product_name_original: p.name, quantity: 1, unit_price: p.price || 0, line_total: p.price || 0, uom_original: p.uom, tax_rate: productTaxRate(p), mapping_status: 'mapped' } as unknown as OrderLine])
           }
