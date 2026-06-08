@@ -358,27 +358,27 @@
       }
     ]
   },
-  {
-    "code": "CSG0000021",
-    "name": "CTKM CK 20% ST KINGKONGQ",
-    "target": "Tất cả khách hàng",
-    "customer_type": "",
-    "from_date": "2026-05-19",
-    "to_date": "2026-06-30",
-    "is_inactive": false,
-    "customers": [],
-    "items": [
-      {
-        "product_code": "TP-00136",
-        "product_name": "Nước tinh khiết Satori 5L có vòi",
-        "product_type": "Hàng hóa",
-        "uom": "Thùng",
-        "unit_price": 80080,
-        "discount_type": "Theo %",
-        "discount": 0
-      }
-    ]
-  },
+{
+  "code": "CSG0000021",
+  "name": "CTKM CK 20% ST KINGKONGQ",
+  "target": "Theo khách hàng cụ thể",
+  "customer_type": "",
+  "from_date": "2026-05-19",
+  "to_date": "2026-06-30",
+  "is_inactive": false,
+  "customers": ["KH70000408"],
+  "items": [
+    {
+      "product_code": "TP-00136",
+      "product_name": "Nước tinh khiết Satori 5L có vòi",
+      "product_type": "Hàng hóa",
+      "uom": "Thùng",
+      "unit_price": 80080,
+      "discount_type": "Theo %",
+      "discount": 0
+    }
+  ]
+},
   {
     "code": "CSG0000022",
     "name": "Bảng Giá kênh GT - ĐLTT Miền Nam - Hikari bình 19L",
