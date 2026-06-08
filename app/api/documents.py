@@ -153,16 +153,16 @@ def get_raw_document(raw_doc_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/raw/{raw_doc_id}/file")
-def get_raw_file(raw_doc_id: UUID, db: Session = Depends(get_db)):
-    """Trả về file gốc (PDF/JPG) để embed trong iframe"""
+def get_raw_file(raw_doc_id: UUID, download: bool = False, db: Session = Depends(get_db)):
+    """Trả về file gốc (PDF/JPG/Excel) để embed trong iframe hoặc tải về máy"""
     doc = db.query(RawDocument).filter(RawDocument.id == raw_doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     file_path = Path(doc.file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
-    
+
     suffix = file_path.suffix.lower()
     media_types = {
         '.pdf': 'application/pdf',
@@ -171,7 +171,9 @@ def get_raw_file(raw_doc_id: UUID, db: Session = Depends(get_db)):
         '.png': 'image/png',
     }
     media_type = media_types.get(suffix, 'application/octet-stream')
-    return FileResponse(file_path, media_type=media_type)
+    # filename= ép Content-Disposition: attachment — chỉ bật khi người dùng chủ
+    # động bấm "Tải về", tránh phá luồng xem trước PDF/ảnh nhúng trong iframe.
+    return FileResponse(file_path, media_type=media_type, filename=doc.file_name if download else None)
 
 
 @router.get("/raw/{raw_doc_id}/image")
@@ -300,6 +302,16 @@ def upload_excel(
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────
+
+@router.post("/orders/manual")
+def create_manual_order(db: Session = Depends(get_db)):
+    """Tạo đơn hàng trống để nhập tay (mặc định Kênh B2B, ngày đặt hàng = hôm nay)."""
+    order, session_id = document_service.create_manual_order(db, order_type="Kênh B2B")
+    return {
+        "order_id": str(order.id),
+        "session_id": str(session_id),
+    }
+
 
 @router.get("/orders", response_model=list[ProcessedOrderOut])
 def list_orders(status: str | None = None, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):

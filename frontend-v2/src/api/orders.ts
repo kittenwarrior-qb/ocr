@@ -83,6 +83,10 @@ export function getRawFileUrl(rawDocId: string): string {
   return `${base}/documents/raw/${rawDocId}/file`
 }
 
+export function getRawFileDownloadUrl(rawDocId: string): string {
+  return `${getRawFileUrl(rawDocId)}?download=1`
+}
+
 export function getOrderFileUrl(orderId: string): string {
   const base = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '')
   return `${base}/documents/orders/${orderId}/file`

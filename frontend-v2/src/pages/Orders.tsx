@@ -21,6 +21,8 @@ import {
   DeleteOutlined,
   TagsOutlined,
   CloudUploadOutlined,
+  DownloadOutlined,
+  FormOutlined,
   GiftOutlined,
   ContactsOutlined,
 } from '@ant-design/icons'
@@ -29,6 +31,7 @@ import {
   getSessionDetails,
   getOrderFileUrl,
   getRawFileUrl,
+  getRawFileDownloadUrl,
   uploadBatch,
   type SessionLine,
   type SessionOrder,
@@ -232,6 +235,8 @@ export default function OrdersPage() {
   const [misaLoading, setMisaLoading] = useState(false)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
+  const [creatingManualOrder, setCreatingManualOrder] = useState(false)
+  const [pendingManualOrderId, setPendingManualOrderId] = useState<string | null>(null)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [vouchersByCustomer, setVouchersByCustomer] = useState<Record<string, Voucher[]>>({})
@@ -331,6 +336,32 @@ export default function OrdersPage() {
     catch (e: any) { setUploadFiles(prev => prev.map(f => ({ ...f, status: 'error' }))); message.error(e?.response?.data?.detail || 'Upload thất bại') }
     finally { setUploading(false) }
   }, [stagedFiles, refetchSessions])
+
+  const handleCreateManualOrder = useCallback(async () => {
+    setCreatingManualOrder(true)
+    try {
+      const { data } = await client.post('/documents/orders/manual')
+      await refetchSessions()
+      setActiveTab('current')
+      setActiveSessionId(data.session_id)
+      setPendingManualOrderId(data.order_id)
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Không thể tạo đơn thủ công')
+    } finally {
+      setCreatingManualOrder(false)
+    }
+  }, [refetchSessions])
+
+  // Mở form chi tiết ngay khi đơn thủ công vừa tạo đã có trong phiên đang xem
+  useEffect(() => {
+    if (!pendingManualOrderId || !sessionDetail) return
+    const order = sessionDetail.orders.find(o => o.id === pendingManualOrderId)
+    if (order) {
+      setEditingOrder(order)
+      setDetailModalOpen(true)
+      setPendingManualOrderId(null)
+    }
+  }, [pendingManualOrderId, sessionDetail])
 
   const onDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); handleStageFiles(Array.from(e.dataTransfer.files)) }, [handleStageFiles])
 
@@ -674,7 +705,12 @@ export default function OrdersPage() {
 
   return (
     <div className="p-6 max-w-[1500px] mx-auto">
-      <h1 className="text-lg font-semibold text-gray-800 mb-4">Đơn đặt hàng</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold text-gray-800">Đơn đặt hàng</h1>
+        <Button icon={<FormOutlined />} loading={creatingManualOrder} onClick={handleCreateManualOrder}>
+          Tạo đơn thủ công
+        </Button>
+      </div>
 
       {/* Upload */}
       <div onDrop={onDrop} onDragOver={e => { e.preventDefault(); setIsDragging(true) }} onDragLeave={() => setIsDragging(false)} onClick={() => !uploading && inputRef.current?.click()}
@@ -959,7 +995,17 @@ export default function OrdersPage() {
                 <FileIcon name={previewPanelOrder?.file_name} className={/\.(xlsx|xls)$/i.test(previewPanelOrder?.file_name||'') ? 'text-green-300' : 'text-red-300'} />
                 <span className="text-sm font-semibold text-white truncate">{previewPanelOrder?.file_name || 'File'}</span>
               </div>
-              <Button size="small" icon={<ArrowsAltOutlined />} disabled={!previewPanelOrder} onClick={() => previewPanelOrder && setPreviewOrder(previewPanelOrder)}>Phóng to</Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="small"
+                  icon={<DownloadOutlined />}
+                  disabled={!previewPanelOrder?.raw_document_id}
+                  onClick={() => previewPanelOrder?.raw_document_id && window.open(getRawFileDownloadUrl(previewPanelOrder.raw_document_id), '_blank')}
+                >
+                  Tải về
+                </Button>
+                <Button size="small" icon={<ArrowsAltOutlined />} disabled={!previewPanelOrder} onClick={() => previewPanelOrder && setPreviewOrder(previewPanelOrder)}>Phóng to</Button>
+              </div>
             </div>
             {previewPanelOrder ? (
               /\.(xlsx|xls)$/i.test(previewPanelOrder.file_name || '') ? (

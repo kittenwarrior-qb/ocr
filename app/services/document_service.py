@@ -45,6 +45,46 @@ def create_raw_document(db: Session, file_name: str, file_path: str, session_id=
     return doc
 
 
+def create_manual_order(db: Session, order_type: str = "Kênh B2B") -> tuple[ProcessedOrder, UUID]:
+    """Tạo đơn hàng trống để người dùng tự nhập tay — không qua OCR/upload file.
+
+    Vẫn cần một RawDocument gốc (raw_document_id NOT NULL) nên tạo một bản ghi
+    "giả" (file_path rỗng, ocr_status="done") cùng một phiên riêng để đơn hiện
+    ra trong luồng xem/sửa hiện có (giống các đơn được OCR từ file).
+    """
+    from app.models.session import OcrSession
+
+    today_label = date.today().strftime("%d/%m/%Y")
+    session = OcrSession(name=f"Đơn tạo thủ công {today_label}")
+    db.add(session)
+    db.flush()
+
+    raw = RawDocument(
+        file_name=f"Đơn thủ công {today_label}",
+        file_path="",
+        document_type="purchase_order",
+        ocr_status="done",
+        session_id=session.id,
+    )
+    db.add(raw)
+    db.flush()
+
+    order = ProcessedOrder(
+        raw_document_id=raw.id,
+        order_number=generate_order_number(db),
+        order_date=date.today(),
+        currency="VND",
+        missing_fields=_check_missing_order_fields({}, None, None, []),
+        extra_data=_build_order_extra_data(None, None, None, order_type=order_type),
+        status="completed",
+    )
+    db.add(order)
+    db.flush()
+    db.commit()
+    db.refresh(order)
+    return order, session.id
+
+
 # ── Main OCR + processing pipeline ───────────────────────────────────────────
 
 def process_raw_document(db: Session, raw_doc_id: UUID, use_ai: bool = True) -> dict:
