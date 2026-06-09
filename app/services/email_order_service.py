@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
+import httpx
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+
+from app.config import settings
 
 
 def _to_utc_naive(dt: datetime | None) -> datetime | None:
@@ -25,9 +28,9 @@ from app.schemas.email_order import (
 )
 
 
-def list_email_orders(db: Session, skip: int = 0, limit: int = 50) -> list[dict]:
+def list_email_orders(db: Session, page: int = 1, size: int = 20) -> dict:
     from sqlalchemy import case
-    rows = (
+    base_q = (
         db.query(
             EmailOrder,
             func.count(EmailAttachment.id).label("attachment_count"),
@@ -37,14 +40,15 @@ def list_email_orders(db: Session, skip: int = 0, limit: int = 50) -> list[dict]
         .outerjoin(EmailAttachment, EmailAttachment.email_id == EmailOrder.id)
         .group_by(EmailOrder.id)
         .order_by(EmailOrder.received_at.desc().nullslast())
-        .offset(skip)
-        .limit(limit)
-        .all()
     )
 
-    result = []
+    total = db.query(func.count(EmailOrder.id)).scalar() or 0
+    skip = (page - 1) * size
+    rows = base_q.offset(skip).limit(size).all()
+
+    items = []
     for email, att_count, pending, done in rows:
-        result.append({
+        items.append({
             "id": email.id,
             "external_id": email.external_id,
             "sender_email": email.sender_email,
@@ -57,7 +61,10 @@ def list_email_orders(db: Session, skip: int = 0, limit: int = 50) -> list[dict]
             "pending_count": int(pending or 0),
             "done_count": int(done or 0),
         })
-    return result
+
+    import math
+    pages = math.ceil(total / size) if size > 0 else 1
+    return {"items": items, "total": total, "page": page, "size": size, "pages": max(pages, 1)}
 
 
 def get_email_order(db: Session, email_id: int) -> EmailOrder | None:
@@ -150,6 +157,69 @@ def upsert_from_webhook(db: Session, payload: WebhookEmailReceivedIn) -> EmailOr
         ],
     )
     return upsert_from_crawler(db, mapped)
+
+
+def backfill_from_gateway(db: Session, size: int = 50) -> dict:
+    """
+    Pull *all* emails from the external Email Gateway and upsert them into our DB.
+
+    The Gateway is the source of truth for raw emails; our DB additionally tracks
+    per-attachment OCR status (pending/processing/done). The webhook only delivers
+    emails that arrive *after* it was wired up, so historical emails never make it
+    in. This endpoint backfills the gap by paging through the whole Gateway list.
+
+    Idempotent: relies on upsert_from_crawler's dedup (unique external_id +
+    skip-existing external_attachment_id), so running it repeatedly is safe.
+
+    Returns a summary: {"synced": int, "total": int, "pages": int}.
+    """
+    base = settings.EMAIL_GATEWAY_URL.rstrip("/")
+    synced = 0
+    total = 0
+    pages = 1
+
+    with httpx.Client(timeout=30.0) as http:
+        page = 1
+        while True:
+            resp = http.get(f"{base}/emails", params={"page": page, "size": size})
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("items", [])
+            total = data.get("total", total)
+            pages = data.get("pages", pages)
+
+            for item in items:
+                # Always fetch full detail so attachments are included.
+                detail_resp = http.get(f"{base}/emails/{item['id']}")
+                detail_resp.raise_for_status()
+                full = detail_resp.json()
+
+                mapped = SyncFromCrawlerIn(
+                    external_id=full["message_id"],
+                    sender_email=full["sender_email"],
+                    sender_name=full.get("sender_name"),
+                    recipient_email=full.get("recipient_email"),
+                    subject=full.get("subject"),
+                    received_at=full.get("received_at"),
+                    attachments=[
+                        SyncAttachmentIn(
+                            external_attachment_id=a["id"],
+                            filename=a["filename"],
+                            file_size=a.get("file_size"),
+                            download_url=a.get("download_url"),
+                            view_url=a.get("view_url"),
+                        )
+                        for a in (full.get("attachments") or [])
+                    ],
+                )
+                upsert_from_crawler(db, mapped)
+                synced += 1
+
+            if page >= pages or not items:
+                break
+            page += 1
+
+    return {"synced": synced, "total": total, "pages": pages}
 
 
 def log_webhook_received(db: Session, event: str | None, external_id: str | None, payload: dict) -> int:

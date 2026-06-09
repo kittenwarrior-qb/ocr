@@ -103,6 +103,14 @@ export interface EmailOrderListItem {
   done_count: number;
 }
 
+export interface EmailOrderListResponse {
+  items: EmailOrderListItem[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
 // ============================================================
 // Crawler service API
 // ============================================================
@@ -159,17 +167,33 @@ export function getAttachmentViewUrl(attachmentId: number): string {
 // ============================================================
 
 export async function getEmailOrders(
-  skip = 0,
-  limit = 50,
-): Promise<EmailOrderListItem[]> {
+  page = 1,
+  size = 20,
+): Promise<EmailOrderListResponse> {
   const { data } = await client.get("/email-orders", {
-    params: { skip, limit },
+    params: { page, size },
   });
+  // handle both paginated and legacy array responses
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length, page: 1, size: data.length, pages: 1 }
+  }
   return data;
 }
 
 export async function getEmailOrder(id: number): Promise<EmailOrder> {
   const { data } = await client.get(`/email-orders/${id}`);
+  return data;
+}
+
+export interface BackfillResult {
+  synced: number;
+  total: number;
+  pages: number;
+}
+
+/** Ask our backend to pull all emails from the Gateway into our DB. */
+export async function backfillEmails(): Promise<BackfillResult> {
+  const { data } = await client.post("/email-orders/backfill");
   return data;
 }
 

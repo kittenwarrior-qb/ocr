@@ -66,6 +66,56 @@ export interface EmailGroup<T extends HasSenderEmail = HasSenderEmail> {
   emails: T[]
 }
 
+export type TimeGroup = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'older'
+
+export const TIME_GROUP_LABELS: Record<TimeGroup, string> = {
+  today: 'Hôm nay',
+  yesterday: 'Hôm qua',
+  this_week: 'Tuần này',
+  last_week: 'Tuần trước',
+  older: 'Cũ hơn',
+}
+
+export function getTimeGroup(isoDate: string | null): TimeGroup {
+  if (!isoDate) return 'older'
+  const date = new Date(isoDate.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(isoDate) ? isoDate : `${isoDate}Z`)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400_000)
+
+  // start of current week (Monday)
+  const dow = startOfToday.getDay() // 0=Sun
+  const daysSinceMonday = (dow + 6) % 7
+  const startOfThisWeek = new Date(startOfToday.getTime() - daysSinceMonday * 86400_000)
+  const startOfLastWeek = new Date(startOfThisWeek.getTime() - 7 * 86400_000)
+
+  if (date >= startOfToday) return 'today'
+  if (date >= startOfYesterday) return 'yesterday'
+  if (date >= startOfThisWeek) return 'this_week'
+  if (date >= startOfLastWeek) return 'last_week'
+  return 'older'
+}
+
+export interface TimeEmailGroup<T> {
+  key: TimeGroup
+  label: string
+  emails: T[]
+}
+
+export function groupEmailsByTime<T extends { received_at: string | null; created_at: string }>(
+  emails: T[]
+): TimeEmailGroup<T>[] {
+  const order: TimeGroup[] = ['today', 'yesterday', 'this_week', 'last_week', 'older']
+  const map = new Map<TimeGroup, T[]>(order.map(k => [k, []]))
+  for (const email of emails) {
+    const group = getTimeGroup(email.received_at ?? email.created_at)
+    map.get(group)!.push(email)
+  }
+  return order
+    .filter(k => map.get(k)!.length > 0)
+    .map(k => ({ key: k, label: TIME_GROUP_LABELS[k], emails: map.get(k)! }))
+}
+
 /**
  * Group a flat list of emails by sender domain, sorted alphabetically by domain.
  */

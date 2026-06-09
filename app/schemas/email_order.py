@@ -79,6 +79,14 @@ class AttachmentStatusPatch(BaseModel):
     status: AttachmentStatus
 
 
+class EmailOrderListResponse(BaseModel):
+    items: list[EmailOrderListItem]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+
 class BulkConvertIn(BaseModel):
     attachment_ids: list[int]
 
