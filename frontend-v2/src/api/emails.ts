@@ -166,17 +166,42 @@ export function getAttachmentViewUrl(attachmentId: number): string {
 // Our backend API — /api/v1/email-orders
 // ============================================================
 
+export interface EmailOrderFilters {
+  search?: string;
+  recipient?: string | null;
+  domain?: string | null;
+  status?: "all" | "pending" | "done";
+  date?: string | null; // "YYYY-MM-DD"
+}
+
 export async function getEmailOrders(
   page = 1,
   size = 20,
+  filters: EmailOrderFilters = {},
 ): Promise<EmailOrderListResponse> {
-  const { data } = await client.get("/email-orders", {
-    params: { page, size },
-  });
+  // drop empty/null/"all" values so they aren't sent as query params
+  const params: Record<string, string | number> = { page, size };
+  if (filters.search?.trim()) params.search = filters.search.trim();
+  if (filters.recipient) params.recipient = filters.recipient;
+  if (filters.domain) params.domain = filters.domain;
+  if (filters.status && filters.status !== "all") params.status = filters.status;
+  if (filters.date) params.date = filters.date;
+
+  const { data } = await client.get("/email-orders", { params });
   // handle both paginated and legacy array responses
   if (Array.isArray(data)) {
     return { items: data, total: data.length, page: 1, size: data.length, pages: 1 }
   }
+  return data;
+}
+
+export interface EmailFacets {
+  domains: { domain: string; count: number }[];
+  recipients: string[];
+}
+
+export async function getEmailFacets(): Promise<EmailFacets> {
+  const { data } = await client.get("/email-orders/facets");
   return data;
 }
 
