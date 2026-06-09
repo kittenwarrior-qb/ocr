@@ -171,9 +171,15 @@ def get_raw_file(raw_doc_id: UUID, download: bool = False, db: Session = Depends
         '.png': 'image/png',
     }
     media_type = media_types.get(suffix, 'application/octet-stream')
-    # filename= ép Content-Disposition: attachment — chỉ bật khi người dùng chủ
-    # động bấm "Tải về", tránh phá luồng xem trước PDF/ảnh nhúng trong iframe.
-    return FileResponse(file_path, media_type=media_type, filename=doc.file_name if download else None)
+    if download:
+        # Ép trình duyệt tải về với đúng tên file gốc (kể cả tiếng Việt có dấu).
+        return FileResponse(file_path, media_type=media_type, filename=doc.file_name)
+    # Không download: set Content-Disposition: inline để trình duyệt nhúng nội
+    # dung trực tiếp trong <iframe> thay vì tải về — một số Chrome/Chromium từ
+    # chối render PDF trong iframe nếu header này vắng mặt hoàn toàn.
+    # Starlette dùng setdefault nên header truyền vào qua `headers=` được giữ
+    # nguyên, không bị ghi đè bởi logic tự sinh tên file trong set_headers().
+    return FileResponse(file_path, media_type=media_type, headers={"content-disposition": "inline"})
 
 
 @router.get("/raw/{raw_doc_id}/image")

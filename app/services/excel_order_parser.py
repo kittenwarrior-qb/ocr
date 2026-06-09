@@ -78,7 +78,7 @@ _SATORI_COLUMN_LABEL_PATTERNS: dict[str, tuple[str, ...]] = {
     "spec": ("quy cach",),
     "uom": ("don vi tinh", "dvt"),
     "qty_ordered": ("so luong hang dat", "luong hang dat", "luong dat hang"),
-    "qty_promo": ("so luong khuyen mai", "luong khuyen mai"),
+    "qty_promo": ("so luong hang khuyen mai", "so luong khuyen mai", "luong hang khuyen mai", "luong khuyen mai", "hang khuyen mai"),
     "qty_total": ("tong san luong", "tong so luong"),
     "unit_price": ("don gia ban", "don gia"),
     "line_total_pretax": ("thanh tien chua", "thanh tien chua thue", "thanh tien chua gtgt"),
@@ -276,6 +276,20 @@ def _parse_satori_template(ws) -> dict:
             "line_total": line_total_pretax if line_total_pretax > 0 else None,
             "tax_rate": tax_rate,
         })
+
+        # Dòng hàng khuyến mãi (quà tặng) — giá 0đ, số lượng từ cột "Hàng KM"
+        qty_promo = _clean_num(col_val(vals, 'qty_promo'))
+        if qty_promo > 0:
+            result['items'].append({
+                "product_name": product_name + " (KM)",
+                "product_code": "",
+                "quantity": qty_promo,
+                "uom": uom,
+                "unit_price": 0,
+                "line_total": 0,
+                "tax_rate": tax_rate,
+                "is_gift": True,
+            })
 
     # Không tự tính total_amount nếu file không in sẵn — số tự tính có thể sai
     # (thiếu dòng khuyến mãi/chiết khấu không tính thuế, v.v.). Giữ null để user
