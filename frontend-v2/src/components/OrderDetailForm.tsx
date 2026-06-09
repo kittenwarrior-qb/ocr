@@ -423,13 +423,20 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
 
   const keepUomConversionOriginal = () => {
     if (!pendingUomConversion) return
-    const { lineIdx, nextLine } = pendingUomConversion
+    const { lineIdx, nextLine, conversion } = pendingUomConversion
     setLines(prev => {
       const u = [...prev]
-      const line = { ...nextLine }
-      const price = Number(line.unit_price) || 0
-      const qty = Number(line.quantity) || 0
-      if (price > 0 && qty > 0) line.line_total = price * qty
+      const total = Number(nextLine.line_total) || 0
+      const qty   = Number(nextLine.quantity)   || 0
+      // Giữ nguyên số lượng + đổi lại đơn vị về ĐVT gốc (chai/lon...) từ PDF.
+      // unit_price phải được suy từ tổng tiền PDF ÷ số lượng gốc, KHÔNG nhân
+      // pbPrice (giá/thùng) × qty (chai) — đó là hai ĐVT khác nhau.
+      const line = {
+        ...nextLine,
+        uom_original: conversion.fromUom,
+        line_total: total,
+        unit_price: qty > 0 && total > 0 ? Math.round(total / qty) : nextLine.unit_price,
+      }
       u[lineIdx] = line
       return u
     })
@@ -1031,7 +1038,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 if (conversion) {
                   setPendingUomConversion({
                     lineIdx: pendingChange.lineIdx,
-                    nextLine: { ...applied, unit_price: finalPrice, line_total: finalLineTotal },
+                    // Giữ line_total từ PDF — applyUomConversion sẽ tính lại
+                    // unit_price = total / convertedQty sau khi quy đổi.
+                    // KHÔNG dùng finalPrice * qty ở đây: finalPrice là giá/thùng
+                    // nhưng qty vẫn đang tính theo chai → tích số sai 24×.
+                    nextLine: { ...applied, unit_price: finalPrice, line_total: applied.line_total },
                     conversion,
                   })
                   setPendingChange(null)
