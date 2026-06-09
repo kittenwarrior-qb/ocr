@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
 import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag } from 'antd'
-import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined } from '@ant-design/icons'
+import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined, GiftOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
 
@@ -157,7 +157,11 @@ function applyProductToLine(line: OrderLine, product: Product): OrderLine {
 }
 
 function isSystemLine(line: Partial<OrderLine>): boolean {
-  return line.mapping_status === 'overridden'
+  return line.mapping_status === 'overridden' || isGiftLine(line)
+}
+
+function isGiftLine(line: Partial<OrderLine>): boolean {
+  return (line.product_name_original || '').trim().endsWith('(KM)')
 }
 
 type PopupType = 'customer' | 'contact' | null
@@ -849,7 +853,12 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                         {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
                       </div>
                     </td>
-                    <td className="px-2 py-1"><EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" /></td>
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-1">
+                        {isGiftLine(line) && <Tooltip title="Hàng khuyến mãi"><GiftOutlined className="text-purple-500 flex-shrink-0" /></Tooltip>}
+                        <EditableCell value={line.product_name_original} onChange={v => updateLine(idx, 'product_name_original', v)} placeholder="Tên SP" />
+                      </div>
+                    </td>
                     <td className="px-2 py-1"><EditableCell value={line.uom_original} onChange={v => updateLine(idx, 'uom_original', v)} placeholder="ĐVT" /></td>
                     <td className="px-2 py-1 text-right"><EditableCell value={line.quantity} type="number" onChange={v => updateLine(idx, 'quantity', v)} /></td>
                     <td className="px-2 py-1 text-right"><EditableCell value={line.unit_price} type="number" onChange={v => updateLine(idx, 'unit_price', v)} /></td>
