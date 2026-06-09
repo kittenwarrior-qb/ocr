@@ -1,5 +1,20 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Button, Card, Tag, message, Tooltip, Badge, Spin, Modal, Alert, Checkbox, Switch, Input, Select } from 'antd'
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  Button,
+  Tag,
+  message,
+  Tooltip,
+  Badge,
+  Spin,
+  Modal,
+  Alert,
+  Checkbox,
+  Switch,
+  Input,
+  Select,
+  DatePicker,
+} from "antd";
+import type { Dayjs } from "dayjs";
 import {
   MailOutlined,
   FilePdfOutlined,
@@ -7,21 +22,21 @@ import {
   SyncOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined,
   EyeOutlined,
   LoadingOutlined,
   ThunderboltOutlined,
   SearchOutlined,
   InboxOutlined,
-} from '@ant-design/icons'
+  ExclamationCircleOutlined,
+  CaretDownOutlined,
+  CaretRightOutlined,
+  CalendarOutlined,
+} from "@ant-design/icons";
 import {
   getEmailOrders,
   getEmailOrder,
   getCrawlStatus,
-  triggerCrawl,
-  getCrawlerEmails,
-  getCrawlerEmail,
-  syncEmailToDB,
+  backfillEmails,
   convertAttachment,
   doneAttachment,
   bulkConvert,
@@ -31,378 +46,569 @@ import {
   type EmailOrder,
   type EmailAttachment,
   type CrawlStatus,
-} from '@/api/emails'
-import { uploadBatch, checkFilenames } from '@/api/orders'
-import { decodeMimeName, groupEmailsByDomain } from '@/utils/emailUtils'
+} from "@/api/emails";
+import { uploadBatch, checkFilenames } from "@/api/orders";
+import {
+  decodeMimeName,
+  groupEmailsByDomain,
+  groupEmailsByTime,
+  getDomain,
+} from "@/utils/emailUtils";
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/**
- * Parse an ISO string from the backend.
- * Backend stores naive UTC datetimes and serializes them without a timezone
- * suffix (e.g. "2026-06-04T09:30:00"). JS would otherwise interpret such a
- * string as *local* time. We append "Z" when no timezone offset is present so
- * it is correctly read as UTC, then rendered in the user's local timezone.
- */
 function parseBackendDate(iso: string): Date {
-  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso)
-  return new Date(hasTz ? iso : `${iso}Z`)
+  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  return new Date(hasTz ? iso : `${iso}Z`);
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = parseBackendDate(iso)
-  const now = new Date()
+  if (!iso) return "—";
+  const d = parseBackendDate(iso);
+  const now = new Date();
   if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
-  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return d.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
-function StatusTag({ status }: { status: EmailAttachment['status'] }) {
-  if (status === 'done')
-    return <Tag icon={<CheckCircleOutlined />} color="success">Đã xong</Tag>
-  if (status === 'processing')
-    return <Tag icon={<SyncOutlined spin />} color="processing">Đang xử lý</Tag>
-  return <Tag icon={<ClockCircleOutlined />} color="default">Chờ xử lý</Tag>
+function formatDateFull(iso: string | null): string {
+  if (!iso) return "—";
+  const d = parseBackendDate(iso);
+  return d.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-// ---- merge list items with loaded detail ----
-type EmailMap = Map<number, EmailOrder>
+function StatusTag({ status }: { status: EmailAttachment["status"] }) {
+  if (status === "done")
+    return (
+      <Tag icon={<CheckCircleOutlined />} color="success">
+        Đã xong
+      </Tag>
+    );
+  if (status === "processing")
+    return (
+      <Tag icon={<SyncOutlined spin />} color="processing">
+        Đang xử lý
+      </Tag>
+    );
+  return (
+    <Tag icon={<ClockCircleOutlined />} color="default">
+      Chờ xử lý
+    </Tag>
+  );
+}
+
+type EmailMap = Map<number, EmailOrder>;
+
+const PAGE_SIZE = 20;
 
 export default function EmailOrdersPage() {
-  const [listItems, setListItems] = useState<EmailOrderListItem[]>([])
-  const [detailMap, setDetailMap] = useState<EmailMap>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [crawlStatus, setCrawlStatus] = useState<CrawlStatus | null>(null)
-  const [crawling, setCrawling] = useState(false)
+  const [listItems, setListItems] = useState<EmailOrderListItem[]>([]);
+  const [detailMap, setDetailMap] = useState<EmailMap>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const [crawlStatus, setCrawlStatus] = useState<CrawlStatus | null>(null);
+  const [crawling, setCrawling] = useState(false);
 
-  // multi-select: set of attachment ids
-  const [selected, setSelected] = useState<Set<number>>(new Set())
-  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  // per-attachment optimistic status override (so UI updates instantly)
-  const [statusOverride, setStatusOverride] = useState<Map<number, EmailAttachment['status']>>(new Map())
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [statusOverride, setStatusOverride] = useState<
+    Map<number, EmailAttachment["status"]>
+  >(new Map());
 
-  const [previewFile, setPreviewFile] = useState<{ filename: string; url: string } | null>(null)
+  const [previewFile, setPreviewFile] = useState<{
+    filename: string;
+    url: string;
+  } | null>(null);
 
-  // company sidebar — null means "show all companies"
-  const [selectedDomain, setSelectedDomain] = useState<string | null>(null)
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(
+    null,
+  );
+  const [filterState, setFilterState] = useState<"all" | "pending" | "done">(
+    "all",
+  );
 
-  // free-text search over sender name / email / subject / recipient
-  const [searchQuery, setSearchQuery] = useState('')
+  const [autoPoll, setAutoPoll] = useState(true);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+  const POLL_INTERVAL_MS = 60_000;
 
-  // filter by recipient mailbox — null means "all recipients"
-  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
+  // collapsed time-groups in sidebar (Set of group keys that are collapsed)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
 
-  // auto-polling (webhook delivers to backend; FE polls our DB to pick up new rows)
-  const [autoPoll, setAutoPoll] = useState(true)
-  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null)
-  const POLL_INTERVAL_MS = 60_000
+  // date filter — null means "all dates"
+  const [filterDate, setFilterDate] = useState<Dayjs | null>(null);
 
-  // ---- fetch list from our DB ----
-  // `silent`: skip the full-screen spinner (used by auto-poll so the UI doesn't flicker)
-  const fetchList = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true)
-    setError(null)
-    try {
-      const items = await getEmailOrders(0, 50)
-      const decoded = items.map(e => ({
-        ...e,
-        sender_name: e.sender_name ? decodeMimeName(e.sender_name) : e.sender_name,
-        subject: e.subject ? decodeMimeName(e.subject) : e.subject,
-      }))
-      setListItems(prev => {
-        // detect newly arrived emails to notify the user during silent polls
-        if (silent && decoded.length > prev.length) {
-          message.info(`Có ${decoded.length - prev.length} email mới`)
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // ---- fetch list from DB ----
+  const fetchList = useCallback(
+    async (silent = false, resetPage = false) => {
+      if (!silent) setLoading(true);
+      setError(null);
+      try {
+        const currentPage = resetPage ? 1 : page;
+        const res = await getEmailOrders(currentPage, PAGE_SIZE);
+        const decoded = res.items.map((e) => ({
+          ...e,
+          sender_name: e.sender_name
+            ? decodeMimeName(e.sender_name)
+            : e.sender_name,
+          subject: e.subject ? decodeMimeName(e.subject) : e.subject,
+        }));
+        if (resetPage) {
+          setListItems((prev) => {
+            if (silent && decoded.length > 0) {
+              const prevIds = new Set(prev.map((x) => x.id));
+              const newCount = decoded.filter((x) => !prevIds.has(x.id)).length;
+              if (newCount > 0) message.info(`Có ${newCount} email mới`);
+            }
+            return decoded;
+          });
+          setPage(1);
+        } else {
+          setListItems((prev) => {
+            if (silent) {
+              const prevIds = new Set(prev.map((x) => x.id));
+              const newCount = decoded.filter((x) => !prevIds.has(x.id)).length;
+              if (newCount > 0) message.info(`Có ${newCount} email mới`);
+            }
+            return decoded;
+          });
         }
-        return decoded
-      })
-      setLastSyncAt(new Date())
-    } catch (e: unknown) {
-      if (!silent) setError(e instanceof Error ? e.message : 'Không thể tải danh sách email')
-    } finally {
-      if (!silent) setLoading(false)
-    }
-  }, [])
+        setHasMore(res.page < res.pages);
+        setLastSyncAt(new Date());
+      } catch (e: unknown) {
+        if (!silent)
+          setError(
+            e instanceof Error ? e.message : "Không thể tải danh sách email",
+          );
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [page],
+  );
 
   const fetchCrawlStatus = useCallback(async () => {
-    try { setCrawlStatus(await getCrawlStatus()) } catch { /* non-critical */ }
-  }, [])
-
-  useEffect(() => { fetchList(); fetchCrawlStatus() }, [fetchList, fetchCrawlStatus])
-
-  // ---- auto-poll our DB for emails delivered via webhook ----
-  useEffect(() => {
-    if (!autoPoll) return
-    const id = setInterval(() => fetchList(true), POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [autoPoll, fetchList])
-
-  // ---- lazy-load attachment detail for one email ----
-  async function loadDetail(emailId: number) {
-    if (detailMap.has(emailId)) return
     try {
-      const detail = await getEmailOrder(emailId)
-      setDetailMap(prev => new Map(prev).set(emailId, detail))
+      setCrawlStatus(await getCrawlStatus());
     } catch {
-      message.error('Không thể tải danh sách file đính kèm')
+      /* non-critical */
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchList(false, true);
+    fetchCrawlStatus();
+  }, [fetchCrawlStatus]);
+
+  // auto-poll
+  useEffect(() => {
+    if (!autoPoll) return;
+    const id = setInterval(() => fetchList(true, true), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [autoPoll, fetchList]);
+
+  // ---- infinite scroll ----
+  useEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    function onScroll() {
+      if (!el || loadingMore || !hasMore) return;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
+        loadMore();
+      }
+    }
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loadingMore, hasMore]);
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const res = await getEmailOrders(nextPage, PAGE_SIZE);
+      const decoded = res.items.map((e) => ({
+        ...e,
+        sender_name: e.sender_name
+          ? decodeMimeName(e.sender_name)
+          : e.sender_name,
+        subject: e.subject ? decodeMimeName(e.subject) : e.subject,
+      }));
+      setListItems((prev) => {
+        const existingIds = new Set(prev.map((x) => x.id));
+        const fresh = decoded.filter((x) => !existingIds.has(x.id));
+        return [...prev, ...fresh];
+      });
+      setPage(nextPage);
+      setHasMore(res.page < res.pages);
+    } catch {
+      message.error("Không thể tải thêm email");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
-  // ---- crawl new emails from crawler service then sync to our DB ----
-  async function handleFetchNew() {
-    setCrawling(true)
+  // ---- load detail for selected email ----
+  async function loadDetail(emailId: number) {
+    if (detailMap.has(emailId)) return;
+    setDetailLoading(true);
     try {
-      await triggerCrawl()
-      message.info('Đang crawl email mới...')
-      await new Promise(r => setTimeout(r, 2500))
-      await fetchCrawlStatus()
-
-      // pull latest emails from crawler and sync each one to our DB
-      const res = await getCrawlerEmails({ size: 50 })
-      await Promise.all(
-        res.items.map(async crawlerEmail => {
-          const full = await getCrawlerEmail(crawlerEmail.id)
-          await syncEmailToDB(full)
-        })
-      )
-      await fetchList()
-      // clear detail cache so reloading shows fresh status
-      setDetailMap(new Map())
-      setStatusOverride(new Map())
-      message.success('Đã đồng bộ email mới')
+      const detail = await getEmailOrder(emailId);
+      setDetailMap((prev) => new Map(prev).set(emailId, detail));
     } catch {
-      message.error('Không thể lấy đơn hàng mới')
+      message.error("Không thể tải chi tiết email");
     } finally {
-      setCrawling(false)
+      setDetailLoading(false);
+    }
+  }
+
+  function selectEmail(id: number) {
+    setSelectedEmailId(id);
+    loadDetail(id);
+  }
+
+  // ---- backfill: backend pulls all emails from the Gateway into our DB ----
+  async function handleFetchNew() {
+    setCrawling(true);
+    try {
+      message.info("Đang đồng bộ email từ gateway...");
+      const res = await backfillEmails();
+      await fetchCrawlStatus();
+      await fetchList(false, true);
+      setDetailMap(new Map());
+      setStatusOverride(new Map());
+      message.success(`Đã đồng bộ ${res.synced} email`);
+    } catch {
+      message.error("Không thể lấy đơn hàng mới");
+    } finally {
+      setCrawling(false);
     }
   }
 
   // ---- single convert ----
-  async function handleConvert(att: EmailAttachment) {
-    if (att.status !== 'pending') return
-    setStatusOverride(prev => new Map(prev).set(att.id, 'processing'))
+  // `forceUpload`: bỏ qua việc bỏ-qua-khi-đã-done. Dùng cho "Convert lại" — người
+  // dùng chủ ý muốn chạy lại (vd kết quả OCR cũ sai), nên luôn upload bản mới.
+  // Vẫn skip nếu file đang chạy (pending/processing) để không đẩy trùng vào hàng chờ.
+  async function handleConvert(att: EmailAttachment, forceUpload = false) {
+    const current = statusOverride.get(att.id) ?? att.status;
+    const wasDone = current === "done";
+    setStatusOverride((prev) => new Map(prev).set(att.id, "processing"));
+    if (wasDone) {
+      setListItems((prev) =>
+        prev.map((e) =>
+          e.id !== att.email_id
+            ? e
+            : {
+                ...e,
+                done_count: Math.max(0, e.done_count - 1),
+                pending_count: e.pending_count + 1,
+              },
+        ),
+      );
+    }
     try {
-      // 1. Check if this filename already exists in OCR
-      const statusMap = await checkFilenames([att.filename])
-      const ocrStatus = statusMap[att.filename]
+      const statusMap = await checkFilenames([att.filename]);
+      const ocrStatus = statusMap[att.filename];
+      // File đang trong hàng chờ OCR (chưa xong) → không đẩy trùng, dù force hay không.
+      const isInFlight = ocrStatus === "pending" || ocrStatus === "processing";
+      // File đã có kết quả cũ (done) → bình thường thì skip, nhưng "Convert lại"
+      // (forceUpload) sẽ bỏ qua để upload bản mới đè lên.
+      const skipBecauseDone = ocrStatus === "done" && !forceUpload;
 
-      if (ocrStatus === 'pending' || ocrStatus === 'processing' || ocrStatus === 'done') {
-        // Already in OCR pipeline — just mark our record as processing, skip upload
-        message.info(`"${att.filename}" đã có trong hàng chờ OCR (${ocrStatus})`)
-        await convertAttachment(att.id)
-        return
+      if (isInFlight || skipBecauseDone) {
+        message.info(
+          `"${att.filename}" đã có trong hàng chờ OCR (${ocrStatus})`,
+        );
+        await convertAttachment(att.id);
+        return;
       }
-
-      // 2. Not in OCR yet (null) or previously failed → fetch blob and upload
-      await convertAttachment(att.id)
-      const downloadUrl = att.download_url ?? getAttachmentDownloadUrl(att.external_attachment_id ?? att.id)
-      const res = await fetch(downloadUrl)
-      if (!res.ok) throw new Error(`Không tải được file: HTTP ${res.status}`)
-      const blob = await res.blob()
-      const file = new File([blob], att.filename, { type: 'application/pdf' })
-      await uploadBatch([file], true)
-      message.success(`Đã gửi "${att.filename}" vào hàng chờ OCR`)
+      await convertAttachment(att.id);
+      const downloadUrl =
+        att.download_url ??
+        getAttachmentDownloadUrl(att.external_attachment_id ?? att.id);
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error(`Không tải được file: HTTP ${res.status}`);
+      const blob = await res.blob();
+      const file = new File([blob], att.filename, { type: "application/pdf" });
+      await uploadBatch([file], true);
+      message.success(`Đã gửi "${att.filename}" vào hàng chờ OCR`);
     } catch (e: unknown) {
-      setStatusOverride(prev => new Map(prev).set(att.id, 'pending'))
-      message.error(e instanceof Error ? e.message : `Không thể convert "${att.filename}"`)
+      setStatusOverride((prev) =>
+        new Map(prev).set(att.id, wasDone ? "done" : "pending"),
+      );
+      if (wasDone) {
+        setListItems((prev) =>
+          prev.map((em) =>
+            em.id !== att.email_id
+              ? em
+              : {
+                  ...em,
+                  done_count: em.done_count + 1,
+                  pending_count: Math.max(0, em.pending_count - 1),
+                },
+          ),
+        );
+      }
+      message.error(
+        e instanceof Error ? e.message : `Không thể convert "${att.filename}"`,
+      );
     }
   }
 
   // ---- single done ----
   async function handleDone(att: EmailAttachment) {
-    if (att.status !== 'processing') return
-    setStatusOverride(prev => new Map(prev).set(att.id, 'done'))
+    if (att.status !== "processing") return;
+    setStatusOverride((prev) => new Map(prev).set(att.id, "done"));
     try {
-      await doneAttachment(att.id)
-      // refresh list counts
-      setListItems(prev =>
-        prev.map(e =>
-          e.id !== att.email_id ? e : {
-            ...e,
-            done_count: e.done_count + 1,
-            pending_count: Math.max(0, e.pending_count - 1),
-          }
-        )
-      )
+      await doneAttachment(att.id);
+      setListItems((prev) =>
+        prev.map((e) =>
+          e.id !== att.email_id
+            ? e
+            : {
+                ...e,
+                done_count: e.done_count + 1,
+                pending_count: Math.max(0, e.pending_count - 1),
+              },
+        ),
+      );
     } catch {
-      setStatusOverride(prev => new Map(prev).set(att.id, 'processing'))
-      message.error('Không thể cập nhật trạng thái')
+      setStatusOverride((prev) => new Map(prev).set(att.id, "processing"));
+      message.error("Không thể cập nhật trạng thái");
     }
   }
 
-  // ---- bulk convert selected attachments ----
+  // ---- bulk convert ----
   async function handleBulkConvert() {
-    if (selected.size === 0) return
-    setBulkProcessing(true)
-    const ids = [...selected]
-
-    // collect attachment objects for the selected ids
+    if (selected.size === 0) return;
+    setBulkProcessing(true);
+    const ids = [...selected];
     const selectedAtts = [...detailMap.values()]
-      .flatMap(d => d.attachments)
-      .filter(a => ids.includes(a.id))
-
-    // optimistic UI
-    setStatusOverride(prev => {
-      const next = new Map(prev)
-      ids.forEach(id => next.set(id, 'processing'))
-      return next
-    })
-    setSelected(new Set())
-
+      .flatMap((d) => d.attachments)
+      .filter((a) => ids.includes(a.id));
+    setStatusOverride((prev) => {
+      const next = new Map(prev);
+      ids.forEach((id) => next.set(id, "processing"));
+      return next;
+    });
+    setSelected(new Set());
     try {
-      // 1. Bulk-mark as processing in our DB
-      await bulkConvert(ids)
-
-      // 2. Check which filenames are already in OCR
-      const filenames = selectedAtts.map(a => a.filename)
-      const statusMap = await checkFilenames(filenames)
-
-      // 3. Only upload files that are not yet in OCR (null or failed)
-      const toUpload = selectedAtts.filter(a => {
-        const s = statusMap[a.filename]
-        return s === null || s === 'failed'
-      })
-
-      const skipped = selectedAtts.length - toUpload.length
-      if (skipped > 0) {
-        message.info(`${skipped} file đã có trong hàng chờ OCR, bỏ qua`)
-      }
-
+      await bulkConvert(ids);
+      const filenames = selectedAtts.map((a) => a.filename);
+      const statusMap = await checkFilenames(filenames);
+      const toUpload = selectedAtts.filter((a) => {
+        const s = statusMap[a.filename];
+        return s === null || s === "failed";
+      });
+      const skipped = selectedAtts.length - toUpload.length;
+      if (skipped > 0)
+        message.info(`${skipped} file đã có trong hàng chờ OCR, bỏ qua`);
       if (toUpload.length > 0) {
         const blobs = await Promise.all(
-          toUpload.map(async a => {
-            const url = a.download_url ?? getAttachmentDownloadUrl(a.external_attachment_id ?? a.id)
-            const res = await fetch(url)
-            if (!res.ok) return null
-            const blob = await res.blob()
-            return new File([blob], a.filename, { type: 'application/pdf' })
-          })
-        )
-        const files = blobs.filter((f): f is File => f !== null)
-        if (files.length > 0) await uploadBatch(files, true)
-        message.success(`Đã gửi ${files.length} file vào hàng chờ OCR`)
+          toUpload.map(async (a) => {
+            const url =
+              a.download_url ??
+              getAttachmentDownloadUrl(a.external_attachment_id ?? a.id);
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            return new File([blob], a.filename, { type: "application/pdf" });
+          }),
+        );
+        const files = blobs.filter((f): f is File => f !== null);
+        if (files.length > 0) await uploadBatch(files, true);
+        message.success(`Đã gửi ${files.length} file vào hàng chờ OCR`);
       }
     } catch {
-      // revert optimistic
-      setStatusOverride(prev => {
-        const next = new Map(prev)
-        ids.forEach(id => next.set(id, 'pending'))
-        return next
-      })
-      message.error('Không thể convert các file đã chọn')
+      setStatusOverride((prev) => {
+        const next = new Map(prev);
+        ids.forEach((id) => next.set(id, "pending"));
+        return next;
+      });
+      message.error("Không thể convert các file đã chọn");
     } finally {
-      setBulkProcessing(false)
+      setBulkProcessing(false);
     }
   }
 
   function toggleSelect(attId: number) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      next.has(attId) ? next.delete(attId) : next.add(attId)
-      return next
-    })
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(attId) ? next.delete(attId) : next.add(attId);
+      return next;
+    });
   }
 
-  // ---- free-text filter over sender name / email / subject / recipient ----
+  function toggleGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  // ---- derived data ----
   const filteredItems = useMemo(() => {
-    let items = listItems
-
-    // filter by recipient mailbox (if one is selected)
-    if (selectedRecipient) {
-      items = items.filter(e => e.recipient_email === selectedRecipient)
+    let items = listItems;
+    if (selectedRecipient)
+      items = items.filter((e) => e.recipient_email === selectedRecipient);
+    if (selectedDomain)
+      items = items.filter((e) => getDomain(e.sender_email) === selectedDomain);
+    if (filterState === "pending")
+      items = items.filter((e) => e.pending_count > 0);
+    if (filterState === "done")
+      items = items.filter(
+        (e) => e.attachment_count > 0 && e.done_count === e.attachment_count,
+      );
+    if (filterDate) {
+      const dateStr = filterDate.format("YYYY-MM-DD");
+      items = items.filter((e) => {
+        const iso = e.received_at ?? e.created_at;
+        if (!iso) return false;
+        const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+        const d = new Date(hasTz ? iso : `${iso}Z`);
+        return d.toISOString().slice(0, 10) === dateStr;
+      });
     }
-
-    // free-text search
-    const q = searchQuery.trim().toLowerCase()
+    const q = searchQuery.trim().toLowerCase();
     if (q) {
-      items = items.filter(e =>
-        (e.sender_name ?? '').toLowerCase().includes(q) ||
-        e.sender_email.toLowerCase().includes(q) ||
-        (e.recipient_email ?? '').toLowerCase().includes(q) ||
-        (e.subject ?? '').toLowerCase().includes(q)
-      )
+      items = items.filter(
+        (e) =>
+          (e.sender_name ?? "").toLowerCase().includes(q) ||
+          e.sender_email.toLowerCase().includes(q) ||
+          (e.recipient_email ?? "").toLowerCase().includes(q) ||
+          (e.subject ?? "").toLowerCase().includes(q),
+      );
     }
-    return items
-  }, [listItems, searchQuery, selectedRecipient])
+    return items;
+  }, [
+    listItems,
+    searchQuery,
+    selectedRecipient,
+    selectedDomain,
+    filterState,
+    filterDate,
+  ]);
 
-  // distinct recipient mailboxes present in the data (for the filter dropdown)
   const recipients = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>();
     for (const e of listItems) {
-      if (e.recipient_email) set.add(e.recipient_email)
+      if (e.recipient_email) set.add(e.recipient_email);
     }
-    return Array.from(set).sort()
-  }, [listItems])
+    return Array.from(set).sort();
+  }, [listItems]);
 
-  // if the selected recipient disappears (e.g. after refresh), fall back to "all"
   useEffect(() => {
-    if (selectedRecipient && !recipients.includes(selectedRecipient)) {
-      setSelectedRecipient(null)
-    }
-  }, [recipients, selectedRecipient])
+    if (selectedRecipient && !recipients.includes(selectedRecipient))
+      setSelectedRecipient(null);
+  }, [recipients, selectedRecipient]);
 
-  // ---- derive groups from filtered items (for grouping header) ----
-  const groups = useMemo(
-    () => groupEmailsByDomain(filteredItems),
-    [filteredItems]
-  )
+  const domains = useMemo(() => groupEmailsByDomain(listItems), [listItems]);
 
-  // groups shown in the main panel — filtered by the selected company (if any)
-  const visibleGroups = useMemo(
-    () => (selectedDomain ? groups.filter(g => g.domain === selectedDomain) : groups),
-    [groups, selectedDomain]
-  )
-
-  // if the selected company disappears (e.g. after refresh), fall back to "all"
   useEffect(() => {
-    if (selectedDomain && !groups.some(g => g.domain === selectedDomain)) {
-      setSelectedDomain(null)
-    }
-  }, [groups, selectedDomain])
+    if (selectedDomain && !domains.some((g) => g.domain === selectedDomain))
+      setSelectedDomain(null);
+  }, [domains, selectedDomain]);
 
-  const pendingSelectedCount = selected.size
+  const timeGroups = useMemo(
+    () => groupEmailsByTime(filteredItems),
+    [filteredItems],
+  );
+
+  const selectedEmail = selectedEmailId
+    ? listItems.find((e) => e.id === selectedEmailId)
+    : null;
+  const selectedDetail = selectedEmailId
+    ? detailMap.get(selectedEmailId)
+    : null;
+
+  const pendingSelectedCount = selected.size;
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <MailOutlined className="text-blue-600 text-xl" />
-          <h1 className="text-lg font-semibold text-gray-800 m-0">Đơn hàng qua Email</h1>
-          {!loading && (
-            <Badge
-              count={searchQuery.trim() ? filteredItems.length : listItems.length}
-              color="blue"
-            />
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <Input
-            allowClear
-            prefix={<SearchOutlined className="text-gray-400" />}
-            placeholder="Tìm theo tên / email / người nhận / tiêu đề"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-72"
-          />
-          <Select
-            allowClear
-            placeholder="Người nhận"
-            value={selectedRecipient}
-            onChange={v => setSelectedRecipient(v ?? null)}
-            options={recipients.map(r => ({ label: r, value: r }))}
-            className="w-56"
-            suffixIcon={<InboxOutlined className="text-gray-400" />}
-          />
-          <Tooltip title="Tự động kiểm tra email mới mỗi 60 giây (webhook đẩy về DB)">
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+      {/* ── Top bar ── */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shrink-0">
+        <MailOutlined className="text-blue-600 text-lg" />
+        <h1 className="text-base font-semibold text-gray-800 m-0 mr-2">
+          Đơn hàng qua Email
+        </h1>
+        {!loading && <Badge count={listItems.length} color="blue" />}
+
+        <Input
+          allowClear
+          prefix={<SearchOutlined className="text-gray-400" />}
+          placeholder="Tên / email / tiêu đề..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-64"
+          size="small"
+        />
+
+        <Select
+          allowClear
+          size="small"
+          placeholder="Người nhận"
+          value={selectedRecipient}
+          onChange={(v) => setSelectedRecipient(v ?? null)}
+          options={recipients.map((r) => ({ label: r, value: r }))}
+          className="w-48"
+          suffixIcon={<InboxOutlined className="text-gray-400" />}
+        />
+
+        <Select
+          size="small"
+          value={filterState}
+          onChange={(v) => setFilterState(v)}
+          className="w-36"
+          options={[
+            { label: "Tất cả trạng thái", value: "all" },
+            { label: "Chờ xử lý", value: "pending" },
+            { label: "Đã xong", value: "done" },
+          ]}
+        />
+
+        <DatePicker
+          size="small"
+          allowClear
+          placeholder="Lọc theo ngày"
+          value={filterDate}
+          onChange={(d) => setFilterDate(d)}
+          format="DD/MM/YYYY"
+          suffixIcon={<CalendarOutlined className="text-gray-400" />}
+          className="w-38"
+        />
+
+        <div className="ml-auto flex items-center gap-2">
+          <Tooltip title="Tự động kiểm tra email mới mỗi 60 giây">
             <Switch
               size="small"
               checked={autoPoll}
@@ -411,10 +617,16 @@ export default function EmailOrdersPage() {
               unCheckedChildren="Off"
             />
           </Tooltip>
-          <Button icon={<ReloadOutlined />} onClick={() => fetchList()} loading={loading}>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={() => fetchList(false, true)}
+            loading={loading}
+          >
             Làm mới
           </Button>
           <Button
+            size="small"
             type="primary"
             icon={crawling ? <SyncOutlined spin /> : <ReloadOutlined />}
             onClick={handleFetchNew}
@@ -425,35 +637,71 @@ export default function EmailOrdersPage() {
         </div>
       </div>
 
-      {/* Crawl status bar */}
-      {crawlStatus && (
-        <div className="mb-4 text-xs text-gray-500 flex items-center gap-3">
-          {crawlStatus.is_running && (
+      {/* ── Status bar ── */}
+      {(crawlStatus || lastSyncAt) && (
+        <div className="px-4 py-1.5 bg-white border-b border-gray-100 text-xs text-gray-400 flex items-center gap-3 shrink-0">
+          {crawlStatus?.is_running && (
             <span className="flex items-center gap-1 text-blue-500">
               <LoadingOutlined /> Đang crawl...
             </span>
           )}
-          {crawlStatus.last_run_at && <span>Lần cuối: {formatDate(crawlStatus.last_run_at)}</span>}
-          <span>Tổng: {crawlStatus.total_emails_processed} email đã xử lý</span>
-          {crawlStatus.last_error && <span className="text-red-500">Lỗi: {crawlStatus.last_error}</span>}
+          {crawlStatus?.last_run_at && (
+            <span>Lần cuối: {formatDate(crawlStatus.last_run_at)}</span>
+          )}
+          {crawlStatus && (
+            <span>Tổng: {crawlStatus.total_emails_processed} email</span>
+          )}
+          {crawlStatus?.last_error && (
+            <span className="text-red-400">Lỗi: {crawlStatus.last_error}</span>
+          )}
           {lastSyncAt && (
-            <span className="text-gray-400">
-              · Đồng bộ lúc {lastSyncAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            <span>
+              · Đồng bộ lúc{" "}
+              {lastSyncAt.toLocaleTimeString("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
             </span>
           )}
         </div>
       )}
 
-      {/* Sync time even when crawlStatus is unavailable */}
-      {!crawlStatus && lastSyncAt && (
-        <div className="mb-4 text-xs text-gray-400">
-          Đồng bộ lúc {lastSyncAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-        </div>
-      )}
+      {/* ── Company filter chips ── */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-100 shrink-0 flex-wrap">
+        <span className="text-xs text-gray-400 mr-1">Công ty:</span>
+        <button
+          onClick={() => setSelectedDomain(null)}
+          className={`px-3 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+            selectedDomain === null
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+          }`}
+        >
+          Tất cả
+        </button>
+        {domains.map((g) => (
+          <button
+            key={g.domain}
+            onClick={() =>
+              setSelectedDomain(selectedDomain === g.domain ? null : g.domain)
+            }
+            title={`@${g.domain}`}
+            className={`px-3 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+              selectedDomain === g.domain
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+            }`}
+          >
+            {g.label}
+            <span className="ml-1 opacity-60">{g.emails.length}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* Bulk action bar — shows when items are selected */}
+      {/* ── Bulk action bar ── */}
       {pendingSelectedCount > 0 && (
-        <div className="sticky top-0 z-10 mb-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 shadow-sm">
+        <div className="flex items-center justify-between bg-blue-50 border-b border-blue-200 px-4 py-2 shrink-0">
           <span className="text-sm text-blue-700 font-medium">
             Đã chọn {pendingSelectedCount} file
           </span>
@@ -464,7 +712,9 @@ export default function EmailOrdersPage() {
             <Button
               size="small"
               type="primary"
-              icon={bulkProcessing ? <SyncOutlined spin /> : <ThunderboltOutlined />}
+              icon={
+                bulkProcessing ? <SyncOutlined spin /> : <ThunderboltOutlined />
+              }
               loading={bulkProcessing}
               onClick={handleBulkConvert}
             >
@@ -478,260 +728,310 @@ export default function EmailOrdersPage() {
         <Alert
           type="error"
           message={error}
-          action={<Button size="small" onClick={() => fetchList()}>Thử lại</Button>}
-          className="mb-4"
+          className="mx-4 mt-2 shrink-0"
+          action={
+            <Button size="small" onClick={() => fetchList(false, true)}>
+              Thử lại
+            </Button>
+          }
         />
       )}
 
-      {loading && (
-        <div className="flex justify-center py-20">
-          <Spin size="large" />
-        </div>
-      )}
-
-      {/* Two-column layout: company sidebar + email list */}
-      {!loading && listItems.length > 0 && (
-        <div className="flex gap-4 items-start">
-          {/* Company sidebar */}
-          <aside className="w-56 shrink-0 sticky top-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide px-2 pt-1 pb-2 m-0">
-                Công ty
-              </p>
-              <button
-                onClick={() => setSelectedDomain(null)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                  selectedDomain === null
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <span>Tất cả</span>
-                <Badge count={listItems.length} color={selectedDomain === null ? 'blue' : 'gray'} />
-              </button>
-              {groups.map(group => (
-                <button
-                  key={group.domain}
-                  onClick={() => setSelectedDomain(group.domain)}
-                  title={`@${group.domain}`}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                    selectedDomain === group.domain
-                      ? 'bg-blue-50 text-blue-600 font-medium'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="truncate text-left">{group.label}</span>
-                  <Badge count={group.emails.length} color={selectedDomain === group.domain ? 'blue' : 'gray'} />
-                </button>
-              ))}
+      {/* ── Master-detail body ── */}
+      <div className="flex flex-1 min-h-0">
+        {/* ── Sidebar email list ── */}
+        <aside
+          ref={sidebarRef}
+          className="w-96 shrink-0 border-r border-gray-200 bg-white overflow-y-auto"
+        >
+          {loading && (
+            <div className="flex justify-center py-12">
+              <Spin />
             </div>
-          </aside>
+          )}
 
-          {/* Email list grouped by company domain */}
-          <div className="flex-1 min-w-0 flex flex-col gap-6">
-            {visibleGroups.map(group => (
-            <div key={group.domain}>
-              {/* Hide the inline company header when filtering to a single company (sidebar already shows it) */}
-              {!selectedDomain && (
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-semibold text-gray-700">{group.label}</span>
-                  <span className="text-xs text-gray-400">@{group.domain}</span>
-                  <Badge count={group.emails.length} color="gray" />
-                </div>
+          {!loading && filteredItems.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-sm gap-2">
+              {searchQuery.trim() ? (
+                <>
+                  <SearchOutlined className="text-2xl" />
+                  <span>Không tìm thấy kết quả</span>
+                </>
+              ) : (
+                <>
+                  <MailOutlined className="text-2xl" />
+                  <span>Chưa có email nào</span>
+                </>
               )}
+            </div>
+          )}
 
-              <div className="flex flex-col gap-3">
-                {(group.emails as unknown as EmailOrderListItem[]).map(item => {
-                  const detail = detailMap.get(item.id)
-                  const allDone = item.attachment_count > 0 && item.done_count === item.attachment_count
-                  const hasProcessing = detail?.attachments.some(
-                    a => (statusOverride.get(a.id) ?? a.status) === 'processing'
-                  )
+          {!loading &&
+            timeGroups.map((group) => {
+              const isCollapsed = collapsedGroups.has(group.key);
+              return (
+                <div key={group.key}>
+                  <button
+                    onClick={() => toggleGroup(group.key)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 sticky top-0 z-10 border-b border-gray-100 hover:bg-gray-100 transition-colors"
+                  >
+                    {isCollapsed ? (
+                      <CaretRightOutlined className="text-gray-400" />
+                    ) : (
+                      <CaretDownOutlined className="text-gray-400" />
+                    )}
+                    <span>{group.label}</span>
+                    <span className="ml-auto font-normal text-gray-400 normal-case tracking-normal">
+                      {group.emails.length} email
+                    </span>
+                  </button>
+                  {!isCollapsed &&
+                    group.emails.map((item) => {
+                      const isSelected = selectedEmailId === item.id;
+                      const allDone =
+                        item.attachment_count > 0 &&
+                        item.done_count === item.attachment_count;
+                      const hasPending = item.pending_count > 0;
 
-                  return (
-                    <Card
-                      key={item.id}
-                      className="shadow-sm border border-gray-200 rounded-xl"
-                      bodyStyle={{ padding: 0 }}
-                    >
-                      {/* Email header */}
-                      <div className="px-5 pt-4 pb-3 border-b border-gray-100">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-gray-800 text-sm truncate">
-                                {item.subject || '(Không có tiêu đề)'}
-                              </span>
-                              {allDone && <Tag color="success">Đã xử lý</Tag>}
-                              {hasProcessing && (
-                                <Tag icon={<SyncOutlined spin />} color="processing">Đang xử lý</Tag>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              <span className="font-medium text-gray-700">{item.sender_name}</span>
-                              <span className="text-gray-400">&lt;{item.sender_email}&gt;</span>
-                            </div>
-                            {item.recipient_email && (
-                              <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                                <InboxOutlined />
-                                <span>Người nhận:</span>
-                                <span className="text-gray-600">{item.recipient_email}</span>
-                              </div>
-                            )}
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => selectEmail(item.id)}
+                          className={`w-full text-left px-3 py-3 border-b border-gray-100 transition-colors ${
+                            isSelected
+                              ? "bg-blue-50 border-l-2 border-l-blue-500"
+                              : "hover:bg-gray-50 border-l-2 border-l-transparent"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1 mb-0.5">
+                            <span
+                              className={`text-xs font-semibold truncate flex-1 ${isSelected ? "text-blue-700" : "text-gray-800"}`}
+                            >
+                              {item.sender_name || item.sender_email}
+                            </span>
+                            <span className="text-xs text-gray-400 shrink-0 mt-0.5">
+                              {formatDate(item.received_at)}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs text-gray-400">{formatDate(item.received_at)}</span>
+                          <div className="text-xs text-gray-600 truncate mb-1">
+                            {item.subject || "(Không có tiêu đề)"}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {allDone ? (
+                              <Tag
+                                color="success"
+                                className="m-0 text-xs leading-4"
+                              >
+                                Đã xong
+                              </Tag>
+                            ) : hasPending ? (
+                              <Tag
+                                color="warning"
+                                className="m-0 text-xs leading-4"
+                              >
+                                {item.pending_count} chờ
+                              </Tag>
+                            ) : null}
                             <span className="text-xs text-gray-400">
                               {item.done_count}/{item.attachment_count} file
                             </span>
                           </div>
-                        </div>
-                      </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              );
+            })}
 
-                      {/* Attachments */}
-                      <div className="px-5 py-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide m-0">
-                            File PDF đính kèm ({item.attachment_count})
-                          </p>
-                          {!detail && (
-                            <Button
-                              size="small"
-                              type="link"
-                              className="p-0 h-auto text-xs"
-                              onClick={() => loadDetail(item.id)}
-                            >
-                              Tải danh sách file
-                            </Button>
-                          )}
-                        </div>
-
-                        {detail && detail.attachments.length === 0 && (
-                          <p className="text-xs text-gray-400">Không có file đính kèm</p>
-                        )}
-
-                        {detail && detail.attachments.length > 0 && (
-                          <div className="flex flex-col gap-2">
-                            {detail.attachments.map(att => {
-                              const status = statusOverride.get(att.id) ?? att.status
-                              const isPending = status === 'pending'
-                              const isProcessing = status === 'processing'
-                              const isDone = status === 'done'
-                              const extId = att.external_attachment_id ?? att.id
-                              const viewUrl = att.view_url ?? getAttachmentViewUrl(extId)
-
-                              return (
-                                <div
-                                  key={att.id}
-                                  className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 border transition-colors ${
-                                    selected.has(att.id)
-                                      ? 'bg-blue-50 border-blue-300'
-                                      : 'bg-gray-50 border-gray-100'
-                                  }`}
-                                >
-                                  {/* Checkbox — only for pending */}
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    {isPending ? (
-                                      <Checkbox
-                                        checked={selected.has(att.id)}
-                                        onChange={() => toggleSelect(att.id)}
-                                      />
-                                    ) : isDone ? (
-                                      <CheckCircleOutlined className="text-green-500" />
-                                    ) : isProcessing ? (
-                                      <SyncOutlined spin className="text-blue-500" />
-                                    ) : (
-                                      <ExclamationCircleOutlined className="text-gray-300" />
-                                    )}
-                                    <FilePdfOutlined className="text-red-400 text-base shrink-0" />
-                                    <span className="text-sm text-gray-700 truncate">{att.filename}</span>
-                                    {att.file_size && (
-                                      <span className="text-xs text-gray-400 shrink-0">
-                                        {formatBytes(att.file_size)}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <StatusTag status={status} />
-
-                                    <Tooltip title="Xem file PDF">
-                                      <Button
-                                        size="small"
-                                        icon={<EyeOutlined />}
-                                        onClick={() =>
-                                          setPreviewFile({ filename: att.filename, url: viewUrl })
-                                        }
-                                      >
-                                        Xem
-                                      </Button>
-                                    </Tooltip>
-
-                                    {isPending && (
-                                      <Tooltip title="Gửi file lên OCR để trích xuất đơn hàng">
-                                        <Button
-                                          size="small"
-                                          type="primary"
-                                          onClick={() => handleConvert(att)}
-                                        >
-                                          Convert
-                                        </Button>
-                                      </Tooltip>
-                                    )}
-
-                                    {isProcessing && (
-                                      <Tooltip title="Xác nhận đã kiểm tra kết quả OCR">
-                                        <Button
-                                          size="small"
-                                          type="default"
-                                          icon={<CheckCircleOutlined />}
-                                          onClick={() => handleDone(att)}
-                                        >
-                                          Done
-                                        </Button>
-                                      </Tooltip>
-                                    )}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
+          {/* Infinite scroll loader */}
+          {loadingMore && (
+            <div className="flex justify-center py-4">
+              <Spin size="small" />
             </div>
-            ))}
+          )}
+          {!loadingMore && !hasMore && listItems.length > 0 && (
+            <div className="text-center text-xs text-gray-300 py-3">
+              Đã tải hết
+            </div>
+          )}
+        </aside>
 
-            {/* No emails after filtering */}
-            {visibleGroups.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-                {searchQuery.trim() ? (
-                  <>
-                    <SearchOutlined className="text-4xl mb-3" />
-                    <p className="text-base">Không tìm thấy email khớp với "{searchQuery.trim()}"</p>
-                  </>
-                ) : (
-                  <>
-                    <MailOutlined className="text-4xl mb-3" />
-                    <p className="text-base">Không có email cho công ty này</p>
-                  </>
+        {/* ── Detail panel ── */}
+        <main className="flex-1 min-w-0 overflow-y-auto bg-gray-50">
+          {!selectedEmail ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
+              <MailOutlined className="text-5xl" />
+              <p className="text-base">Chọn một email để xem chi tiết</p>
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto p-6 flex flex-col gap-4">
+              {/* Email header */}
+              <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3">
+                  {selectedEmail.subject || "(Không có tiêu đề)"}
+                </h2>
+                <div className="flex flex-col gap-1 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 w-20 shrink-0">Từ:</span>
+                    <span className="font-medium text-gray-800">
+                      {selectedEmail.sender_name}
+                    </span>
+                    <br />
+                    <span className="text-gray-400">
+                      &lt;{selectedEmail.sender_email}&gt;
+                    </span>
+                  </div>
+                  {selectedEmail.recipient_email && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 w-20 shrink-0">Đến:</span>
+                      <span>{selectedEmail.recipient_email}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 w-20 shrink-0">Ngày:</span>
+                    <span>{formatDateFull(selectedEmail.received_at)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Attachments */}
+              <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-gray-700 m-0">
+                    File PDF đính kèm ({selectedEmail.attachment_count})
+                  </p>
+                  {!selectedDetail && !detailLoading && (
+                    <Button
+                      size="small"
+                      type="link"
+                      className="p-0 h-auto text-xs"
+                      onClick={() => loadDetail(selectedEmail.id)}
+                    >
+                      Tải danh sách file
+                    </Button>
+                  )}
+                </div>
+
+                {detailLoading && (
+                  <div className="flex justify-center py-6">
+                    <Spin />
+                  </div>
+                )}
+
+                {selectedDetail && selectedDetail.attachments.length === 0 && (
+                  <p className="text-sm text-gray-400">
+                    Không có file đính kèm
+                  </p>
+                )}
+
+                {selectedDetail && selectedDetail.attachments.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {selectedDetail.attachments.map((att) => {
+                      const status = statusOverride.get(att.id) ?? att.status;
+                      const isPending = status === "pending";
+                      const isProcessing = status === "processing";
+                      const isDone = status === "done";
+                      const extId = att.external_attachment_id ?? att.id;
+                      const viewUrl =
+                        att.view_url ?? getAttachmentViewUrl(extId);
+
+                      return (
+                        <div
+                          key={att.id}
+                          className={`flex items-center justify-between gap-3 rounded-lg px-4 py-3 border transition-colors ${
+                            selected.has(att.id)
+                              ? "bg-blue-50 border-blue-300"
+                              : "bg-gray-50 border-gray-100"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {isPending ? (
+                              <Checkbox
+                                checked={selected.has(att.id)}
+                                onChange={() => toggleSelect(att.id)}
+                              />
+                            ) : isDone ? (
+                              <CheckCircleOutlined className="text-green-500" />
+                            ) : isProcessing ? (
+                              <SyncOutlined spin className="text-blue-500" />
+                            ) : (
+                              <ExclamationCircleOutlined className="text-gray-300" />
+                            )}
+                            <FilePdfOutlined className="text-red-400 text-base shrink-0" />
+                            <span className="text-sm text-gray-700 truncate">
+                              {att.filename}
+                            </span>
+                            {att.file_size && (
+                              <span className="text-xs text-gray-400 shrink-0">
+                                {formatBytes(att.file_size)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <StatusTag status={status} />
+
+                            <Tooltip title="Xem file PDF">
+                              <Button
+                                size="small"
+                                icon={<EyeOutlined />}
+                                onClick={() =>
+                                  setPreviewFile({
+                                    filename: att.filename,
+                                    url: viewUrl,
+                                  })
+                                }
+                              >
+                                Xem
+                              </Button>
+                            </Tooltip>
+
+                            {isPending && (
+                              <Tooltip title="Gửi file lên OCR để trích xuất đơn hàng">
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  onClick={() => handleConvert(att)}
+                                >
+                                  Convert
+                                </Button>
+                              </Tooltip>
+                            )}
+
+                            {isProcessing && (
+                              <Tooltip title="Xác nhận đã kiểm tra kết quả OCR">
+                                <Button
+                                  size="small"
+                                  icon={<CheckCircleOutlined />}
+                                  onClick={() => handleDone(att)}
+                                >
+                                  Done
+                                </Button>
+                              </Tooltip>
+                            )}
+
+                            {(isProcessing || isDone) && (
+                              <Tooltip title="Convert lại file này (luôn gửi bản mới lên OCR)">
+                                <Button
+                                  size="small"
+                                  icon={<ReloadOutlined />}
+                                  onClick={() => handleConvert(att, true)}
+                                >
+                                  Convert lại
+                                </Button>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Empty state — no emails at all */}
-      {!loading && !error && listItems.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-          <MailOutlined className="text-5xl mb-3" />
-          <p className="text-base">Chưa có email nào. Nhấn "Lấy đơn hàng mới" để đồng bộ.</p>
-        </div>
-      )}
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* PDF Preview Modal */}
       <Modal
@@ -745,7 +1045,7 @@ export default function EmailOrdersPage() {
           </div>
         }
         width="80vw"
-        styles={{ body: { padding: 0, height: '80vh' } }}
+        styles={{ body: { padding: 0, height: "80vh" } }}
         centered
         destroyOnClose
       >
@@ -754,10 +1054,10 @@ export default function EmailOrdersPage() {
             src={previewFile.url}
             title={previewFile.filename}
             className="w-full border-0"
-            style={{ height: '80vh' }}
+            style={{ height: "80vh" }}
           />
         )}
       </Modal>
     </div>
-  )
+  );
 }

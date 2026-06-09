@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     APP_ID: str = ""
     MISA_CLIENT_SECRET: str = ""
 
+    # External Email Gateway (crawls mailboxes, exposes /emails + /attachments)
+    EMAIL_GATEWAY_URL: str = "https://email-gateway.longpt.io.vn/api"
+
     UPLOAD_DIR: str = "./uploads"
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

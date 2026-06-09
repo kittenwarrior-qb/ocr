@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.email_order import (
     EmailOrderOut,
-    EmailOrderListItem,
+    EmailOrderListResponse,
     EmailAttachmentOut,
     SyncFromCrawlerIn,
     BulkConvertIn,
@@ -16,15 +16,25 @@ from app.services import email_order_service as svc
 router = APIRouter(prefix="/email-orders", tags=["email-orders"])
 
 
-@router.get("", response_model=list[EmailOrderListItem])
-def list_email_orders(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    return svc.list_email_orders(db, skip=skip, limit=limit)
+@router.get("", response_model=EmailOrderListResponse)
+def list_email_orders(page: int = 1, size: int = 20, db: Session = Depends(get_db)):
+    return svc.list_email_orders(db, page=page, size=size)
 
 
 @router.get("/webhook-logs", response_model=list[WebhookLogOut])
 def list_webhook_logs(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """Inspect recent webhook deliveries (for debugging). Must be declared before /{email_id}."""
     return svc.list_webhook_logs(db, skip=skip, limit=limit)
+
+
+@router.post("/backfill")
+def backfill(db: Session = Depends(get_db)):
+    """
+    Pull all emails from the external Email Gateway into our DB.
+    Idempotent — safe to run repeatedly. Declared before /{email_id} so the
+    literal path isn't captured by the dynamic route.
+    """
+    return svc.backfill_from_gateway(db)
 
 
 @router.get("/{email_id}", response_model=EmailOrderOut)
