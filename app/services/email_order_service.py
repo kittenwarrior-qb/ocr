@@ -28,26 +28,76 @@ from app.schemas.email_order import (
 )
 
 
-def list_email_orders(db: Session, page: int = 1, size: int = 20) -> dict:
-    from sqlalchemy import case
+def list_email_orders(
+    db: Session,
+    page: int = 1,
+    size: int = 20,
+    *,
+    search: str | None = None,
+    recipient: str | None = None,
+    domain: str | None = None,
+    status: str | None = None,
+    date: str | None = None,
+) -> dict:
+    """
+    Paginated email list with optional server-side filters.
+
+    - search:    free-text over sender name/email, recipient, subject (ILIKE)
+    - recipient: exact recipient mailbox
+    - domain:    sender domain, e.g. "familymart.com" -> sender_email ILIKE '%@familymart.com'
+    - status:    "pending" (has pending attachments) | "done" (all attachments done)
+    - date:      "YYYY-MM-DD" — emails received on that calendar day
+    """
+    from sqlalchemy import case, or_, and_, func as sa_func, cast, Date
+
+    att_count = func.count(EmailAttachment.id).label("attachment_count")
+    pending_sum = func.sum(case((EmailAttachment.status == "pending", 1), else_=0)).label("pending_count")
+    done_sum = func.sum(case((EmailAttachment.status == "done", 1), else_=0)).label("done_count")
+
     base_q = (
-        db.query(
-            EmailOrder,
-            func.count(EmailAttachment.id).label("attachment_count"),
-            func.sum(case((EmailAttachment.status == "pending", 1), else_=0)).label("pending_count"),
-            func.sum(case((EmailAttachment.status == "done", 1), else_=0)).label("done_count"),
-        )
+        db.query(EmailOrder, att_count, pending_sum, done_sum)
         .outerjoin(EmailAttachment, EmailAttachment.email_id == EmailOrder.id)
-        .group_by(EmailOrder.id)
-        .order_by(EmailOrder.received_at.desc().nullslast())
     )
 
-    total = db.query(func.count(EmailOrder.id)).scalar() or 0
+    # --- row-level filters (WHERE) ---
+    if search:
+        like = f"%{search.strip()}%"
+        base_q = base_q.filter(
+            or_(
+                EmailOrder.sender_name.ilike(like),
+                EmailOrder.sender_email.ilike(like),
+                EmailOrder.recipient_email.ilike(like),
+                EmailOrder.subject.ilike(like),
+            )
+        )
+    if recipient:
+        base_q = base_q.filter(EmailOrder.recipient_email == recipient)
+    if domain:
+        base_q = base_q.filter(EmailOrder.sender_email.ilike(f"%@{domain}"))
+    if date:
+        base_q = base_q.filter(cast(EmailOrder.received_at, Date) == date)
+
+    base_q = base_q.group_by(EmailOrder.id)
+
+    # --- aggregate filters (HAVING) ---
+    if status == "pending":
+        base_q = base_q.having(pending_sum > 0)
+    elif status == "done":
+        base_q = base_q.having(and_(att_count > 0, done_sum == att_count))
+
+    # total must reflect the same filters (wrap the filtered query in a subquery)
+    total = db.query(sa_func.count()).select_from(base_q.subquery()).scalar() or 0
+
     skip = (page - 1) * size
-    rows = base_q.offset(skip).limit(size).all()
+    rows = (
+        base_q.order_by(EmailOrder.received_at.desc().nullslast())
+        .offset(skip)
+        .limit(size)
+        .all()
+    )
 
     items = []
-    for email, att_count, pending, done in rows:
+    for email, a_count, pending, done in rows:
         items.append({
             "id": email.id,
             "external_id": email.external_id,
@@ -57,7 +107,7 @@ def list_email_orders(db: Session, page: int = 1, size: int = 20) -> dict:
             "subject": email.subject,
             "received_at": email.received_at,
             "created_at": email.created_at,
-            "attachment_count": att_count or 0,
+            "attachment_count": a_count or 0,
             "pending_count": int(pending or 0),
             "done_count": int(done or 0),
         })
@@ -65,6 +115,36 @@ def list_email_orders(db: Session, page: int = 1, size: int = 20) -> dict:
     import math
     pages = math.ceil(total / size) if size > 0 else 1
     return {"items": items, "total": total, "page": page, "size": size, "pages": max(pages, 1)}
+
+
+def get_email_facets(db: Session) -> dict:
+    """
+    Distinct values used to populate filter UI (company chips, recipient dropdown).
+    Computed over the whole table so the options don't shrink with pagination.
+    """
+    # count emails per sender domain
+    domain_counts: dict[str, int] = {}
+    for (sender_email,) in db.query(EmailOrder.sender_email).all():
+        if not sender_email:
+            continue
+        at = sender_email.rfind("@")
+        dom = sender_email[at + 1:].lower() if at != -1 else sender_email.lower()
+        domain_counts[dom] = domain_counts.get(dom, 0) + 1
+
+    recipients = [
+        r[0]
+        for r in db.query(EmailOrder.recipient_email)
+        .filter(EmailOrder.recipient_email.isnot(None))
+        .distinct()
+        .order_by(EmailOrder.recipient_email)
+        .all()
+    ]
+
+    domains = [
+        {"domain": d, "count": c}
+        for d, c in sorted(domain_counts.items(), key=lambda kv: kv[0])
+    ]
+    return {"domains": domains, "recipients": recipients}
 
 
 def get_email_order(db: Session, email_id: int) -> EmailOrder | None:

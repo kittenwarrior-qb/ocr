@@ -17,8 +17,32 @@ router = APIRouter(prefix="/email-orders", tags=["email-orders"])
 
 
 @router.get("", response_model=EmailOrderListResponse)
-def list_email_orders(page: int = 1, size: int = 20, db: Session = Depends(get_db)):
-    return svc.list_email_orders(db, page=page, size=size)
+def list_email_orders(
+    page: int = 1,
+    size: int = 20,
+    search: str | None = None,
+    recipient: str | None = None,
+    domain: str | None = None,
+    status: str | None = None,
+    date: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return svc.list_email_orders(
+        db,
+        page=page,
+        size=size,
+        search=search,
+        recipient=recipient,
+        domain=domain,
+        status=status,
+        date=date,
+    )
+
+
+@router.get("/facets")
+def email_facets(db: Session = Depends(get_db)):
+    """Distinct domains + recipients for filter UI. Declared before /{email_id}."""
+    return svc.get_email_facets(db)
 
 
 @router.get("/webhook-logs", response_model=list[WebhookLogOut])

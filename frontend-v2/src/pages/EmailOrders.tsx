@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Button,
   Tag,
@@ -31,11 +32,15 @@ import {
   CaretDownOutlined,
   CaretRightOutlined,
   CalendarOutlined,
+  LeftOutlined,
+  RightOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import {
   getEmailOrders,
   getEmailOrder,
   getCrawlStatus,
+  getEmailFacets,
   backfillEmails,
   convertAttachment,
   doneAttachment,
@@ -46,13 +51,13 @@ import {
   type EmailOrder,
   type EmailAttachment,
   type CrawlStatus,
+  type EmailFacets,
 } from "@/api/emails";
 import { uploadBatch, checkFilenames } from "@/api/orders";
 import {
   decodeMimeName,
-  groupEmailsByDomain,
   groupEmailsByTime,
-  getDomain,
+  domainToLabel,
 } from "@/utils/emailUtils";
 
 function formatBytes(bytes: number): string {
@@ -123,14 +128,35 @@ export default function EmailOrdersPage() {
   const [listItems, setListItems] = useState<EmailOrderListItem[]>([]);
   const [detailMap, setDetailMap] = useState<EmailMap>(new Map());
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [crawlStatus, setCrawlStatus] = useState<CrawlStatus | null>(null);
   const [crawling, setCrawling] = useState(false);
 
-  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
+  // selected email lives in the URL (?email=123) so it survives navigating to the
+  // OCR page and back, refreshes, and is shareable.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const emailParam = searchParams.get("email");
+  const selectedEmailId = emailParam ? Number(emailParam) : null;
+
+  const setSelectedEmailId = useCallback(
+    (id: number | null) => {
+      if (id == null) localStorage.removeItem("emailOrders:selected");
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id == null) next.delete("email");
+          else next.set("email", String(id));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -146,12 +172,19 @@ export default function EmailOrdersPage() {
 
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(
     null,
   );
   const [filterState, setFilterState] = useState<"all" | "pending" | "done">(
     "all",
   );
+
+  // facets (distinct domains + recipients over whole DB) for filter UI
+  const [facets, setFacets] = useState<EmailFacets>({
+    domains: [],
+    recipients: [],
+  });
 
   const [autoPoll, setAutoPoll] = useState(true);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
@@ -167,54 +200,61 @@ export default function EmailOrdersPage() {
 
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // ---- fetch list from DB ----
-  const fetchList = useCallback(
-    async (silent = false, resetPage = false) => {
-      if (!silent) setLoading(true);
-      setError(null);
-      try {
-        const currentPage = resetPage ? 1 : page;
-        const res = await getEmailOrders(currentPage, PAGE_SIZE);
-        const decoded = res.items.map((e) => ({
-          ...e,
-          sender_name: e.sender_name
-            ? decodeMimeName(e.sender_name)
-            : e.sender_name,
-          subject: e.subject ? decodeMimeName(e.subject) : e.subject,
-        }));
-        if (resetPage) {
-          setListItems((prev) => {
-            if (silent && decoded.length > 0) {
-              const prevIds = new Set(prev.map((x) => x.id));
-              const newCount = decoded.filter((x) => !prevIds.has(x.id)).length;
-              if (newCount > 0) message.info(`Có ${newCount} email mới`);
-            }
-            return decoded;
-          });
-          setPage(1);
-        } else {
-          setListItems((prev) => {
-            if (silent) {
-              const prevIds = new Set(prev.map((x) => x.id));
-              const newCount = decoded.filter((x) => !prevIds.has(x.id)).length;
-              if (newCount > 0) message.info(`Có ${newCount} email mới`);
-            }
-            return decoded;
-          });
+  // ---- fetch one page from DB (page replaces the list) ----
+  // keep the latest filters in a ref so fetchList stays a stable callback
+  const filtersRef = useRef({
+    search: "",
+    recipient: null as string | null,
+    domain: null as string | null,
+    status: "all" as "all" | "pending" | "done",
+    date: null as string | null,
+  });
+  filtersRef.current = {
+    search: debouncedSearch,
+    recipient: selectedRecipient,
+    domain: selectedDomain,
+    status: filterState,
+    date: filterDate ? filterDate.format("YYYY-MM-DD") : null,
+  };
+
+  const fetchList = useCallback(async (targetPage = 1, silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
+    try {
+      const res = await getEmailOrders(
+        targetPage,
+        PAGE_SIZE,
+        filtersRef.current,
+      );
+      const decoded = res.items.map((e) => ({
+        ...e,
+        sender_name: e.sender_name
+          ? decodeMimeName(e.sender_name)
+          : e.sender_name,
+        subject: e.subject ? decodeMimeName(e.subject) : e.subject,
+      }));
+      setListItems((prev) => {
+        // notify on silent poll only when on the first page (newest emails)
+        if (silent && targetPage === 1) {
+          const prevIds = new Set(prev.map((x) => x.id));
+          const newCount = decoded.filter((x) => !prevIds.has(x.id)).length;
+          if (newCount > 0) message.info(`Có ${newCount} email mới`);
         }
-        setHasMore(res.page < res.pages);
-        setLastSyncAt(new Date());
-      } catch (e: unknown) {
-        if (!silent)
-          setError(
-            e instanceof Error ? e.message : "Không thể tải danh sách email",
-          );
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [page],
-  );
+        return decoded;
+      });
+      setPage(res.page);
+      setTotalPages(res.pages);
+      setTotalCount(res.total);
+      setLastSyncAt(new Date());
+    } catch (e: unknown) {
+      if (!silent)
+        setError(
+          e instanceof Error ? e.message : "Không thể tải danh sách email",
+        );
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
 
   const fetchCrawlStatus = useCallback(async () => {
     try {
@@ -224,62 +264,62 @@ export default function EmailOrdersPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchList(false, true);
-    fetchCrawlStatus();
-  }, [fetchCrawlStatus]);
+  const fetchFacets = useCallback(async () => {
+    try {
+      setFacets(await getEmailFacets());
+    } catch {
+      /* non-critical — filter UI just stays empty */
+    }
+  }, []);
 
-  // auto-poll
+  // initial load
+  useEffect(() => {
+    fetchList(1);
+    fetchCrawlStatus();
+    fetchFacets();
+  }, [fetchList, fetchCrawlStatus, fetchFacets]);
+
+  // debounce the search box (400ms)
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  // re-fetch page 1 whenever any filter changes
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    setSelected(new Set());
+    fetchList(1);
+  }, [
+    debouncedSearch,
+    selectedRecipient,
+    selectedDomain,
+    filterState,
+    filterDate,
+    fetchList,
+  ]);
+
+  // auto-poll the current page so new emails surface without a manual refresh
   useEffect(() => {
     if (!autoPoll) return;
-    const id = setInterval(() => fetchList(true, true), POLL_INTERVAL_MS);
+    const id = setInterval(() => fetchList(page, true), POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [autoPoll, fetchList]);
+  }, [autoPoll, fetchList, page]);
 
-  // ---- infinite scroll ----
-  useEffect(() => {
-    const el = sidebarRef.current;
-    if (!el) return;
-    function onScroll() {
-      if (!el || loadingMore || !hasMore) return;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
-        loadMore();
-      }
-    }
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [loadingMore, hasMore]);
-
-  async function loadMore() {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const res = await getEmailOrders(nextPage, PAGE_SIZE);
-      const decoded = res.items.map((e) => ({
-        ...e,
-        sender_name: e.sender_name
-          ? decodeMimeName(e.sender_name)
-          : e.sender_name,
-        subject: e.subject ? decodeMimeName(e.subject) : e.subject,
-      }));
-      setListItems((prev) => {
-        const existingIds = new Set(prev.map((x) => x.id));
-        const fresh = decoded.filter((x) => !existingIds.has(x.id));
-        return [...prev, ...fresh];
-      });
-      setPage(nextPage);
-      setHasMore(res.page < res.pages);
-    } catch {
-      message.error("Không thể tải thêm email");
-    } finally {
-      setLoadingMore(false);
-    }
+  function goToPage(target: number) {
+    if (target < 1 || target > totalPages || target === page) return;
+    setSelected(new Set());
+    fetchList(target);
+    // scroll sidebar back to top on page change
+    sidebarRef.current?.scrollTo({ top: 0 });
   }
 
   // ---- load detail for selected email ----
-  async function loadDetail(emailId: number) {
-    if (detailMap.has(emailId)) return;
+  const loadDetail = useCallback(async (emailId: number) => {
     setDetailLoading(true);
     try {
       const detail = await getEmailOrder(emailId);
@@ -289,12 +329,32 @@ export default function EmailOrdersPage() {
     } finally {
       setDetailLoading(false);
     }
-  }
+  }, []);
 
   function selectEmail(id: number) {
     setSelectedEmailId(id);
-    loadDetail(id);
+    if (!detailMap.has(id)) loadDetail(id);
   }
+
+  // On mount: if the URL has no ?email but we remembered one (e.g. user left to
+  // the OCR page via the sidebar, which drops the query string), restore it.
+  useEffect(() => {
+    if (emailParam == null) {
+      const remembered = localStorage.getItem("emailOrders:selected");
+      if (remembered) setSelectedEmailId(Number(remembered));
+    }
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // restore the email selected via URL (?email=123) — after navigating away and
+  // back, or on refresh. Remember it and load its detail if not cached.
+  useEffect(() => {
+    if (selectedEmailId != null) {
+      localStorage.setItem("emailOrders:selected", String(selectedEmailId));
+      if (!detailMap.has(selectedEmailId)) loadDetail(selectedEmailId);
+    }
+  }, [selectedEmailId, detailMap, loadDetail]);
 
   // ---- backfill: backend pulls all emails from the Gateway into our DB ----
   async function handleFetchNew() {
@@ -303,7 +363,8 @@ export default function EmailOrdersPage() {
       message.info("Đang đồng bộ email từ gateway...");
       const res = await backfillEmails();
       await fetchCrawlStatus();
-      await fetchList(false, true);
+      await fetchList(1);
+      await fetchFacets();
       setDetailMap(new Map());
       setStatusOverride(new Map());
       message.success(`Đã đồng bộ ${res.synced} email`);
@@ -477,79 +538,35 @@ export default function EmailOrdersPage() {
   }
 
   // ---- derived data ----
-  const filteredItems = useMemo(() => {
-    let items = listItems;
-    if (selectedRecipient)
-      items = items.filter((e) => e.recipient_email === selectedRecipient);
-    if (selectedDomain)
-      items = items.filter((e) => getDomain(e.sender_email) === selectedDomain);
-    if (filterState === "pending")
-      items = items.filter((e) => e.pending_count > 0);
-    if (filterState === "done")
-      items = items.filter(
-        (e) => e.attachment_count > 0 && e.done_count === e.attachment_count,
-      );
-    if (filterDate) {
-      const dateStr = filterDate.format("YYYY-MM-DD");
-      items = items.filter((e) => {
-        const iso = e.received_at ?? e.created_at;
-        if (!iso) return false;
-        const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
-        const d = new Date(hasTz ? iso : `${iso}Z`);
-        return d.toISOString().slice(0, 10) === dateStr;
-      });
-    }
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      items = items.filter(
-        (e) =>
-          (e.sender_name ?? "").toLowerCase().includes(q) ||
-          e.sender_email.toLowerCase().includes(q) ||
-          (e.recipient_email ?? "").toLowerCase().includes(q) ||
-          (e.subject ?? "").toLowerCase().includes(q),
-      );
-    }
-    return items;
-  }, [
-    listItems,
-    searchQuery,
-    selectedRecipient,
-    selectedDomain,
-    filterState,
-    filterDate,
-  ]);
+  // Filtering happens server-side now; just group the current page by time.
+  const timeGroups = useMemo(() => groupEmailsByTime(listItems), [listItems]);
 
-  const recipients = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of listItems) {
-      if (e.recipient_email) set.add(e.recipient_email);
-    }
-    return Array.from(set).sort();
-  }, [listItems]);
+  // facets (distinct domains + recipients over the whole DB) for the filter UI
+  const domains = facets.domains;
+  const recipients = facets.recipients;
 
-  useEffect(() => {
-    if (selectedRecipient && !recipients.includes(selectedRecipient))
-      setSelectedRecipient(null);
-  }, [recipients, selectedRecipient]);
-
-  const domains = useMemo(() => groupEmailsByDomain(listItems), [listItems]);
-
-  useEffect(() => {
-    if (selectedDomain && !domains.some((g) => g.domain === selectedDomain))
-      setSelectedDomain(null);
-  }, [domains, selectedDomain]);
-
-  const timeGroups = useMemo(
-    () => groupEmailsByTime(filteredItems),
-    [filteredItems],
-  );
-
-  const selectedEmail = selectedEmailId
-    ? listItems.find((e) => e.id === selectedEmailId)
-    : null;
   const selectedDetail = selectedEmailId
     ? detailMap.get(selectedEmailId)
     : null;
+  // prefer the list item (current page); fall back to the loaded detail so the
+  // header still renders when the selected email isn't on the current page
+  // (e.g. restored from URL after returning from the OCR page).
+  const selectedEmail =
+    (selectedEmailId
+      ? listItems.find((e) => e.id === selectedEmailId)
+      : null) ??
+    (selectedDetail
+      ? {
+          ...selectedDetail,
+          attachment_count: selectedDetail.attachments.length,
+          pending_count: selectedDetail.attachments.filter(
+            (a) => a.status === "pending",
+          ).length,
+          done_count: selectedDetail.attachments.filter(
+            (a) => a.status === "done",
+          ).length,
+        }
+      : null);
 
   const pendingSelectedCount = selected.size;
 
@@ -620,7 +637,7 @@ export default function EmailOrdersPage() {
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => fetchList(false, true)}
+            onClick={() => fetchList(page)}
             loading={loading}
           >
             Làm mới
@@ -647,9 +664,6 @@ export default function EmailOrdersPage() {
           )}
           {crawlStatus?.last_run_at && (
             <span>Lần cuối: {formatDate(crawlStatus.last_run_at)}</span>
-          )}
-          {crawlStatus && (
-            <span>Tổng: {crawlStatus.total_emails_processed} email</span>
           )}
           {crawlStatus?.last_error && (
             <span className="text-red-400">Lỗi: {crawlStatus.last_error}</span>
@@ -693,8 +707,8 @@ export default function EmailOrdersPage() {
                 : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
             }`}
           >
-            {g.label}
-            <span className="ml-1 opacity-60">{g.emails.length}</span>
+            {domainToLabel(g.domain)}
+            <span className="ml-1 opacity-60">{g.count}</span>
           </button>
         ))}
       </div>
@@ -730,7 +744,7 @@ export default function EmailOrdersPage() {
           message={error}
           className="mx-4 mt-2 shrink-0"
           action={
-            <Button size="small" onClick={() => fetchList(false, true)}>
+            <Button size="small" onClick={() => fetchList(page)}>
               Thử lại
             </Button>
           }
@@ -740,118 +754,128 @@ export default function EmailOrdersPage() {
       {/* ── Master-detail body ── */}
       <div className="flex flex-1 min-h-0">
         {/* ── Sidebar email list ── */}
-        <aside
-          ref={sidebarRef}
-          className="w-96 shrink-0 border-r border-gray-200 bg-white overflow-y-auto"
-        >
-          {loading && (
-            <div className="flex justify-center py-12">
-              <Spin />
-            </div>
-          )}
+        <aside className="w-96 shrink-0 border-r border-gray-200 bg-white flex flex-col">
+          <div ref={sidebarRef} className="flex-1 min-h-0 overflow-y-auto">
+            {loading && (
+              <div className="flex justify-center py-12">
+                <Spin />
+              </div>
+            )}
 
-          {!loading && filteredItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-sm gap-2">
-              {searchQuery.trim() ? (
-                <>
-                  <SearchOutlined className="text-2xl" />
-                  <span>Không tìm thấy kết quả</span>
-                </>
-              ) : (
-                <>
-                  <MailOutlined className="text-2xl" />
-                  <span>Chưa có email nào</span>
-                </>
-              )}
-            </div>
-          )}
+            {!loading && listItems.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-sm gap-2">
+                {searchQuery.trim() ? (
+                  <>
+                    <SearchOutlined className="text-2xl" />
+                    <span>Không tìm thấy kết quả</span>
+                  </>
+                ) : (
+                  <>
+                    <MailOutlined className="text-2xl" />
+                    <span>Chưa có email nào</span>
+                  </>
+                )}
+              </div>
+            )}
 
-          {!loading &&
-            timeGroups.map((group) => {
-              const isCollapsed = collapsedGroups.has(group.key);
-              return (
-                <div key={group.key}>
-                  <button
-                    onClick={() => toggleGroup(group.key)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 sticky top-0 z-10 border-b border-gray-100 hover:bg-gray-100 transition-colors"
-                  >
-                    {isCollapsed ? (
-                      <CaretRightOutlined className="text-gray-400" />
-                    ) : (
-                      <CaretDownOutlined className="text-gray-400" />
-                    )}
-                    <span>{group.label}</span>
-                    <span className="ml-auto font-normal text-gray-400 normal-case tracking-normal">
-                      {group.emails.length} email
-                    </span>
-                  </button>
-                  {!isCollapsed &&
-                    group.emails.map((item) => {
-                      const isSelected = selectedEmailId === item.id;
-                      const allDone =
-                        item.attachment_count > 0 &&
-                        item.done_count === item.attachment_count;
-                      const hasPending = item.pending_count > 0;
+            {!loading &&
+              timeGroups.map((group) => {
+                const isCollapsed = collapsedGroups.has(group.key);
+                return (
+                  <div key={group.key}>
+                    <button
+                      onClick={() => toggleGroup(group.key)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 sticky top-0 z-10 border-b border-gray-100 hover:bg-gray-100 transition-colors"
+                    >
+                      {isCollapsed ? (
+                        <CaretRightOutlined className="text-gray-400" />
+                      ) : (
+                        <CaretDownOutlined className="text-gray-400" />
+                      )}
+                      <span>{group.label}</span>
+                      <span className="ml-auto font-normal text-gray-400 normal-case tracking-normal">
+                        {group.emails.length} email
+                      </span>
+                    </button>
+                    {!isCollapsed &&
+                      group.emails.map((item) => {
+                        const isSelected = selectedEmailId === item.id;
+                        const allDone =
+                          item.attachment_count > 0 &&
+                          item.done_count === item.attachment_count;
+                        const hasPending = item.pending_count > 0;
 
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => selectEmail(item.id)}
-                          className={`w-full text-left px-3 py-3 border-b border-gray-100 transition-colors ${
-                            isSelected
-                              ? "bg-blue-50 border-l-2 border-l-blue-500"
-                              : "hover:bg-gray-50 border-l-2 border-l-transparent"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-1 mb-0.5">
-                            <span
-                              className={`text-xs font-semibold truncate flex-1 ${isSelected ? "text-blue-700" : "text-gray-800"}`}
-                            >
-                              {item.sender_name || item.sender_email}
-                            </span>
-                            <span className="text-xs text-gray-400 shrink-0 mt-0.5">
-                              {formatDate(item.received_at)}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-600 truncate mb-1">
-                            {item.subject || "(Không có tiêu đề)"}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {allDone ? (
-                              <Tag
-                                color="success"
-                                className="m-0 text-xs leading-4"
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => selectEmail(item.id)}
+                            className={`w-full text-left px-3 py-3 border-b border-gray-100 transition-colors ${
+                              isSelected
+                                ? "bg-blue-50 border-l-2 border-l-blue-500"
+                                : "hover:bg-gray-50 border-l-2 border-l-transparent"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1 mb-0.5">
+                              <span
+                                className={`text-xs font-semibold truncate flex-1 ${isSelected ? "text-blue-700" : "text-gray-800"}`}
                               >
-                                Đã xong
-                              </Tag>
-                            ) : hasPending ? (
-                              <Tag
-                                color="warning"
-                                className="m-0 text-xs leading-4"
-                              >
-                                {item.pending_count} chờ
-                              </Tag>
-                            ) : null}
-                            <span className="text-xs text-gray-400">
-                              {item.done_count}/{item.attachment_count} file
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                </div>
-              );
-            })}
+                                {item.sender_name || item.sender_email}
+                              </span>
+                              <span className="text-xs text-gray-400 shrink-0 mt-0.5">
+                                {formatDate(item.received_at)}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 truncate mb-1">
+                              {item.subject || "(Không có tiêu đề)"}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {allDone ? (
+                                <Tag
+                                  color="success"
+                                  className="m-0 text-xs leading-4"
+                                >
+                                  Đã xong
+                                </Tag>
+                              ) : hasPending ? (
+                                <Tag
+                                  color="warning"
+                                  className="m-0 text-xs leading-4"
+                                >
+                                  {item.pending_count} chờ
+                                </Tag>
+                              ) : null}
+                              <span className="text-xs text-gray-400">
+                                {item.done_count}/{item.attachment_count} file
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                );
+              })}
+          </div>
 
-          {/* Infinite scroll loader */}
-          {loadingMore && (
-            <div className="flex justify-center py-4">
-              <Spin size="small" />
-            </div>
-          )}
-          {!loadingMore && !hasMore && listItems.length > 0 && (
-            <div className="text-center text-xs text-gray-300 py-3">
-              Đã tải hết
+          {/* Pagination footer */}
+          {!loading && totalCount > 0 && (
+            <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
+              <span className="text-xs text-gray-400">
+                Trang {page}/{totalPages} · {totalCount} email
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="small"
+                  icon={<LeftOutlined />}
+                  disabled={page <= 1 || loading}
+                  onClick={() => goToPage(page - 1)}
+                />
+                <Button
+                  size="small"
+                  icon={<RightOutlined />}
+                  disabled={page >= totalPages || loading}
+                  onClick={() => goToPage(page + 1)}
+                />
+              </div>
             </div>
           )}
         </aside>
@@ -867,9 +891,19 @@ export default function EmailOrdersPage() {
             <div className="max-w-4xl mx-auto p-6 flex flex-col gap-4">
               {/* Email header */}
               <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">
-                  {selectedEmail.subject || "(Không có tiêu đề)"}
-                </h2>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <h2 className="text-lg font-semibold text-gray-900 m-0">
+                    {selectedEmail.subject || "(Không có tiêu đề)"}
+                  </h2>
+                  <Tooltip title="Đóng">
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<CloseOutlined />}
+                      onClick={() => setSelectedEmailId(null)}
+                    />
+                  </Tooltip>
+                </div>
                 <div className="flex flex-col gap-1 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400 w-20 shrink-0">Từ:</span>
