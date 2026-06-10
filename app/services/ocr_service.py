@@ -52,7 +52,7 @@ VIETNAMESE NUMBER FORMAT:
 PRICE EXTRACTION (read as-is, NO calculations):
 - Extract numbers EXACTLY as printed in the document. Do NOT calculate, verify, or adjust any values.
 - items.unit_price: read the printed unit price column value directly (e.g. "Đơn giá cuối (-VAT)", "Đơn giá", "Unit Price"). If multiple price columns exist, prefer the FINAL/NET price column after all discounts.
-- items.line_total: read the printed line amount directly (e.g. "Thành tiền (-VAT)", "Thành tiền"). If absent, leave null — do NOT calculate.
+- items.line_total: the PRE-TAX line amount (amount BEFORE VAT). Prefer columns labeled "Tạm tính", "Tạm tính (VND)", "Thành tiền (-VAT)", "Amount (-VAT)". CRITICAL: when the table has BOTH a "Tạm tính" column AND a "Thành tiền" column, always take "Tạm tính" (the pre-tax subtotal) — never take the post-VAT "Thành tiền" in that case. Only use plain "Thành tiền" when it is the sole amount column and no pre-tax column exists. If absent, leave null — do NOT calculate.
 - items.tax_rate: read the % VAT column as a number (e.g. "8%" → 8).
 - total_amount: read the printed grand total exactly as shown (e.g. "Thành tiền (+VAT)", "TỔNG CỘNG", total after VAT). Do NOT sum or calculate.
 - Leave any field null if not clearly printed in the document.
@@ -89,7 +89,8 @@ FIELD ALIASES — the same field may appear under many different labels:
 - items.unit_price: "Price", "Unit Price", "Đơn giá", "GIÁ VỐN ĐVỊ (0VAT)", "Pur. Price (-VAT)", "Buy Cost", "Net Buy Cost", "UNIT COST", "Sply prc", "Đơn giá lẻ sau VAT", "Đơn giá (-VAT)", "Đơn giá cuối (-VAT)"
 - items.tax_rate: "VAT", "VAT(%)", "VAT Rate", "Tax Rate", "THUẾ SUẤT", "Tax rt", "% VAT"
 - items.discount_rate: "% CK", "CK%", "CK trực tiếp", "% KM Giảm Giá", "Discount"
-- items.line_total: "Total", "Amount", "Thành tiền", "THÀNH TiỀN", "Extended Cost", "Sply amt", "Sub Total", "Amount (-VAT)", "Thành tiền (-VAT)"
+- items.line_total: "Tạm tính", "Tạm tính (VND)", "Amount (-VAT)", "Thành tiền (-VAT)", "Extended Cost", "Sply amt", "Sub Total", "Amount", "Total"
+  NOTE: When "Tạm tính" and "Thành tiền" both appear in the same table, "Tạm tính" is pre-tax (correct for line_total) and "Thành tiền" is post-tax (do NOT use). Use plain "Thành tiền" only when it is the only amount column.
 - total_amount: "Total Amount", "TỔNG CỘNG", "Tổng cộng", "Grand Total", "TOTAL BF.TAX", "Thành tiền (No VAT)", "Tổng giá trị trước thuế", "Sub Total", "Total Net Purchase Price"
 - tax_amount: "VAT amount", "Thuế GTGT", "TOTAL VAT", "Total VAT", "Tax", "VAT AMT", "Tot add tax"
 
