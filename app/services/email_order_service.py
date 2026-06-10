@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timezone
 import httpx
 from sqlalchemy.orm import Session
@@ -112,7 +113,6 @@ def list_email_orders(
             "done_count": int(done or 0),
         })
 
-    import math
     pages = math.ceil(total / size) if size > 0 else 1
     return {"items": items, "total": total, "page": page, "size": size, "pages": max(pages, 1)}
 
@@ -325,7 +325,7 @@ def _finish_webhook_log(
     log.status = status
     log.email_id = email_id
     log.error = error
-    log.processed_at = datetime.utcnow()
+    log.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
 
 
@@ -368,7 +368,7 @@ def set_attachment_processing(db: Session, attachment_id: int) -> EmailAttachmen
     if not att:
         return None
     att.status = "processing"
-    att.converted_at = datetime.utcnow()
+    att.converted_at = datetime.now(timezone.utc).replace(tzinfo=None)
     att.done_at = None
     db.commit()
     db.refresh(att)
@@ -380,7 +380,7 @@ def set_attachment_done(db: Session, attachment_id: int) -> EmailAttachment | No
     if not att or att.status != "processing":
         return att
     att.status = "done"
-    att.done_at = datetime.utcnow()
+    att.done_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(att)
     return att
@@ -395,7 +395,7 @@ def bulk_set_processing(db: Session, attachment_ids: list[int]) -> list[EmailAtt
         )
         .all()
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     for att in atts:
         att.status = "processing"
         att.converted_at = now

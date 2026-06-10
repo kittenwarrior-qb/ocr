@@ -407,7 +407,9 @@ export default function EmailOrdersPage() {
 
       if (isInFlight || skipBecauseDone) {
         message.info(
-          `"${att.filename}" đã có trong hàng chờ OCR (${ocrStatus})`,
+          isInFlight
+            ? `"${att.filename}" đang trong hàng chờ OCR (${ocrStatus}), bỏ qua`
+            : `"${att.filename}" đã có kết quả OCR, bỏ qua`,
         );
         await convertAttachment(att.id);
         return;
@@ -447,7 +449,8 @@ export default function EmailOrdersPage() {
 
   // ---- single done ----
   async function handleDone(att: EmailAttachment) {
-    if (att.status !== "processing") return;
+    const currentStatus = statusOverride.get(att.id) ?? att.status;
+    if (currentStatus !== "processing") return;
     setStatusOverride((prev) => new Map(prev).set(att.id, "done"));
     try {
       await doneAttachment(att.id);
