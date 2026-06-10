@@ -46,7 +46,7 @@ import {
   doneAttachment,
   bulkConvert,
   getAttachmentDownloadUrl,
-  getAttachmentViewUrl,
+  getAttachmentProxyViewUrl,
   type EmailOrderListItem,
   type EmailOrder,
   type EmailAttachment,
@@ -968,9 +968,7 @@ export default function EmailOrdersPage() {
                       const isPending = status === "pending";
                       const isProcessing = status === "processing";
                       const isDone = status === "done";
-                      const extId = att.external_attachment_id ?? att.id;
-                      const viewUrl =
-                        att.view_url ?? getAttachmentViewUrl(extId);
+                      const viewUrl = getAttachmentProxyViewUrl(att.id);
 
                       return (
                         <div

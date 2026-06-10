@@ -162,6 +162,16 @@ export function getAttachmentViewUrl(attachmentId: number): string {
   return `${emailApiBase()}/attachments/${attachmentId}/view`;
 }
 
+/**
+ * Proxy URL through our own backend so the browser always receives
+ * Content-Disposition: inline and is never blocked by X-Frame-Options
+ * from the external email gateway.  Use this for <iframe> preview.
+ */
+export function getAttachmentProxyViewUrl(attachmentId: number): string {
+  const base = (import.meta.env.VITE_API_URL || "/api/v1").replace(/\/$/, "");
+  return `${base}/email-orders/attachments/${attachmentId}/view`;
+}
+
 // ============================================================
 // Our backend API — /api/v1/email-orders
 // ============================================================

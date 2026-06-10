@@ -1,6 +1,9 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.schemas.email_order import (
     EmailOrderOut,
@@ -104,6 +107,37 @@ def receive_webhook(
 
 
 # --- Attachment status transitions ---
+
+@router.get("/attachments/{attachment_id}/view")
+async def view_attachment(attachment_id: int, db: Session = Depends(get_db)):
+    """Proxy attachment PDF from the email gateway with Content-Disposition: inline so the
+    browser renders it inside an <iframe> instead of triggering a download."""
+    att = svc.get_attachment(db, attachment_id)
+    if not att:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    url = att.view_url
+    if not url and att.external_attachment_id is not None:
+        base = settings.EMAIL_GATEWAY_URL.rstrip("/")
+        url = f"{base}/attachments/{att.external_attachment_id}/view"
+    if not url:
+        raise HTTPException(status_code=404, detail="No view URL available for this attachment")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            r = await http.get(url)
+            r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Gateway returned {e.response.status_code}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gateway unreachable: {e}")
+
+    return Response(
+        content=r.content,
+        media_type="application/pdf",
+        headers={"content-disposition": "inline"},
+    )
+
 
 @router.post("/attachments/{attachment_id}/convert", response_model=EmailAttachmentOut)
 def convert_attachment(attachment_id: int, db: Session = Depends(get_db)):

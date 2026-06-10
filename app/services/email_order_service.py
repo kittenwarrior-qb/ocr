@@ -361,6 +361,10 @@ def list_webhook_logs(db: Session, skip: int = 0, limit: int = 50) -> list[Webho
     )
 
 
+def get_attachment(db: Session, attachment_id: int) -> EmailAttachment | None:
+    return db.query(EmailAttachment).filter(EmailAttachment.id == attachment_id).first()
+
+
 def set_attachment_processing(db: Session, attachment_id: int) -> EmailAttachment | None:
     att = db.query(EmailAttachment).filter(EmailAttachment.id == attachment_id).first()
     # Allow converting from any status: "pending" (first time), "processing"
