@@ -233,6 +233,8 @@ export default function OrdersPage() {
   const [misaSaved, setMisaSaved] = useState(false)
   const [misaConfirmOpen, setMisaConfirmOpen] = useState(false)
   const [misaLoading, setMisaLoading] = useState(false)
+  const [pushingOrderId, setPushingOrderId] = useState<string | null>(null)
+  const [batchPushing, setBatchPushing] = useState(false)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
   const [creatingManualOrder, setCreatingManualOrder] = useState(false)
@@ -279,26 +281,92 @@ export default function OrdersPage() {
 
   useEffect(() => { setMisaSaved(false) }, [editingOrder?.id])
 
+  // Đẩy 1 đơn lên MISA — trả về kết quả để dùng chung cho push lẻ + push hàng loạt.
+  const pushSingleOrder = async (orderId: string): Promise<{ ok: boolean; msg: string; saleNo?: string }> => {
+    try {
+      const { data } = await client.post(`/misa/push/orders/${orderId}`)
+      if (data?.success && data?.results?.[0]?.success) {
+        return { ok: true, msg: data.sale_order_no, saleNo: data.sale_order_no }
+      }
+      const err = data?.results?.[0]?.validate_infos?.[0]?.error_message || data?.error_message || 'Lỗi từ MISA'
+      return { ok: false, msg: err }
+    } catch (e: any) {
+      return { ok: false, msg: e?.response?.data?.detail || 'Không thể kết nối MISA' }
+    }
+  }
+
+  // Đơn đủ điều kiện đẩy MISA: map xong hết SP + đã chọn KH.
+  const canPushOrder = (o: SessionOrder) => (o.pending_count || 0) === 0 && hasMappedCustomer(o)
+
   const handleSaveToMisa = async () => {
     if (!editingOrder) return
     setMisaConfirmOpen(false)
     setMisaLoading(true)
-    try {
-      const { data } = await client.post(`/misa/push/orders/${editingOrder.id}`)
-      if (data?.success && data?.results?.[0]?.success) {
-        message.success(`Đã lưu lên MISA: ${data.sale_order_no}`)
-        setDetailModalOpen(false)
-        setEditingOrder(null)
-        queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
-      } else {
-        const err = data?.results?.[0]?.validate_infos?.[0]?.error_message || data?.error_message || 'Lỗi từ MISA'
-        message.error(err)
-      }
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Không thể kết nối MISA')
-    } finally {
-      setMisaLoading(false)
+    const r = await pushSingleOrder(editingOrder.id)
+    setMisaLoading(false)
+    if (r.ok) {
+      message.success(`Đã lưu lên MISA: ${r.saleNo}`)
+      setDetailModalOpen(false)
+      setEditingOrder(null)
+      queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+    } else {
+      message.error(r.msg)
     }
+  }
+
+  // Đẩy 1 đơn trực tiếp từ danh sách (không cần mở popup).
+  const handlePushOrderRow = (order: SessionOrder) => {
+    Modal.confirm({
+      title: 'Đẩy đơn lên MISA?',
+      content: `Đơn "${order.file_name}"${order.po_number ? ` (PO ${order.po_number})` : ''} sẽ được đẩy lên MISA CRM.`,
+      okText: 'Đẩy lên MISA', cancelText: 'Hủy',
+      onOk: async () => {
+        setPushingOrderId(order.id)
+        const r = await pushSingleOrder(order.id)
+        setPushingOrderId(null)
+        if (r.ok) message.success(`Đã đẩy lên MISA: ${r.saleNo}`)
+        else message.error(r.msg)
+        queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+      },
+    })
+  }
+
+  // Đẩy cả cụm: tất cả đơn đủ điều kiện trong phiên, tuần tự, báo cáo tổng kết.
+  const handleBatchPush = () => {
+    const eligible = (sessionDetail?.orders || []).filter(canPushOrder)
+    if (!eligible.length) { message.warning('Không có đơn nào đủ điều kiện đẩy (cần map xong KH + SP)'); return }
+    Modal.confirm({
+      title: `Đẩy ${eligible.length} đơn lên MISA?`,
+      content: 'Các đơn đã map xong sẽ được đẩy lần lượt lên MISA CRM. Đơn lỗi sẽ được báo lại để xử lý riêng.',
+      okText: 'Đẩy tất cả', cancelText: 'Hủy',
+      onOk: async () => {
+        setBatchPushing(true)
+        let okCount = 0
+        const failed: string[] = []
+        for (const o of eligible) {
+          setPushingOrderId(o.id)
+          const r = await pushSingleOrder(o.id)
+          if (r.ok) okCount++
+          else failed.push(`${o.file_name}${o.po_number ? ` (PO ${o.po_number})` : ''}: ${r.msg}`)
+        }
+        setPushingOrderId(null)
+        setBatchPushing(false)
+        queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+        if (!failed.length) {
+          message.success(`Đã đẩy thành công ${okCount}/${eligible.length} đơn lên MISA`)
+        } else {
+          Modal.warning({
+            title: `Đẩy xong: ${okCount} thành công, ${failed.length} lỗi`,
+            width: 560,
+            content: (
+              <div className="text-xs space-y-1 max-h-80 overflow-auto">
+                {failed.map((f, i) => <div key={i} className="text-red-600">• {f}</div>)}
+              </div>
+            ),
+          })
+        }
+      },
+    })
   }
 
   // Fetch vouchers + pricebooks whenever session orders change
@@ -771,8 +839,19 @@ export default function OrdersPage() {
               </div>
               {sessionDetail.processing_count === 0 && sessionDetail.done_count > 0 && (() => {
                 const ok = sessionDetail.orders.every(hasMappedCustomer) && sessionDetail.total_unmapped === 0 && sessionDetail.total_products > 0
-                return ok ? <Button type="primary" icon={<ExportOutlined />} onClick={() => handleExport(activeSessionId)}>Xuất Excel</Button>
-                  : <Tooltip title="Vui lòng hoàn tất mapping KH + SP"><Button type="primary" icon={<ExportOutlined />} disabled>Xuất Excel</Button></Tooltip>
+                const pushable = sessionDetail.orders.filter(canPushOrder).length
+                return (
+                  <div className="flex items-center gap-2">
+                    {pushable > 0 && (
+                      <Button icon={<CloudUploadOutlined />} loading={batchPushing} onClick={handleBatchPush}
+                        title="Đẩy tất cả đơn đã map xong lên MISA CRM">
+                        Đẩy {pushable} đơn lên MISA
+                      </Button>
+                    )}
+                    {ok ? <Button type="primary" icon={<ExportOutlined />} onClick={() => handleExport(activeSessionId)}>Xuất Excel</Button>
+                      : <Tooltip title="Vui lòng hoàn tất mapping KH + SP"><Button type="primary" icon={<ExportOutlined />} disabled>Xuất Excel</Button></Tooltip>}
+                  </div>
+                )
               })()}
             </div>
 
@@ -825,6 +904,17 @@ export default function OrdersPage() {
                       {(() => { const ok = order.pending_count === 0 && hasMappedCustomer(order); if (ok) return <Tag color="success" className="text-xs ml-2"><CheckOutlined /> OK</Tag>; if (order.pending_count > 0) return <Tag color="warning" className="text-xs ml-2">{order.pending_count} chưa map</Tag>; if (!hasMappedCustomer(order)) return <Tag color="warning" className="text-xs ml-2">Chưa chọn KH</Tag>; return null })()}
                     </div>
                     <div className="flex items-center gap-1.5">
+                      {canPushOrder(order) && (
+                        <Tooltip title="Đẩy đơn này lên MISA CRM (không cần mở popup)">
+                          <button
+                            className="text-xs text-emerald-200 hover:text-white border border-emerald-600/60 rounded-md px-2.5 py-1 font-medium hover:bg-emerald-700/40 transition-colors disabled:opacity-50"
+                            disabled={pushingOrderId === order.id || batchPushing}
+                            onClick={(e) => { e.stopPropagation(); handlePushOrderRow(order) }}
+                          >
+                            {pushingOrderId === order.id ? <LoadingOutlined spin /> : <CloudUploadOutlined />} Lưu với MISA
+                          </button>
+                        </Tooltip>
+                      )}
                       <button className="text-xs text-slate-200 hover:text-white border border-slate-500 rounded-md px-2.5 py-1 font-medium hover:bg-slate-600 transition-colors" onClick={() => { setEditingOrder(order); setDetailModalOpen(true) }}><EditOutlined /> Chi tiết</button>
                       <Tooltip title="Xóa đơn hàng này">
                         <button className="text-xs text-red-300 hover:text-red-100 border border-red-700/50 rounded-md px-2 py-1 hover:bg-red-900/30 transition-colors" onClick={(e) => { e.stopPropagation(); Modal.confirm({ title: 'Xóa đơn hàng?', content: `Đơn "${order.file_name}" sẽ bị xóa vĩnh viễn khỏi phiên này.`, okText: 'Xóa', okType: 'danger', cancelText: 'Hủy', onOk: async () => { try { await client.delete(`/documents/orders/${order.id}`); queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] }); message.success('Đã xóa') } catch { message.error('Xóa thất bại') } } }) }}><DeleteOutlined /></button>

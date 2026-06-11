@@ -325,19 +325,27 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     # ── Kiểm tra PO number trùng ────────────────────────────────────────────
+    # Cho phép các đơn TÁCH (cùng raw_document, cùng PO) đều được đẩy — đây là
+    # hành vi hợp lệ. Chỉ chặn khi PO đã được đẩy bởi đơn KHÁC nguồn (re-upload).
     if order.po_number:
         from app.models.po_history import POHistory
         existing_po = db.query(POHistory).filter(POHistory.po_number == order.po_number.strip()).first()
         if existing_po:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"Số PO '{order.po_number}' đã được đẩy lên MISA trước đó"
-                    + (f" (Đơn {existing_po.sale_order_no})" if existing_po.sale_order_no else "")
-                    + (f" cho KH {existing_po.customer_name or existing_po.customer_code}" if existing_po.customer_code else "")
-                    + ". Xóa bản ghi trong PO History nếu muốn đẩy lại."
-                ),
-            )
+            is_split_sibling = False
+            if existing_po.order_id and existing_po.order_id != order.id:
+                prev = db.query(ProcessedOrder).filter(ProcessedOrder.id == existing_po.order_id).first()
+                if prev and prev.raw_document_id == order.raw_document_id:
+                    is_split_sibling = True
+            if not is_split_sibling:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Số PO '{order.po_number}' đã được đẩy lên MISA trước đó"
+                        + (f" (Đơn {existing_po.sale_order_no})" if existing_po.sale_order_no else "")
+                        + (f" cho KH {existing_po.customer_name or existing_po.customer_code}" if existing_po.customer_code else "")
+                        + ". Xóa bản ghi trong PO History nếu muốn đẩy lại."
+                    ),
+                )
 
     # ── Auto-increment DH number ────────────────────────────────────────────
     try:
@@ -357,6 +365,23 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
 
     def date_fmt(d):
         return d.strftime("%Y-%m-%dT00:00:00.000+07:00") if d else None
+
+    def safe_contact_name() -> str:
+        """Tên liên hệ gửi MISA phải là LH có thật. Ưu tiên contact_code; nếu chỉ
+        có free-text mà lại trùng địa chỉ (do match sai) thì bỏ qua, tránh lỗi
+        MISA 'contact_name: Không tồn tại' làm fail cả đơn."""
+        code = (meta.get("contact_code") or "").strip()
+        if code:
+            return code
+        name = (meta.get("contact") or "").strip()
+        if not name:
+            return ""
+        addr_fields = {
+            (meta.get(k) or "").strip()
+            for k in ("delivery_address", "invoice_address", "delivery_street",
+                      "invoice_street", "owner", "customer_owner")
+        }
+        return "" if name in addr_fields else name
 
     # ── Build line items ────────────────────────────────────────────────────
     lines_payload = []
@@ -404,7 +429,7 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
         "status": "Chưa thực hiện",
         "sale_order_type": meta.get("order_type") or "Kênh MT",
         "account_name": meta.get("customer_code") or (partner.code if partner else "") or "",
-        "contact_name": meta.get("contact_code") or meta.get("contact") or "",
+        "contact_name": safe_contact_name(),
         "owner_name": meta.get("executor") or meta.get("owner") or None,
         "recorded_sale_users_name": meta.get("salesperson", "KM1989-Nguyễn Văn Ân"),
         "custom_field4": meta.get("salesperson", "KM1989-Nguyễn Văn Ân"),
