@@ -63,7 +63,7 @@ function useTableData<T>(
   return { search, setSearch, page, setPage, data, total, loading }
 }
 
-function matchContactToCustomer(contact: Contact): Customer | null {
+export function matchContactToCustomer(contact: Contact): Customer | null {
   const all = getCustomers()
   if (contact.customer_code || contact.customer_name) {
     const cached = all.find(c => c.code === contact.customer_code || c.name === contact.customer_name)

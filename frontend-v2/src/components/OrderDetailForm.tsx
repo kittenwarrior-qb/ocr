@@ -69,9 +69,9 @@ function saveNV(v: string) {
   try { localStorage.setItem(LS_NV_KEY, v) } catch {}
 }
 import type { OrderLine } from '@/types/order'
-import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
+import CustomerContactPopup, { type CustomerContactResult, type Contact, matchContactToCustomer } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
-import { getProducts, getCustomers, fetchContacts } from '@/utils/catalogStore'
+import { getProducts, fetchContacts, fetchCustomers, type Customer } from '@/utils/catalogStore'
 import { getUomConversion, type UomConversionResult } from '@/utils/uomConversion'
 import type { PriceOverride } from '@/components/SelectPopup'
 import ContactSelectPopup from '@/components/ContactSelectPopup'
@@ -87,10 +87,68 @@ function EditableCell({ value, type = 'text', onChange, placeholder }: { value: 
   return type === 'number' ? (<InputNumber size="small" autoFocus value={localVal as number} onChange={v => setLocalVal(v)} onBlur={() => { setEditing(false); onChange(localVal) }} onPressEnter={() => { setEditing(false); onChange(localVal) }} className="w-full" />) : (<Input size="small" autoFocus value={localVal as string} onChange={e => setLocalVal(e.target.value)} onBlur={() => { setEditing(false); onChange(localVal) }} onPressEnter={() => { setEditing(false); onChange(localVal) }} />)
 }
 
-function InputWithPopup({ value, placeholder, onPopupClick }: { value?: string; placeholder?: string; onPopupClick: () => void }) {
+// Ô nhập có dropdown gợi ý (debounce gọi API). Dùng cho Khách hàng & Liên hệ.
+function AsyncSearchSelect<T extends { code: string }>({
+  value, placeholder, fetcher, renderLabel, onPick, onTypeText, onPopupClick,
+}: {
+  value: string
+  placeholder?: string
+  fetcher: (q: string) => Promise<T[]>
+  renderLabel: (item: T) => ReactNode
+  onPick: (item: T) => void
+  onTypeText?: (text: string) => void
+  onPopupClick: () => void
+}) {
+  const [input, setInput] = useState<string | null>(null) // null = hiển thị `value`
+  const [options, setOptions] = useState<{ value: string; label: ReactNode; item: T }[]>([])
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const itemsRef = useRef<T[]>([])
+  const didPickRef = useRef(false)
+
+  const display = input === null ? value : input
+
+  const handleSearch = (q: string) => {
+    setInput(q)
+    if (onTypeText) onTypeText(q)
+    if (timer.current) clearTimeout(timer.current)
+    if (!q.trim()) { setOptions([]); return }
+    timer.current = setTimeout(async () => {
+      try {
+        const items = await fetcher(q)
+        itemsRef.current = items
+        // value phải duy nhất cho AutoComplete → ghép code + index
+        setOptions(items.map((it, i) => ({ value: `${it.code}|${i}`, label: renderLabel(it), item: it })))
+      } catch { setOptions([]) }
+    }, 300)
+  }
+
+  const handleSelect = (val: string) => {
+    const idx = Number(val.split('|')[1])
+    const item = itemsRef.current[idx]
+    if (item) { didPickRef.current = true; onPick(item) }
+    setInput(null)
+    setOptions([])
+  }
+
+  const handleBlur = () => {
+    if (!didPickRef.current && input !== null && input.trim() && onTypeText) onTypeText(input.trim())
+    didPickRef.current = false
+    setInput(null)
+    setOptions([])
+  }
+
   return (
     <div className="flex items-center gap-0">
-      <Input value={value} placeholder={placeholder || '- Không chọn -'} readOnly className="flex-1" />
+      <AutoComplete
+        className="flex-1"
+        value={display}
+        options={options}
+        onSearch={handleSearch}
+        onSelect={handleSelect}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        popupMatchSelectWidth={360}
+      />
       <Button icon={<SearchOutlined />} onClick={onPopupClick} className="border-l-0 rounded-l-none" title="Chọn từ danh sách" />
     </div>
   )
@@ -238,10 +296,11 @@ function ProductCodeCell({ line, isPending, systemLine, conf, pbOv, onProductSel
   return (
     <div
       className="flex items-center gap-1 min-w-0 cursor-pointer group"
-      onClick={() => { setEditing(true); setInputVal('') }}
+      onDoubleClick={() => { setEditing(true); setInputVal('') }}
+      title="Double-click để sửa mã"
     >
       {currentCode ? (
-        <Tooltip title={isPending && !systemLine && conf ? `Gợi ý map: ${Math.round(conf.score * 100)}%` : 'Click để sửa mã'}>
+        <Tooltip title={isPending && !systemLine && conf ? `Gợi ý map: ${Math.round(conf.score * 100)}% — double-click để sửa` : 'Double-click để sửa mã'}>
           <span className={`font-mono text-xs font-semibold truncate group-hover:underline ${
             isPending && !systemLine && conf
               ? conf.score >= 0.85 ? 'text-emerald-700'
@@ -721,6 +780,40 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     return rates.size > 1
   }, [lines])
 
+  // Map một sản phẩm vào dòng — dùng chung cho ProductModal, ô mã hàng inline và nút xác nhận nhanh.
+  const handleProductSelection = (lineIdx: number, p: Product) => {
+    const line = lines[lineIdx]
+    if (!line) return
+    const pbOverride = priceOverrides.get(p.code)
+    const uomChanged = isSignificantUomChange(line.uom_original || '', p.uom)
+    const currentPrice = Number(line.unit_price) || 0
+    const pbPrice = pbOverride?.unit_price
+    const priceChanged = !!pbPrice && pbPrice !== currentPrice
+    if (uomChanged || priceChanged) {
+      setPendingChange({
+        lineIdx, product: p,
+        uomFrom: line.uom_original ?? undefined, uomTo: p.uom, uomChanged,
+        pbPrice, pbName: pbOverride?.pricebook_name, currentPrice,
+      })
+      return
+    }
+    const lineLabel = line.product_name_original || '(dòng chưa có tên)'
+    Modal.confirm({
+      title: 'Xác nhận map sản phẩm',
+      content: (
+        <div className="text-sm space-y-1">
+          <div>Map dòng <strong>"{lineLabel}"</strong> sang sản phẩm trong danh mục:</div>
+          <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
+            <span className="font-mono font-bold text-blue-700">{p.code}</span>
+            <span className="text-slate-600 ml-2">— {p.name}</span>
+          </div>
+        </div>
+      ),
+      okText: 'Xác nhận map', cancelText: 'Xem lại', width: 460,
+      onOk: () => setLines(prev => prev.map((l, idx) => idx === lineIdx ? applyProductToLine(l, p) : l)),
+    })
+  }
+
   const handleSplit = () => {
     const taxRateCount = new Set(lines.map((l: OrderLine) => l.tax_rate)).size
     Modal.confirm({
@@ -829,17 +922,41 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
             </Tooltip>
           )}</span>}>
-            <InputWithPopup value={selectedCustomer} placeholder="- Không chọn -" onPopupClick={() => setActivePopup('customer')} />
+            <AsyncSearchSelect<Customer>
+              value={selectedCustomer}
+              placeholder="Nhập tên/mã KH hoặc chọn từ danh sách"
+              fetcher={async q => (await fetchCustomers(q, 0, 8)).items}
+              renderLabel={c => (
+                <div className="flex gap-2 text-xs leading-snug">
+                  <span className="font-mono text-blue-700 shrink-0 w-24 truncate">{c.code}</span>
+                  <span className="text-slate-700 truncate">{c.name}</span>
+                  {c.tax_code && <span className="text-slate-400 shrink-0">MST {c.tax_code}</span>}
+                </div>
+              )}
+              onPick={c => handleCustomerContactResult({ type: 'customer', customer: c })}
+              onPopupClick={() => setActivePopup('customer')}
+            />
           </Form.Item>
           <Form.Item label={<span className="flex items-center gap-1.5">Liên hệ{contactMatchType === 'fuzzy' && (
             <Tooltip title="Hệ thống tự động ghép theo tên công ty/địa chỉ giao hàng — vui lòng kiểm tra lại trước khi tin tưởng số liệu">
               <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
             </Tooltip>
           )}</span>}>
-            <div className="flex gap-1">
-              <Input value={selectedContactName} onChange={e => { setSelectedContactName(e.target.value); setCustField('contact', e.target.value); setContactMatchType('manual') }} placeholder="Nhập hoặc chọn từ danh sách" className="flex-1" />
-              <Button icon={<SearchOutlined />} onClick={() => setActivePopup('contact')} title="Chọn người liên hệ" />
-            </div>
+            <AsyncSearchSelect<Contact>
+              value={selectedContactName}
+              placeholder="Nhập tên liên hệ hoặc chọn từ danh sách"
+              fetcher={async q => (await fetchContacts(q, 0, 8)).items}
+              renderLabel={ct => (
+                <div className="flex gap-2 text-xs leading-snug">
+                  <span className="text-slate-700 font-medium shrink-0 max-w-[140px] truncate">{ct.name}</span>
+                  {ct.organization && <span className="text-slate-400 truncate">{ct.organization}</span>}
+                  {(ct.phone || ct.phone_work) && <span className="text-slate-400 shrink-0">{ct.phone || ct.phone_work}</span>}
+                </div>
+              )}
+              onPick={ct => handleCustomerContactResult({ type: 'contact', contact: ct, customer: matchContactToCustomer(ct) })}
+              onTypeText={text => { setSelectedContactName(text); setCustField('contact', text); setContactMatchType('manual') }}
+              onPopupClick={() => setActivePopup('contact')}
+            />
           </Form.Item>
           {/* Address confirm banner when contact has address */}
           {selectedCustomerData.contact && selectedCustomerData.contact_address && (
@@ -984,26 +1101,15 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     </td>
                     <td className="px-2 py-1 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        {isPending && !systemLine ? (
-                          conf ? (
-                            <Tooltip title={`Gợi ý map: ${conf.product.code} - ${Math.round(conf.score * 100)}%`}>
-                              <span className={`font-mono text-xs font-semibold truncate ${
-                                conf.score >= 0.85 ? 'text-emerald-700'
-                                  : conf.score >= 0.5 ? 'text-amber-600'
-                                  : 'text-red-500'
-                              }`}>
-                                {conf.product.code}
-                              </span>
-                            </Tooltip>
-                          ) : (
-                            <span className="font-mono text-xs text-red-400">—</span>
-                          )
-                        ) : (
-                          <span className="font-mono text-slate-900 text-xs font-semibold truncate">{line.ocr_product_code || '—'}</span>
-                        )}
-                        {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
-                      </div>
+                      <ProductCodeCell
+                        line={line}
+                        isPending={isPending}
+                        systemLine={systemLine}
+                        conf={conf}
+                        pbOv={pbOv}
+                        onProductSelect={p => handleProductSelection(idx, p)}
+                        onCodeChange={code => updateLine(idx, 'ocr_product_code', code)}
+                      />
                     </td>
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-1">
@@ -1123,41 +1229,9 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         suggestName={productModalIdx !== null && productModalIdx >= 0 ? lines[productModalIdx]?.product_name_original || '' : ''}
         onSelect={p => {
           if (productModalIdx !== null && productModalIdx >= 0) {
-            const line = lines[productModalIdx]
-            const pbOverride = priceOverrides.get(p.code)
-            const uomChanged = isSignificantUomChange(line.uom_original || '', p.uom)
-            const currentPrice = Number(line.unit_price) || 0
-            const pbPrice = pbOverride?.unit_price
-            const priceChanged = !!pbPrice && pbPrice !== currentPrice
-
-            if (uomChanged || priceChanged) {
-              setPendingChange({
-                lineIdx: productModalIdx, product: p,
-                uomFrom: line.uom_original ?? undefined, uomTo: p.uom, uomChanged,
-                pbPrice, pbName: pbOverride?.pricebook_name, currentPrice,
-              })
-              setProductModalIdx(null)
-              return
-            }
-            // Yêu cầu xác nhận trước khi map — giống popup chọn khách hàng/liên hệ,
-            // tránh map nhầm sản phẩm chỉ vì lỡ tay click vào dòng kết quả tìm kiếm.
             const lineIdx = productModalIdx
-            const lineLabel = line.product_name_original || '(dòng chưa có tên)'
             setProductModalIdx(null)
-            Modal.confirm({
-              title: 'Xác nhận map sản phẩm',
-              content: (
-                <div className="text-sm space-y-1">
-                  <div>Map dòng <strong>"{lineLabel}"</strong> sang sản phẩm trong danh mục:</div>
-                  <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-1">
-                    <span className="font-mono font-bold text-blue-700">{p.code}</span>
-                    <span className="text-slate-600 ml-2">— {p.name}</span>
-                  </div>
-                </div>
-              ),
-              okText: 'Xác nhận map', cancelText: 'Xem lại', width: 460,
-              onOk: () => setLines(prev => prev.map((l, idx) => idx === lineIdx ? applyProductToLine(l, p) : l)),
-            })
+            handleProductSelection(lineIdx, p)
             return
           } else {
             setLines(prev => [...prev, { id: `new-${Date.now()}`, ocr_product_code: p.code, product_name_original: p.name, quantity: 1, unit_price: p.price || 0, line_total: p.price || 0, uom_original: p.uom, tax_rate: productTaxRate(p), mapping_status: 'mapped' } as unknown as OrderLine])
