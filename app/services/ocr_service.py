@@ -38,7 +38,7 @@ CRITICAL REQUIRED FIELDS (MUST extract):
 
 DOUBLECHECK RULES:
 - order_date MUST be DIFFERENT from delivery_date (delivery is always AFTER order date)
-- total_amount should approximately equal SUM of all items[].line_total (with possible tax/discount)
+- total_amount should approximately equal SUM of all items[].line_total PLUS total VAT (i.e. total_amount ≈ sum(line_total) + tax_amount). If total_amount equals sum(line_total) exactly with no tax, that is also valid. Do NOT adjust line_total values to force this check to pass.
 - If you see multiple dates, order_date is the EARLIER one, delivery_date is the LATER one
 - If a field labeled "Ngày Đặt Hàng" exists, that is order_date. "Ngày Giao Hàng" is delivery_date.
 - DO NOT confuse them. Read the label carefully.
@@ -51,7 +51,7 @@ VIETNAMESE NUMBER FORMAT:
 
 PRICE EXTRACTION (read as-is, NO calculations):
 - Extract numbers EXACTLY as printed in the document. Do NOT calculate, verify, or adjust any values.
-- items.unit_price: read the printed unit price column value directly (e.g. "Đơn giá cuối (-VAT)", "Đơn giá", "Unit Price"). If multiple price columns exist, prefer the FINAL/NET price column after all discounts.
+- items.unit_price: the PRE-TAX unit price. Read from columns labeled "Đơn giá (-VAT)", "Đơn giá cuối (-VAT)", "Đơn giá", "Unit Price". If both a pre-tax and a post-tax price column exist (e.g. "Đơn giá (-VAT)" and "Đơn giá (+VAT)"), always prefer the PRE-TAX column. If multiple pre-tax price columns exist, prefer the one after all discounts are applied.
 - items.line_total: the PRE-TAX line amount (amount BEFORE VAT). Prefer columns labeled "Tạm tính", "Tạm tính (VND)", "Thành tiền (-VAT)", "Amount (-VAT)". CRITICAL: when the table has BOTH a "Tạm tính" column AND a "Thành tiền" column, always take "Tạm tính" (the pre-tax subtotal) — never take the post-VAT "Thành tiền" in that case. Only use plain "Thành tiền" when it is the sole amount column and no pre-tax column exists. If absent, leave null — do NOT calculate.
 - items.tax_rate: read the % VAT column as a number (e.g. "8%" → 8).
 - total_amount: read the printed grand total exactly as shown (e.g. "Thành tiền (+VAT)", "TỔNG CỘNG", total after VAT). Do NOT sum or calculate.
