@@ -1,5 +1,5 @@
-﻿import { useEffect, useState, useMemo } from 'react'
-import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag } from 'antd'
+﻿import { useEffect, useState, useMemo, useRef, type ReactNode } from 'react'
+import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag, AutoComplete } from 'antd'
 import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined, GiftOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder } from '@/api/orders'
 import client from '@/api/client'
@@ -71,7 +71,7 @@ function saveNV(v: string) {
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
-import { getProducts } from '@/utils/catalogStore'
+import { getProducts, getCustomers, fetchContacts } from '@/utils/catalogStore'
 import { getUomConversion, type UomConversionResult } from '@/utils/uomConversion'
 import type { PriceOverride } from '@/components/SelectPopup'
 import ContactSelectPopup from '@/components/ContactSelectPopup'
@@ -162,6 +162,102 @@ function isSystemLine(line: Partial<OrderLine>): boolean {
 
 function isGiftLine(line: Partial<OrderLine>): boolean {
   return (line.product_name_original || '').trim().endsWith('(KM)')
+}
+
+function ProductCodeCell({ line, isPending, systemLine, conf, pbOv, onProductSelect, onCodeChange }: {
+  line: OrderLine
+  isPending: boolean
+  systemLine: boolean
+  conf: { score: number; product: Product } | null
+  pbOv: PriceOverride | undefined
+  onProductSelect: (product: Product) => void
+  onCodeChange: (code: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [inputVal, setInputVal] = useState('')
+  const [options, setOptions] = useState<{ value: string; label: ReactNode; product: Product }[]>([])
+  const didSelectRef = useRef(false)
+
+  const currentCode = isPending && !systemLine
+    ? (conf?.product.code ?? null)
+    : (line.ocr_product_code || null)
+
+  const handleSearch = (q: string) => {
+    setInputVal(q)
+    if (!q.trim()) { setOptions([]); return }
+    setOptions(searchProducts(q).slice(0, 8).map(p => ({
+      value: p.code,
+      label: (
+        <div className="flex gap-2 text-xs leading-snug">
+          <span className="font-mono text-blue-700 shrink-0 w-28">{p.code}</span>
+          <span className="text-slate-500 truncate">{p.name}</span>
+        </div>
+      ),
+      product: p,
+    })))
+  }
+
+  const handleSelect = (_val: string, option: { value: string; label: ReactNode; product: Product }) => {
+    didSelectRef.current = true
+    onProductSelect(option.product)
+    setEditing(false)
+    setInputVal('')
+    setOptions([])
+  }
+
+  const handleBlur = () => {
+    if (!didSelectRef.current && inputVal.trim()) {
+      onCodeChange(inputVal.trim())
+    }
+    didSelectRef.current = false
+    setEditing(false)
+    setInputVal('')
+    setOptions([])
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <AutoComplete
+          autoFocus
+          size="small"
+          value={inputVal}
+          options={options}
+          onSearch={handleSearch}
+          onSelect={handleSelect as any}
+          onBlur={handleBlur}
+          placeholder={currentCode || 'Nhập mã...'}
+          style={{ width: 130 }}
+          popupMatchSelectWidth={280}
+        />
+        {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1 min-w-0 cursor-pointer group"
+      onClick={() => { setEditing(true); setInputVal('') }}
+    >
+      {currentCode ? (
+        <Tooltip title={isPending && !systemLine && conf ? `Gợi ý map: ${Math.round(conf.score * 100)}%` : 'Click để sửa mã'}>
+          <span className={`font-mono text-xs font-semibold truncate group-hover:underline ${
+            isPending && !systemLine && conf
+              ? conf.score >= 0.85 ? 'text-emerald-700'
+                : conf.score >= 0.5 ? 'text-amber-600'
+                : 'text-red-500'
+              : 'text-slate-900'
+          }`}>
+            {currentCode}
+          </span>
+        </Tooltip>
+      ) : (
+        <span className="font-mono text-xs text-red-400 group-hover:text-red-300">—</span>
+      )}
+      {pbOv && <Tooltip title={`CK: ${pbOv.pricebook_name}`}><span className="text-[10px] text-orange-600 bg-orange-100 rounded px-1">★CK</span></Tooltip>}
+    </div>
+  )
 }
 
 type PopupType = 'customer' | 'contact' | null
@@ -493,7 +589,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   })
 
   const voucherAllConditionsMet = (voucher: typeof vouchers[0]) =>
-    !!voucher.items?.length && voucher.items.every(item => {
+    !!voucher.items?.length && voucher.items.some(item => {
       const matchedLine = findVoucherLine(lines, item)
       return matchedLine && (Number(matchedLine.quantity) || 0) >= Number(item.quantity || 0)
     })
@@ -515,11 +611,17 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     }
 
     if (missing.length || insufficient.length) {
-      const detail: string[] = []
-      if (missing.length) detail.push(`Thiếu sản phẩm:\n• ${missing.join('\n• ')}`)
-      if (insufficient.length) detail.push(`Chưa đủ số lượng:\n• ${insufficient.join('\n• ')}`)
-      message.error({ content: detail.join('\n\n'), duration: 6 })
-      return
+      const qualifiedCount = (voucher.items?.length || 0) - missing.length - insufficient.length
+      if (qualifiedCount === 0) {
+        const detail: string[] = []
+        if (missing.length) detail.push(`Thiếu sản phẩm:\n• ${missing.join('\n• ')}`)
+        if (insufficient.length) detail.push(`Chưa đủ số lượng:\n• ${insufficient.join('\n• ')}`)
+        message.error({ content: detail.join('\n\n'), duration: 6 })
+        return
+      }
+      // Some items qualify — warn but continue with qualifying items only
+      const skipped = [...missing, ...insufficient]
+      message.warning({ content: `Áp dụng cho ${qualifiedCount} sản phẩm đủ điều kiện. Bỏ qua: ${skipped.join(', ')}`, duration: 5 })
     }
 
     let nextLines: OrderLine[] = []
@@ -558,9 +660,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       return
     }
 
-    const giftLines = (voucher.items || []).map((item, idx) => {
-      const matchedLine = findVoucherLine(lines, item)!
+    const giftLines = (voucher.items || []).flatMap((item: any, idx: number) => {
+      const matchedLine = findVoucherLine(lines, item)
+      if (!matchedLine) return []
       const orderedQty = Number(matchedLine.quantity) || 0
+      if (orderedQty < Number(item.quantity || 0)) return []
       const multiplier = voucher.multiplier ? Math.floor(orderedQty / Number(item.quantity || 1)) : 1
       let giftQty = multiplier * Number(item.gift_quantity || 0)
       if (Number(item.max_per_order) > 0) giftQty = Math.min(giftQty, Number(item.max_per_order))
@@ -610,11 +714,23 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   }
 
   const handleSave = async () => {
-    try {
-      await updateOrder(orderId, buildSavePayload(lines))
-      message.success('Đã lưu — bạn có thể Lưu với MISA')
-      onLocalSaved?.(lines)
-    } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
+    const doSave = async () => {
+      try {
+        await updateOrder(orderId, buildSavePayload(lines))
+        message.success('Đã lưu — bạn có thể Lưu với MISA')
+        onLocalSaved?.(lines)
+      } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
+    }
+    if (hasUnmappedItems) {
+      Modal.confirm({
+        title: 'Còn dòng hàng chưa map',
+        content: `${unmappedLines.length} dòng chưa được map hàng hóa. Vẫn lưu?`,
+        okText: 'Vẫn lưu', cancelText: 'Xem lại',
+        onOk: doSave,
+      })
+      return
+    }
+    await doSave()
   }
 
 
