@@ -22,6 +22,11 @@ export async function completeOrder(id: string): Promise<{ status: string }> {
   return data
 }
 
+export async function splitOrder(id: string): Promise<Order[]> {
+  const { data } = await client.post(`/documents/orders/${id}/split`)
+  return data
+}
+
 export async function getRawDocument(id: string): Promise<RawDocument> {
   const { data } = await client.get(`/documents/raw/${id}`)
   return data

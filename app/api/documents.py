@@ -344,6 +344,92 @@ def get_order_file(order_id: UUID, db: Session = Depends(get_db)):
     return get_raw_file(order.raw_document_id, db)
 
 
+@router.post("/orders/{order_id}/split")
+def split_order(order_id: UUID, db: Session = Depends(get_db)):
+    """Split an order with mixed tax rates into one order per distinct tax rate.
+    The original order keeps its lines for the lowest tax-rate group.
+    New orders are created for each remaining group, sharing the same PO number
+    and all header data (customer, dates, address, etc.).
+    """
+    from collections import defaultdict
+    import copy
+
+    order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    lines = db.query(OrderLine).filter(OrderLine.processed_order_id == order.id).all()
+    if not lines:
+        raise HTTPException(status_code=400, detail="Order has no lines")
+
+    # Group by tax_rate (round to 1 decimal to avoid float noise)
+    groups: dict[str, list[OrderLine]] = defaultdict(list)
+    for line in lines:
+        key = str(round(float(line.tax_rate or 0), 1))
+        groups[key].append(line)
+
+    if len(groups) < 2:
+        raise HTTPException(status_code=400, detail="Order only has one tax rate — nothing to split")
+
+    sorted_keys = sorted(groups.keys(), key=float)
+
+    def _calc_totals(grp_lines: list[OrderLine]):
+        subtotal = sum(float(l.line_total or 0) for l in grp_lines)
+        tax = sum(round(float(l.line_total or 0) * float(l.tax_rate or 0) / 100) for l in grp_lines)
+        return subtotal + tax, tax
+
+    result_orders: list[ProcessedOrder] = [order]
+
+    # Create new orders first (idx > 0), move their lines
+    for key in sorted_keys[1:]:
+        grp_lines = groups[key]
+        total_with_tax, tax_amount = _calc_totals(grp_lines)
+        pending = sum(1 for l in grp_lines if l.mapping_status == "pending")
+
+        new_order = ProcessedOrder(
+            raw_document_id=order.raw_document_id,
+            partner_id=order.partner_id,
+            delivery_address_id=order.delivery_address_id,
+            order_number=None,
+            po_number=order.po_number,
+            order_date=order.order_date,
+            delivery_date=order.delivery_date,
+            currency=order.currency,
+            payment_method=order.payment_method,
+            recipient_name=order.recipient_name,
+            description=order.description,
+            discount_amount=None,
+            extra_data=copy.deepcopy(order.extra_data) if order.extra_data else {},
+            missing_fields=list(order.missing_fields) if order.missing_fields else [],
+            total_amount=total_with_tax,
+            tax_amount=tax_amount,
+            status="draft" if pending > 0 else "completed",
+        )
+        db.add(new_order)
+        db.flush()  # get new_order.id before assigning lines
+
+        for line in grp_lines:
+            line.processed_order_id = new_order.id
+
+        result_orders.append(new_order)
+
+    db.flush()
+
+    # Update original order totals (only group-0 lines remain)
+    grp0 = groups[sorted_keys[0]]
+    total_with_tax0, tax_amount0 = _calc_totals(grp0)
+    pending0 = sum(1 for l in grp0 if l.mapping_status == "pending")
+    order.total_amount = total_with_tax0
+    order.tax_amount = tax_amount0
+    order.status = "draft" if pending0 > 0 else "completed"
+
+    db.commit()
+    for o in result_orders:
+        db.refresh(o)
+
+    return [_enrich_order(o, db) for o in result_orders]
+
+
 @router.post("/orders/{order_id}/complete")
 def complete_order(order_id: UUID, db: Session = Depends(get_db)):
     order = document_service.manually_complete_order(db, order_id)

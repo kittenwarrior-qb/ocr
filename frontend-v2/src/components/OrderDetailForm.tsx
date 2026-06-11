@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, useMemo, useRef, type ReactNode } from 'react'
 import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag, AutoComplete } from 'antd'
 import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined, GiftOutlined } from '@ant-design/icons'
-import { getOrder, updateOrder } from '@/api/orders'
+import { getOrder, updateOrder, splitOrder } from '@/api/orders'
 import client from '@/api/client'
 
 // ── UOM normalization ─────────────────────────────────────────────────────────
@@ -713,6 +713,30 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     }
   }
 
+  const hasMixedTaxRates = useMemo(() => {
+    const rates = new Set(lines.map((l: OrderLine) => String(l.tax_rate ?? '')))
+    return rates.size > 1
+  }, [lines])
+
+  const handleSplit = () => {
+    const taxRateCount = new Set(lines.map((l: OrderLine) => l.tax_rate)).size
+    Modal.confirm({
+      title: 'Tách đơn hàng theo thuế suất',
+      content: `Đơn hàng có ${taxRateCount} mức thuế khác nhau. Xác nhận tách thành ${taxRateCount} đơn?`,
+      okText: 'Tách đơn',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          const result = await splitOrder(orderId)
+          message.success(`Đã tách thành ${result.length} đơn hàng`)
+          onSaved?.()
+        } catch (e: any) {
+          message.error(e.response?.data?.detail || e.message || 'Tách đơn thất bại')
+        }
+      },
+    })
+  }
+
   const handleSave = async () => {
     const doSave = async () => {
       try {
@@ -1079,7 +1103,10 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       </Form>
 
       {/* Save button */}
-      <div className="flex justify-end mt-4 pt-3 border-t border-gray-200">
+      <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200">
+        {hasMixedTaxRates && (
+          <Button danger onClick={handleSplit}>Tách đơn (thuế 8%/10%)</Button>
+        )}
         <Button type="primary" onClick={handleSave}>Lưu thay đổi</Button>
       </div>
 
