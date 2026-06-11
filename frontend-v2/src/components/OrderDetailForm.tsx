@@ -267,7 +267,6 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     lineIdx: number; product: Product
     uomFrom?: string; uomTo?: string; uomChanged: boolean
     pbPrice?: number; pbName?: string; currentPrice?: number
-    conversion?: UomConversionResult
   } | null>(null)
   const [pendingUomConversion, setPendingUomConversion] = useState<{
     lineIdx: number
@@ -982,18 +981,10 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
             const priceChanged = !!pbPrice && pbPrice !== currentPrice
 
             if (uomChanged || priceChanged) {
-              const conversionPreview = uomChanged ? getUomConversion({
-                quantity: line.quantity,
-                sourceUom: line.uom_original,
-                targetUom: p.uom,
-                product: p,
-                fallbackProductName: line.product_name_original || '',
-              }) : undefined
               setPendingChange({
                 lineIdx: productModalIdx, product: p,
                 uomFrom: line.uom_original ?? undefined, uomTo: p.uom, uomChanged,
                 pbPrice, pbName: pbOverride?.pricebook_name, currentPrice,
-                conversion: conversionPreview || undefined,
               })
               setProductModalIdx(null)
               return
@@ -1048,18 +1039,19 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 const line = lines[pendingChange.lineIdx]
                 const applied = applyProductToLine(line, pendingChange.product)
                 const finalPrice = pendingChange.pbPrice || applied.unit_price
-                const conversion = pendingChange.conversion
+                const conversion = getUomConversion({
+                  quantity: line.quantity,
+                  sourceUom: line.uom_original,
+                  targetUom: pendingChange.product.uom,
+                  product: pendingChange.product,
+                  fallbackProductName: line.product_name_original || '',
+                })
                 if (conversion) {
-                  // Apply UOM conversion + pricebook inline — no second popup
                   const pbPrice = pendingChange.pbPrice
                   setLines(prev => {
                     const u = [...prev]
                     const next = { ...applied, unit_price: finalPrice, line_total: applied.line_total }
-                    const resultLine = {
-                      ...next,
-                      quantity: conversion.convertedQty,
-                      uom_original: conversion.toUom,
-                    } as typeof next
+                    const resultLine = { ...next, quantity: conversion.convertedQty, uom_original: conversion.toUom }
                     if (pbPrice && pbPrice > 0) {
                       resultLine.unit_price = pbPrice
                       resultLine.line_total = pbPrice * conversion.convertedQty
@@ -1086,7 +1078,16 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           }
         >
           <div className="space-y-3 text-sm">
-            {pendingChange.uomChanged && (
+            {pendingChange.uomChanged && (() => {
+              const line = lines[pendingChange.lineIdx]
+              const previewConv = line ? getUomConversion({
+                quantity: line.quantity,
+                sourceUom: line.uom_original,
+                targetUom: pendingChange.product.uom,
+                product: pendingChange.product,
+                fallbackProductName: line.product_name_original || '',
+              }) : null
+              return (
               <div className="border border-amber-200 bg-amber-50 rounded p-3">
                 <div className="font-semibold text-amber-800 mb-1">Đổi đơn vị tính</div>
                 <div className="flex items-center gap-2">
@@ -1094,24 +1095,23 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                   <span className="text-slate-400">→</span>
                   <span className="text-emerald-700 font-semibold">{pendingChange.uomTo}</span>
                 </div>
-                {pendingChange.conversion && (
+                {previewConv ? (
                   <div className="mt-2 space-y-1">
-                    <div className="flex gap-4 text-sm">
-                      <span className="text-slate-600">
-                        {pendingChange.conversion.originalQty.toLocaleString('vi-VN')} {pendingChange.conversion.fromUom}
-                        <span className="text-slate-400 mx-1">→</span>
-                        <span className="font-semibold text-emerald-700">{pendingChange.conversion.convertedQty.toLocaleString('vi-VN')} {pendingChange.conversion.toUom}</span>
-                      </span>
+                    <div className="text-sm text-slate-600">
+                      {previewConv.originalQty.toLocaleString('vi-VN')} {previewConv.fromUom}
+                      <span className="text-slate-400 mx-1">→</span>
+                      <span className="font-semibold text-emerald-700">{previewConv.convertedQty.toLocaleString('vi-VN')} {previewConv.toUom}</span>
                     </div>
                     <div className="font-mono text-xs bg-white border border-amber-100 rounded px-2 py-1 text-slate-600">
-                      {pendingChange.conversion.formula}
+                      {previewConv.formula}
                     </div>
                   </div>
-                )}
-                {!pendingChange.conversion && (
+                ) : (
                   <div className="text-xs text-amber-600 mt-1">Lưu ý: đơn vị thay đổi có thể ảnh hưởng đến số lượng và đơn giá</div>
                 )}
               </div>
+              )
+            })()}
             )}
             {pendingChange.pbPrice && pendingChange.pbPrice !== pendingChange.currentPrice && (
               <div className="border border-orange-200 bg-orange-50 rounded p-3">
