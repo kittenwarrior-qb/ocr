@@ -267,6 +267,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     lineIdx: number; product: Product
     uomFrom?: string; uomTo?: string; uomChanged: boolean
     pbPrice?: number; pbName?: string; currentPrice?: number
+    conversion?: UomConversionResult
   } | null>(null)
   const [pendingUomConversion, setPendingUomConversion] = useState<{
     lineIdx: number
@@ -981,10 +982,18 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
             const priceChanged = !!pbPrice && pbPrice !== currentPrice
 
             if (uomChanged || priceChanged) {
+              const conversionPreview = uomChanged ? getUomConversion({
+                quantity: line.quantity,
+                sourceUom: line.uom_original,
+                targetUom: p.uom,
+                product: p,
+                fallbackProductName: line.product_name_original || '',
+              }) : undefined
               setPendingChange({
                 lineIdx: productModalIdx, product: p,
                 uomFrom: line.uom_original ?? undefined, uomTo: p.uom, uomChanged,
                 pbPrice, pbName: pbOverride?.pricebook_name, currentPrice,
+                conversion: conversionPreview || undefined,
               })
               setProductModalIdx(null)
               return
@@ -1036,34 +1045,41 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 setPendingChange(null)
               }}>Giữ nguyên</Button>
               <Button type="primary" onClick={() => {
-                // Apply all suggested changes
                 const line = lines[pendingChange.lineIdx]
                 const applied = applyProductToLine(line, pendingChange.product)
                 const finalPrice = pendingChange.pbPrice || applied.unit_price
-                const qty = Number(line.quantity) || 1
-                const finalLineTotal = finalPrice && qty ? finalPrice * qty : applied.line_total
-                const conversion = getUomConversion({
-                  quantity: line.quantity,
-                  sourceUom: line.uom_original,
-                  targetUom: pendingChange.product.uom,
-                  product: pendingChange.product,
-                  fallbackProductName: line.product_name_original || '',
-                })
+                const conversion = pendingChange.conversion
                 if (conversion) {
-                  setPendingUomConversion({
-                    lineIdx: pendingChange.lineIdx,
-                    nextLine: { ...applied, unit_price: finalPrice, line_total: applied.line_total },
-                    conversion,
-                    // Pass pricebook price so applyUomConversion uses pbPrice × convertedQty
-                    // instead of deriving price from the OCR total (which is in original UOM units).
-                    pbPrice: pendingChange.pbPrice || undefined,
+                  // Apply UOM conversion + pricebook inline — no second popup
+                  const pbPrice = pendingChange.pbPrice
+                  setLines(prev => {
+                    const u = [...prev]
+                    const next = { ...applied, unit_price: finalPrice, line_total: applied.line_total }
+                    const resultLine = {
+                      ...next,
+                      quantity: conversion.convertedQty,
+                      uom_original: conversion.toUom,
+                    } as typeof next
+                    if (pbPrice && pbPrice > 0) {
+                      resultLine.unit_price = pbPrice
+                      resultLine.line_total = pbPrice * conversion.convertedQty
+                    } else {
+                      const total = Number(next.line_total) || 0
+                      if (total > 0 && conversion.convertedQty > 0) {
+                        resultLine.line_total = total
+                        resultLine.unit_price = Math.round(total / conversion.convertedQty)
+                      }
+                    }
+                    u[pendingChange.lineIdx] = resultLine
+                    return u
                   })
-                  setPendingChange(null)
-                  return
+                } else {
+                  const qty = Number(line.quantity) || 1
+                  const finalLineTotal = finalPrice && qty ? finalPrice * qty : applied.line_total
+                  setLines(prev => prev.map((l, idx) => idx === pendingChange.lineIdx
+                    ? { ...applied, unit_price: finalPrice, line_total: finalLineTotal }
+                    : l))
                 }
-                setLines(prev => prev.map((l, idx) => idx === pendingChange.lineIdx
-                  ? { ...applied, unit_price: finalPrice, line_total: finalLineTotal }
-                  : l))
                 setPendingChange(null)
               }}>Áp dụng thay đổi</Button>
             </div>
@@ -1078,7 +1094,23 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                   <span className="text-slate-400">→</span>
                   <span className="text-emerald-700 font-semibold">{pendingChange.uomTo}</span>
                 </div>
-                <div className="text-xs text-amber-600 mt-1">Lưu ý: đơn vị thay đổi có thể ảnh hưởng đến số lượng và đơn giá</div>
+                {pendingChange.conversion && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-slate-600">
+                        {pendingChange.conversion.originalQty.toLocaleString('vi-VN')} {pendingChange.conversion.fromUom}
+                        <span className="text-slate-400 mx-1">→</span>
+                        <span className="font-semibold text-emerald-700">{pendingChange.conversion.convertedQty.toLocaleString('vi-VN')} {pendingChange.conversion.toUom}</span>
+                      </span>
+                    </div>
+                    <div className="font-mono text-xs bg-white border border-amber-100 rounded px-2 py-1 text-slate-600">
+                      {pendingChange.conversion.formula}
+                    </div>
+                  </div>
+                )}
+                {!pendingChange.conversion && (
+                  <div className="text-xs text-amber-600 mt-1">Lưu ý: đơn vị thay đổi có thể ảnh hưởng đến số lượng và đơn giá</div>
+                )}
               </div>
             )}
             {pendingChange.pbPrice && pendingChange.pbPrice !== pendingChange.currentPrice && (
