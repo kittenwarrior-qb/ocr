@@ -394,11 +394,14 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
   useEffect(() => {
     const code = selectedCustomerData.code || selectedCustomerData.customer_code
     if (!code) { setPricebooks([]); setVouchers([]); return }
+    // Fallback: backend keys the response by the code we sent; if exact key is
+    // missing (whitespace/normalization) fall back to the single returned value.
+    const pick = (data: any) => data?.[code] ?? (Object.values(data ?? {})[0] as any[]) ?? []
     client.get('/misa/price-books/for-customers', { params: { codes: code } })
-      .then(r => setPricebooks(r.data?.[code] || []))
+      .then(r => setPricebooks(pick(r.data)))
       .catch(() => setPricebooks([]))
     client.get('/vouchers/for-customers', { params: { codes: code } })
-      .then(r => setVouchers(r.data?.[code] || []))
+      .then(r => setVouchers(pick(r.data)))
       .catch(() => setVouchers([]))
   }, [selectedCustomerData.code, selectedCustomerData.customer_code])
 
@@ -892,12 +895,12 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
           <h2 className="text-sm font-semibold text-gray-700">Thông tin hàng hóa</h2>
           <span className="text-xs text-gray-400">{lines.length} dòng · xóa dòng sẽ tự lưu</span>
         </div>
-        {/* Voucher + Chính sách giá */}
-        {(vouchers.length > 0 || pricebooks.length > 0) && (
+        {/* Voucher + Chính sách giá — luôn hiện khi đã khớp khách hàng để kế toán nắm được CK/voucher */}
+        {(selectedCustomerData.code || selectedCustomerData.customer_code) && (
           <div className="mb-3 border border-slate-200 rounded-lg overflow-hidden text-xs">
-            {vouchers.length > 0 && (
-              <div className="flex items-start gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
-                <span className="text-slate-400 font-medium shrink-0 w-28">Voucher ({vouchers.length})</span>
+            <div className="flex items-start gap-2 px-3 py-2 border-b border-slate-100">
+              <span className="text-slate-400 font-medium shrink-0 w-28">Voucher ({vouchers.length})</span>
+              {vouchers.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {vouchers.map(v => (
                     <button key={v.code} onClick={() => setSelectedVoucher(v)}
@@ -907,11 +910,13 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
-            {pricebooks.length > 0 && (
-              <div className="flex items-start gap-2 px-3 py-2">
-                <span className="text-slate-400 font-medium shrink-0 w-28">Chính sách giá ({pricebooks.length})</span>
+              ) : (
+                <span className="text-slate-400 italic">Không có voucher cho khách này</span>
+              )}
+            </div>
+            <div className="flex items-start gap-2 px-3 py-2">
+              <span className="text-slate-400 font-medium shrink-0 w-28">Chính sách giá ({pricebooks.length})</span>
+              {pricebooks.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {pricebooks.map(pb => (
                     <button key={pb.code} onClick={() => setSelectedPricebook(pb)}
@@ -921,8 +926,10 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <span className="text-slate-400 italic">Không có chính sách giá (chiết khấu) cho khách này</span>
+              )}
+            </div>
           </div>
         )}
 
