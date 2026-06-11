@@ -1112,7 +1112,6 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               </div>
               )
             })()}
-            )}
             {pendingChange.pbPrice && pendingChange.pbPrice !== pendingChange.currentPrice && (
               <div className="border border-orange-200 bg-orange-50 rounded p-3">
                 <div className="font-semibold text-orange-800 mb-1">Áp dụng giá chiết khấu — {pendingChange.pbName}</div>
