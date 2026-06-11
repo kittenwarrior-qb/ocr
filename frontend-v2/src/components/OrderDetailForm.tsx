@@ -391,6 +391,13 @@ function toCustomerData(record?: Record<string, unknown> | null): CustomerData |
     delivery_city: value('delivery_city'),
     delivery_district: value('delivery_district'),
     delivery_ward: value('delivery_ward'),
+    // Round-trip thông tin liên hệ để không mất contact_code khi mở lại + lưu lại.
+    contact: value('contact'),
+    contact_code: value('contact_code'),
+    contact_phone: value('contact_phone'),
+    contact_email: value('contact_email'),
+    contact_organization: value('contact_organization'),
+    contact_address: value('contact_address'),
   }
 }
 
@@ -810,10 +817,19 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
     }
   }
 
-  const hasMixedTaxRates = useMemo(() => {
-    const rates = new Set(lines.map((l: OrderLine) => String(l.tax_rate ?? '')))
-    return rates.size > 1
+  // Các mức thuế thực sự khác nhau giữa các dòng hàng thật (bỏ qua dòng hệ thống/quà tặng
+  // và dòng chưa có thuế). Chuẩn hóa về số để 8 / "8" / 8.0 coi là một.
+  const distinctTaxRates = useMemo(() => {
+    return new Set(
+      lines
+        .filter(l => !isSystemLine(l))
+        .map(l => l.tax_rate)
+        .filter(t => t !== null && t !== undefined && String(t).trim() !== '')
+        .map(t => Math.round(Number(t) * 10) / 10)
+        .filter(t => !Number.isNaN(t))
+    )
   }, [lines])
+  const hasMixedTaxRates = distinctTaxRates.size > 1
 
   // Map một sản phẩm vào dòng — dùng chung cho ProductModal, ô mã hàng inline và nút xác nhận nhanh.
   const handleProductSelection = (lineIdx: number, p: Product) => {
@@ -850,7 +866,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
   }
 
   const handleSplit = () => {
-    const taxRateCount = new Set(lines.map((l: OrderLine) => l.tax_rate)).size
+    const taxRateCount = distinctTaxRates.size
     Modal.confirm({
       title: 'Tách đơn hàng theo thuế suất',
       content: `Đơn hàng có ${taxRateCount} mức thuế khác nhau. Xác nhận tách thành ${taxRateCount} đơn?`,
@@ -910,14 +926,56 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
         form.setFieldValue('partner_id', result.customer!.code)
         setCustomerMatchType('manual')
       } else {
-        // No company match — only set contact, keep current customer data
-        setSelectedCustomerData(prev => ({ ...prev, contact: result.contact.name }))
+        // No company match — vẫn lưu đầy đủ thông tin LH (nhất là contact_code) để
+        // map vào DB + đẩy MISA, không chỉ mỗi tên.
+        const ct = result.contact
+        setSelectedCustomerData(prev => ({
+          ...prev,
+          contact: ct.name,
+          contact_code: ct.code || '',
+          contact_phone: ct.phone || ct.phone_work || '',
+          contact_email: ct.email || ct.email_personal || '',
+          contact_organization: ct.organization || '',
+        }))
       }
       setSelectedContactName(result.contact.name)
       // Người dùng vừa tự chọn LH từ danh sách — coi là đã xác nhận thủ công
       setContactMatchType('manual')
     }
     setActivePopup(null)
+  }
+
+  // Tag thể hiện rõ trạng thái khớp KH/LH: đã khớp danh mục (xanh) / tự động ghép cần
+  // kiểm tra (cam) / nhập tay chưa khớp (vàng) / chưa có (đỏ).
+  const matchStatusTag = (kind: 'customer' | 'contact'): ReactNode => {
+    const matchType = kind === 'customer' ? customerMatchType : contactMatchType
+    const hasCode = kind === 'customer'
+      ? !!(selectedCustomerData.code || selectedCustomerData.customer_code)
+      : !!selectedCustomerData.contact_code
+    const hasValue = kind === 'customer' ? !!selectedCustomer : !!selectedContactName
+    const label = kind === 'customer' ? 'KH' : 'LH'
+    if (matchType === 'fuzzy') {
+      return (
+        <Tooltip title="Hệ thống tự động ghép từ chứng từ — hãy kiểm tra lại và chọn đúng để xác nhận">
+          <Tag color="orange" className="text-[10px] leading-4 m-0">⚠ Tự động ghép — chưa xác nhận</Tag>
+        </Tooltip>
+      )
+    }
+    if (hasCode) {
+      return (
+        <Tooltip title={`Đã khớp ${label} trong danh mục MISA — sẽ tự động map khi đẩy`}>
+          <Tag color="green" className="text-[10px] leading-4 m-0">✓ Đã khớp danh mục</Tag>
+        </Tooltip>
+      )
+    }
+    if (hasValue) {
+      return (
+        <Tooltip title={`Đang nhập tay, chưa khớp ${label} nào trong danh mục — chọn từ gợi ý để map`}>
+          <Tag color="gold" className="text-[10px] leading-4 m-0">Nhập tay — chưa khớp DM</Tag>
+        </Tooltip>
+      )
+    }
+    return <Tag color="red" className="text-[10px] leading-4 m-0">Chưa chọn {label}</Tag>
   }
 
   const unmappedLines = lines.filter(l => l.mapping_status === 'pending' && !isSystemLine(l))
@@ -952,11 +1010,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
           </Form.Item>
           <Form.Item label="Số PO" name="po_number"><Input /></Form.Item>
           <Form.Item label="Hạn giao hàng" name="delivery_date"><DatePicker className="w-full" format="DD/MM/YYYY" /></Form.Item>
-          <Form.Item label={<span className="flex items-center gap-1.5">Khách hàng{customerMatchType === 'fuzzy' && (
-            <Tooltip title="Hệ thống tự động ghép theo tên/MST trên chứng từ — vui lòng kiểm tra lại trước khi tin tưởng số liệu">
-              <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
-            </Tooltip>
-          )}</span>}>
+          <Form.Item label={<span className="flex items-center gap-1.5">Khách hàng {matchStatusTag('customer')}</span>}>
             <AsyncSearchSelect<Customer>
               value={selectedCustomer}
               placeholder="Nhập tên/mã KH hoặc chọn từ danh sách"
@@ -972,11 +1026,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
               onPopupClick={() => setActivePopup('customer')}
             />
           </Form.Item>
-          <Form.Item label={<span className="flex items-center gap-1.5">Liên hệ{contactMatchType === 'fuzzy' && (
-            <Tooltip title="Hệ thống tự động ghép theo tên công ty/địa chỉ giao hàng — vui lòng kiểm tra lại trước khi tin tưởng số liệu">
-              <Tag color="orange" className="text-[10px] leading-4 m-0">Tự động ghép — chưa xác nhận</Tag>
-            </Tooltip>
-          )}</span>}>
+          <Form.Item label={<span className="flex items-center gap-1.5">Liên hệ {matchStatusTag('contact')}</span>}>
             <AsyncSearchSelect<Contact>
               value={selectedContactName}
               placeholder="Nhập tên liên hệ hoặc chọn từ danh sách"
