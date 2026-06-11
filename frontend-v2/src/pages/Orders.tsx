@@ -231,6 +231,7 @@ export default function OrdersPage() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
   const [misaSaved, setMisaSaved] = useState(false)
+  const [orderDirty, setOrderDirty] = useState(false)
   const [misaConfirmOpen, setMisaConfirmOpen] = useState(false)
   const [misaLoading, setMisaLoading] = useState(false)
   const [pushingOrderId, setPushingOrderId] = useState<string | null>(null)
@@ -279,7 +280,7 @@ export default function OrdersPage() {
   const [catalogReady, setCatalogReady] = useState(false)
   useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
 
-  useEffect(() => { setMisaSaved(false) }, [editingOrder?.id])
+  useEffect(() => { setMisaSaved(false); setOrderDirty(false) }, [editingOrder?.id])
 
   // Đẩy 1 đơn lên MISA — trả về kết quả để dùng chung cho push lẻ + push hàng loạt.
   const pushSingleOrder = async (orderId: string): Promise<{ ok: boolean; msg: string; saleNo?: string }> => {
@@ -1217,10 +1218,14 @@ export default function OrdersPage() {
                 size="small"
                 type="primary"
                 icon={<CloudUploadOutlined />}
-                disabled={!misaSaved}
+                disabled={!misaSaved || orderDirty}
                 loading={misaLoading}
                 onClick={() => setMisaConfirmOpen(true)}
-                title={misaSaved ? 'Đẩy đơn hàng này lên MISA CRM' : 'Lưu đơn hàng trước rồi mới lưu lên MISA'}
+                title={
+                  orderDirty ? 'Có thay đổi chưa lưu — hãy bấm "Lưu thay đổi" trước'
+                    : misaSaved ? 'Đẩy đơn hàng này lên MISA CRM'
+                    : 'Lưu đơn hàng trước rồi mới lưu lên MISA'
+                }
               >
                 Lưu với MISA
               </Button>
@@ -1231,8 +1236,10 @@ export default function OrdersPage() {
         >
           <OrderDetailForm
             orderId={editingOrder.id}
+            onDirtyChange={setOrderDirty}
             onLocalSaved={(updatedLines) => {
               setMisaSaved(true)
+              setOrderDirty(false)
               if (updatedLines && editingOrder) {
                 const pendingCount = updatedLines.filter((l: any) => l.mapping_status === 'pending').length
                 queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {

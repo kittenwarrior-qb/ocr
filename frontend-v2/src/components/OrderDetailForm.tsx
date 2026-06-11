@@ -347,6 +347,20 @@ interface Props {
   orderId: string
   onSaved?: () => void
   onLocalSaved?: (updatedLines: OrderLine[]) => void
+  // Báo cho parent biết popup có thay đổi chưa lưu hay không (để khóa nút "Lưu với MISA").
+  onDirtyChange?: (dirty: boolean) => void
+}
+
+// Ảnh chụp trạng thái có thể chỉnh trong popup để so sánh "có thay đổi chưa lưu".
+function snapshotState(lines: OrderLine[], cust: CustomerData, contact: string): string {
+  return JSON.stringify({
+    lines: lines.map(l => ({
+      code: l.ocr_product_code, pid: (l as { product_id?: string }).product_id ?? null,
+      name: l.product_name_original, qty: l.quantity, price: l.unit_price,
+      total: l.line_total, uom: l.uom_original, tax: l.tax_rate, ms: l.mapping_status,
+    })),
+    cust, contact,
+  })
 }
 
 function toCustomerData(record?: Record<string, unknown> | null): CustomerData | null {
@@ -398,8 +412,9 @@ function buildExtraData(customer: CustomerData): Record<string, string> {
   }
 }
 
-export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Props) {
+export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirtyChange }: Props) {
   const [form] = Form.useForm()
+  const baselineRef = useRef<string>('')   // ảnh chụp trạng thái đã lưu để so sánh "dirty"
   const [lines, setLines] = useState<OrderLine[]>([])
   const [productModalIdx, setProductModalIdx] = useState<number | null>(null)
   const [activePopup, setActivePopup] = useState<PopupType>(null)
@@ -480,14 +495,16 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       const extra = order.extra_data as Record<string, unknown> | null
       const customerData = toCustomerData(extra)
       const baseData: CustomerData = customerData || {}
-      setSelectedCustomer(baseData.name || order.recipient_name || '')
-      setSelectedCustomerData({
+      const custData: CustomerData = {
         ...baseData,
         salesperson: String(extra?.executor || getSavedSalesperson()),
         credit_days: String(extra?.credit_days || ''),
         contact: String(extra?.contact || ''),
-      })
-      setSelectedContactName(String(extra?.contact || ''))
+      }
+      const loadedContact = String(extra?.contact || '')
+      setSelectedCustomer(baseData.name || order.recipient_name || '')
+      setSelectedCustomerData(custData)
+      setSelectedContactName(loadedContact)
       setCustomerMatchType(String(extra?.customer_match_type || ''))
       setContactMatchType(String(extra?.contact_match_type || ''))
       if (extra?.salesperson) setSalesperson(String(extra.salesperson))
@@ -504,9 +521,20 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
         return line
       })
       setLines(mappedLines)
+      // Chốt baseline = trạng thái vừa tải (đã lưu) để theo dõi thay đổi chưa lưu.
+      baselineRef.current = snapshotState(mappedLines, custData, loadedContact)
+      onDirtyChange?.(false)
       setLoading(false)
     }).catch(() => { setLoading(false) })
   }, [orderId, form])
+
+  // Phát hiện thay đổi chưa lưu để parent khóa nút "Lưu với MISA".
+  useEffect(() => {
+    if (loading) return
+    const dirty = snapshotState(lines, selectedCustomerData, selectedContactName) !== baselineRef.current
+    onDirtyChange?.(dirty)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, selectedCustomerData, selectedContactName, loading])
 
   // Tự động đồng bộ tổng tiền (bao gồm thuế) khi đổi dòng hàng
   useEffect(() => {
@@ -518,6 +546,13 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     }, 0)
     form.setFieldValue('total_amount', totalWithTax)
   }, [lines, form, loading])
+
+  // Sau khi ghi DB thành công: chốt baseline mới + báo parent "đã lưu, không còn dirty".
+  const markPersisted = (savedLines: OrderLine[]) => {
+    baselineRef.current = snapshotState(savedLines, selectedCustomerData, selectedContactName)
+    onDirtyChange?.(false)
+    onLocalSaved?.(savedLines)
+  }
 
   const updateLine = (i: number, field: string, value: unknown) => {
     const current = lines[i]
@@ -716,7 +751,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
 
       await updateOrder(orderId, buildSavePayload(nextLines))
       setLines(nextLines)
-      onLocalSaved?.(nextLines)
+      markPersisted(nextLines)
       message.success(`Đã trừ ${totalDiscount.toLocaleString('vi-VN')}đ từ ${appliedCount} dòng hàng`)
       setSelectedVoucher(null)
       return
@@ -752,7 +787,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     nextLines = [...cleanLines, ...giftLines]
     await updateOrder(orderId, buildSavePayload(nextLines))
     setLines(nextLines)
-    onLocalSaved?.(nextLines)
+    markPersisted(nextLines)
     message.success(`Đã thêm ${giftLines.length} dòng tặng hàng`)
     setSelectedVoucher(null)
   }
@@ -766,7 +801,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     try {
       await updateOrder(orderId, buildSavePayload(nextLines))
       message.success('Đã xóa dòng và tự lưu')
-      onLocalSaved?.(nextLines)
+      markPersisted(nextLines)
     } catch (e: any) {
       setLines(previousLines)
       message.error(e.message || 'Xóa dòng thất bại')
@@ -838,7 +873,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       try {
         await updateOrder(orderId, buildSavePayload(lines))
         message.success('Đã lưu — bạn có thể Lưu với MISA')
-        onLocalSaved?.(lines)
+        markPersisted(lines)
       } catch (e: any) { message.error(e.message || 'Lưu thất bại') }
     }
     if (hasUnmappedItems) {
