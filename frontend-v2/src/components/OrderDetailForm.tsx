@@ -272,6 +272,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
     lineIdx: number
     nextLine: OrderLine
     conversion: UomConversionResult
+    pbPrice?: number  // pricebook price per converted unit — if set, use it instead of deriving from OCR total
   } | null>(null)
 
   // Build pricebook price map for product selection
@@ -403,7 +404,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
 
   const applyUomConversion = () => {
     if (!pendingUomConversion) return
-    const { lineIdx, nextLine, conversion } = pendingUomConversion
+    const { lineIdx, nextLine, conversion, pbPrice } = pendingUomConversion
     setLines(prev => {
       const u = [...prev]
       const line = {
@@ -413,7 +414,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
       }
       const currentTotal = Number(nextLine.line_total) || 0
       const price = Number(line.unit_price) || 0
-      if (currentTotal > 0 && conversion.convertedQty > 0) {
+      if (pbPrice && pbPrice > 0) {
+        // Pricebook price is per converted unit — calculate total correctly
+        line.unit_price = pbPrice
+        line.line_total = pbPrice * conversion.convertedQty
+      } else if (currentTotal > 0 && conversion.convertedQty > 0) {
         line.line_total = currentTotal
         line.unit_price = Math.round(currentTotal / conversion.convertedQty)
       } else if (price > 0) {
@@ -1047,12 +1052,11 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
                 if (conversion) {
                   setPendingUomConversion({
                     lineIdx: pendingChange.lineIdx,
-                    // Giữ line_total từ PDF — applyUomConversion sẽ tính lại
-                    // unit_price = total / convertedQty sau khi quy đổi.
-                    // KHÔNG dùng finalPrice * qty ở đây: finalPrice là giá/thùng
-                    // nhưng qty vẫn đang tính theo chai → tích số sai 24×.
                     nextLine: { ...applied, unit_price: finalPrice, line_total: applied.line_total },
                     conversion,
+                    // Pass pricebook price so applyUomConversion uses pbPrice × convertedQty
+                    // instead of deriving price from the OCR total (which is in original UOM units).
+                    pbPrice: pendingChange.pbPrice || undefined,
                   })
                   setPendingChange(null)
                   return
