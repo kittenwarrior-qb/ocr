@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.document import OrderLine, ProcessedBill, ProcessedOrder, RawDocument
 from app.models.partner import Partner
 from app.models.product import Product
+from app.models.contact import Contact
 from app.schemas.document import (
     CorrectionCreate,
     DocumentTypeOverride,
@@ -328,11 +329,49 @@ def list_orders(status: str | None = None, skip: int = 0, limit: int = 50, db: S
     return [_enrich_order(o, db) for o in orders]
 
 
+def _apply_learned_contact(db: Session, order: ProcessedOrder) -> bool:
+    """Khi mở đơn CHƯA có liên hệ: tra alias đã học (theo text OCR) để tự điền LH.
+    Vì alias chỉ được tra lúc OCR ban đầu, đơn cũ xử lý trước khi học alias sẽ
+    không tự nhận — hàm này áp dụng lại lúc mở đơn (chỉ điền khi đang trống)."""
+    extra = dict(order.extra_data or {})
+    if extra.get("contact_code") or (extra.get("contact") or "").strip():
+        return False
+    from app.services import contact_alias_service
+    raw = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first() if order.raw_document_id else None
+    ocr = (raw.extracted_data or {}) if raw else {}
+    hit = None
+    for txt in (ocr.get("recipient_name"), ocr.get("customer_name"), order.recipient_name):
+        if txt:
+            hit = contact_alias_service.lookup(db, txt)
+            if hit:
+                break
+    if not hit:
+        return False
+    contact = db.query(Contact).filter(Contact.code == hit.contact_code).first()
+    if not contact:
+        return False
+    extra.update({
+        "contact": contact.name,
+        "contact_code": contact.code,
+        "contact_phone": contact.phone or contact.phone_work or "",
+        "contact_email": contact.email or contact.email_personal or "",
+        "contact_organization": contact.organization or "",
+        "contact_address": contact.delivery_address or contact.address or "",
+        "contact_match_type": "alias",
+    })
+    order.extra_data = extra
+    flag_modified(order, "extra_data")
+    db.commit()
+    db.refresh(order)
+    return True
+
+
 @router.get("/orders/{order_id}", response_model=ProcessedOrderOut)
 def get_order(order_id: UUID, db: Session = Depends(get_db)):
     order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    _apply_learned_contact(db, order)
     return _enrich_order(order, db)
 
 
