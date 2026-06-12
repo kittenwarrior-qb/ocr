@@ -996,6 +996,32 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
 
   return (
     <div>
+      {/* Cụm hành động luôn ghim trên đầu popup: Lưu thay đổi · Tách đơn (giữa) · Lưu với MISA */}
+      <div className="sticky -top-4 z-20 -mx-6 -mt-4 mb-3 flex justify-end items-center gap-2 bg-white/95 backdrop-blur px-6 py-2.5 border-b border-gray-200">
+        <Button type="primary" onClick={handleSave}>Lưu thay đổi</Button>
+        {hasMixedTaxRates && (
+          <Button danger disabled={dirty} onClick={handleSplit}
+            title={dirty ? 'Lưu thay đổi trước khi tách đơn' : 'Tách đơn theo thuế suất 8%/10%'}>
+            Tách đơn (thuế 8%/10%)
+          </Button>
+        )}
+        {onPushMisa && (
+          <Button
+            icon={<CloudUploadOutlined />}
+            loading={misaLoading}
+            disabled={!misaSaved || dirty}
+            onClick={onPushMisa}
+            title={
+              dirty ? 'Có thay đổi chưa lưu — hãy bấm "Lưu thay đổi" trước'
+                : misaSaved ? 'Đẩy đơn hàng này lên MISA CRM'
+                : 'Lưu đơn hàng trước rồi mới lưu lên MISA'
+            }
+          >
+            Lưu với MISA
+          </Button>
+        )}
+      </div>
+
       {/* Thông tin chung */}
       <h2 className="text-sm font-semibold text-gray-700 mb-4">Thông tin chung</h2>
       <Form form={form} layout="horizontal" size="middle" labelCol={{ span: 8 }} wrapperCol={{ span: 16 }} labelAlign="left" requiredMark={false}>
@@ -1309,32 +1335,6 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
           <Form.Item label="Phường/Xã (GH)"><Input value={selectedCustomerData.delivery_ward || ''} onChange={e => setCustField('delivery_ward', e.target.value)} /></Form.Item>
         </div>
       </Form>
-
-      {/* Cụm hành động: Lưu thay đổi · Tách đơn (giữa) · Lưu với MISA */}
-      <div className="flex justify-end items-center gap-2 mt-4 pt-3 border-t border-gray-200">
-        <Button type="primary" onClick={handleSave}>Lưu thay đổi</Button>
-        {hasMixedTaxRates && (
-          <Button danger disabled={dirty} onClick={handleSplit}
-            title={dirty ? 'Lưu thay đổi trước khi tách đơn' : 'Tách đơn theo thuế suất 8%/10%'}>
-            Tách đơn (thuế 8%/10%)
-          </Button>
-        )}
-        {onPushMisa && (
-          <Button
-            icon={<CloudUploadOutlined />}
-            loading={misaLoading}
-            disabled={!misaSaved || dirty}
-            onClick={onPushMisa}
-            title={
-              dirty ? 'Có thay đổi chưa lưu — hãy bấm "Lưu thay đổi" trước'
-                : misaSaved ? 'Đẩy đơn hàng này lên MISA CRM'
-                : 'Lưu đơn hàng trước rồi mới lưu lên MISA'
-            }
-          >
-            Lưu với MISA
-          </Button>
-        )}
-      </div>
 
       {/* Product modal */}
       <ProductModal
