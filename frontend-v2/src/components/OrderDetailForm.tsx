@@ -927,7 +927,8 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
         setCustomerMatchType('manual')
       } else {
         // No company match — vẫn lưu đầy đủ thông tin LH (nhất là contact_code) để
-        // map vào DB + đẩy MISA, không chỉ mỗi tên.
+        // map vào DB + đẩy MISA, không chỉ mỗi tên. Đồng thời set contact_address để
+        // banner "Áp địa chỉ vào HĐ & GH" hiện ra → người dùng map địa chỉ giao theo LH.
         const ct = result.contact
         setSelectedCustomerData(prev => ({
           ...prev,
@@ -936,6 +937,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
           contact_phone: ct.phone || ct.phone_work || '',
           contact_email: ct.email || ct.email_personal || '',
           contact_organization: ct.organization || '',
+          contact_address: ct.delivery_address || ct.address || '',
         }))
       }
       setSelectedContactName(result.contact.name)
