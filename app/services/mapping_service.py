@@ -241,6 +241,17 @@ def find_best_contact(
     if not contacts:
         return None, ""
 
+    # 1. Alias đã học (kế toán từng chọn liên hệ này cho text OCR tương tự) — tin cậy cao.
+    from app.services import contact_alias_service
+    for txt in (recipient_name, company_name):
+        if not txt:
+            continue
+        hit = contact_alias_service.lookup(db, txt)
+        if hit:
+            learned = next((c for c in contacts if c.code == hit.contact_code), None)
+            if learned:
+                return learned, "alias"
+
     company_norm = _normalize_text(company_name)
     recipient_norm = _normalize_text(recipient_name)
     best_contact: Contact | None = None

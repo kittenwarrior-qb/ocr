@@ -516,6 +516,17 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
         if contact_code:
             order.extra_data["contact_match_type"] = "manual"
             flag_modified(order, "extra_data")
+            # Auto-learn alias liên hệ: lần sau gặp lại text OCR này sẽ tự map.
+            from app.services import contact_alias_service
+            contact_name = body.extra_data.get("contact") or ""
+            raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
+            extracted = (raw_doc.extracted_data or {}) if raw_doc else {}
+            ocr_recipient = (extracted.get("recipient_name") or "").strip()
+            ocr_org = (extracted.get("customer_name") or "").strip()
+            if ocr_recipient and len(ocr_recipient) > 1:
+                contact_alias_service.upsert(db, ocr_recipient, contact_code, contact_name, "name", "auto_learn")
+            if ocr_org and len(ocr_org) > 3:
+                contact_alias_service.upsert(db, ocr_org, contact_code, contact_name, "organization", "auto_learn")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
         kept_line_ids: set[str] = set()

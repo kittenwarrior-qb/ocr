@@ -1,16 +1,17 @@
-import unicodedata
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.database import get_db
 from app.models.contact_alias import ContactAlias
+from app.services.contact_alias_service import normalize_contact
 
 router = APIRouter(prefix="/contact-aliases", tags=["Contact Aliases"])
 
 
 def _norm(text: str) -> str:
-    return unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode().lower()
+    # Dùng chung chuẩn hóa với contact_alias_service để alias nhập tay và tự học khớp nhau.
+    return normalize_contact(text)
 
 
 @router.get("")
