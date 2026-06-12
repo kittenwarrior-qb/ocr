@@ -17,6 +17,21 @@ def normalize_contact(text: str) -> str:
     return text
 
 
+# Từ khóa nhận biết một chuỗi là ĐỊA CHỈ chứ không phải tên người/LH.
+_ADDR_KEYWORDS = (
+    "kcn", "khu cong nghiep", "lo ", "phuong ", " quan ", "tinh ", "duong ",
+    "so nha", "kdt", "khu do thi", "thon ", " xa ", " ap ", " to ", "đ.",
+)
+
+
+def looks_like_address(text: str) -> bool:
+    """True nếu chuỗi trông giống địa chỉ (không nên dùng làm tên liên hệ)."""
+    n = " " + normalize_contact(text) + " "
+    if n.strip() == "":
+        return False
+    return any(kw in n for kw in _ADDR_KEYWORDS)
+
+
 def upsert(
     db: Session,
     external_key: str,

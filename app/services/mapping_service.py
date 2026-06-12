@@ -242,14 +242,15 @@ def find_best_contact(
         return None, ""
 
     # 1. Alias đã học (kế toán từng chọn liên hệ này cho text OCR tương tự) — tin cậy cao.
+    #    Bỏ qua nếu LH tra ra lại là địa chỉ (dữ liệu rác) để không gợi ý nhầm.
     from app.services import contact_alias_service
     for txt in (recipient_name, company_name):
-        if not txt:
+        if not txt or contact_alias_service.looks_like_address(txt):
             continue
         hit = contact_alias_service.lookup(db, txt)
         if hit:
             learned = next((c for c in contacts if c.code == hit.contact_code), None)
-            if learned:
+            if learned and not contact_alias_service.looks_like_address(learned.name):
                 return learned, "alias"
 
     company_norm = _normalize_text(company_name)

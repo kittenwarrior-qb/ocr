@@ -329,41 +329,55 @@ def list_orders(status: str | None = None, skip: int = 0, limit: int = 50, db: S
     return [_enrich_order(o, db) for o in orders]
 
 
-def _apply_learned_contact(db: Session, order: ProcessedOrder) -> bool:
-    """Khi mở đơn CHƯA có liên hệ: tra alias đã học (theo text OCR) để tự điền LH.
-    Vì alias chỉ được tra lúc OCR ban đầu, đơn cũ xử lý trước khi học alias sẽ
-    không tự nhận — hàm này áp dụng lại lúc mở đơn (chỉ điền khi đang trống)."""
-    extra = dict(order.extra_data or {})
-    if extra.get("contact_code") or (extra.get("contact") or "").strip():
-        return False
+def _refresh_contact_on_open(db: Session, order: ProcessedOrder) -> bool:
+    """Lúc mở đơn:
+    1) Dọn liên hệ rác — nếu 'contact' thực ra là ĐỊA CHỈ (do dữ liệu cũ bị lẫn) thì xóa
+       để hiện 'Chưa chọn LH' trung thực, không hiện địa chỉ ở ô liên hệ.
+    2) Nếu đang trống, tra alias đã học theo text OCR để tự điền — nhưng BỎ QUA nếu liên
+       hệ tra ra lại là địa chỉ (tránh điền rác)."""
     from app.services import contact_alias_service
-    raw = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first() if order.raw_document_id else None
-    ocr = (raw.extracted_data or {}) if raw else {}
-    hit = None
-    for txt in (ocr.get("recipient_name"), ocr.get("customer_name"), order.recipient_name):
-        if txt:
-            hit = contact_alias_service.lookup(db, txt)
-            if hit:
-                break
-    if not hit:
-        return False
-    contact = db.query(Contact).filter(Contact.code == hit.contact_code).first()
-    if not contact:
-        return False
-    extra.update({
-        "contact": contact.name,
-        "contact_code": contact.code,
-        "contact_phone": contact.phone or contact.phone_work or "",
-        "contact_email": contact.email or contact.email_personal or "",
-        "contact_organization": contact.organization or "",
-        "contact_address": contact.delivery_address or contact.address or "",
-        "contact_match_type": "alias",
-    })
-    order.extra_data = extra
-    flag_modified(order, "extra_data")
-    db.commit()
-    db.refresh(order)
-    return True
+    extra = dict(order.extra_data or {})
+    changed = False
+
+    # 1) Dọn contact rác (đang là địa chỉ)
+    cur = (extra.get("contact") or "").strip()
+    if cur and contact_alias_service.looks_like_address(cur):
+        for k in ("contact", "contact_code", "contact_phone", "contact_email",
+                  "contact_organization", "contact_address"):
+            extra.pop(k, None)
+        extra["contact_match_type"] = ""
+        changed = True
+
+    # 2) Tự điền từ alias nếu vẫn trống (và LH tra ra không phải địa chỉ)
+    if not (extra.get("contact_code") or (extra.get("contact") or "").strip()):
+        raw = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first() if order.raw_document_id else None
+        ocr = (raw.extracted_data or {}) if raw else {}
+        hit = None
+        for txt in (ocr.get("recipient_name"), ocr.get("customer_name"), order.recipient_name):
+            if txt and not contact_alias_service.looks_like_address(txt):
+                hit = contact_alias_service.lookup(db, txt)
+                if hit:
+                    break
+        if hit:
+            contact = db.query(Contact).filter(Contact.code == hit.contact_code).first()
+            if contact and not contact_alias_service.looks_like_address(contact.name):
+                extra.update({
+                    "contact": contact.name,
+                    "contact_code": contact.code,
+                    "contact_phone": contact.phone or contact.phone_work or "",
+                    "contact_email": contact.email or contact.email_personal or "",
+                    "contact_organization": contact.organization or "",
+                    "contact_address": contact.delivery_address or contact.address or "",
+                    "contact_match_type": "alias",
+                })
+                changed = True
+
+    if changed:
+        order.extra_data = extra
+        flag_modified(order, "extra_data")
+        db.commit()
+        db.refresh(order)
+    return changed
 
 
 @router.get("/orders/{order_id}", response_model=ProcessedOrderOut)
@@ -371,7 +385,7 @@ def get_order(order_id: UUID, db: Session = Depends(get_db)):
     order = db.query(ProcessedOrder).filter(ProcessedOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    _apply_learned_contact(db, order)
+    _refresh_contact_on_open(db, order)
     return _enrich_order(order, db)
 
 
@@ -556,16 +570,18 @@ def update_order(order_id: UUID, body: OrderUpdateRequest, db: Session = Depends
             order.extra_data["contact_match_type"] = "manual"
             flag_modified(order, "extra_data")
             # Auto-learn alias liên hệ: lần sau gặp lại text OCR này sẽ tự map.
+            # KHÔNG học nếu tên LH thực ra là địa chỉ (dữ liệu lẫn) — tránh sinh alias rác.
             from app.services import contact_alias_service
             contact_name = body.extra_data.get("contact") or ""
-            raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
-            extracted = (raw_doc.extracted_data or {}) if raw_doc else {}
-            ocr_recipient = (extracted.get("recipient_name") or "").strip()
-            ocr_org = (extracted.get("customer_name") or "").strip()
-            if ocr_recipient and len(ocr_recipient) > 1:
-                contact_alias_service.upsert(db, ocr_recipient, contact_code, contact_name, "name", "auto_learn")
-            if ocr_org and len(ocr_org) > 3:
-                contact_alias_service.upsert(db, ocr_org, contact_code, contact_name, "organization", "auto_learn")
+            if not contact_alias_service.looks_like_address(contact_name):
+                raw_doc = db.query(RawDocument).filter(RawDocument.id == order.raw_document_id).first()
+                extracted = (raw_doc.extracted_data or {}) if raw_doc else {}
+                ocr_recipient = (extracted.get("recipient_name") or "").strip()
+                ocr_org = (extracted.get("customer_name") or "").strip()
+                if ocr_recipient and len(ocr_recipient) > 1 and not contact_alias_service.looks_like_address(ocr_recipient):
+                    contact_alias_service.upsert(db, ocr_recipient, contact_code, contact_name, "name", "auto_learn")
+                if ocr_org and len(ocr_org) > 3 and not contact_alias_service.looks_like_address(ocr_org):
+                    contact_alias_service.upsert(db, ocr_org, contact_code, contact_name, "organization", "auto_learn")
     if body.lines is not None:
         existing_lines = {str(line.id): line for line in order.lines}
         kept_line_ids: set[str] = set()
