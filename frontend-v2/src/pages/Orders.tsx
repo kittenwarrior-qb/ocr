@@ -231,7 +231,6 @@ export default function OrdersPage() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [editingOrder, setEditingOrder] = useState<SessionOrder | null>(null)
   const [misaSaved, setMisaSaved] = useState(false)
-  const [orderDirty, setOrderDirty] = useState(false)
   const [misaConfirmOpen, setMisaConfirmOpen] = useState(false)
   const [misaLoading, setMisaLoading] = useState(false)
   const [pushingOrderId, setPushingOrderId] = useState<string | null>(null)
@@ -280,7 +279,7 @@ export default function OrdersPage() {
   const [catalogReady, setCatalogReady] = useState(false)
   useEffect(() => { preloadCatalogs().then(() => setCatalogReady(true)) }, [])
 
-  useEffect(() => { setMisaSaved(false); setOrderDirty(false) }, [editingOrder?.id])
+  useEffect(() => { setMisaSaved(false) }, [editingOrder?.id])
 
   // Đẩy 1 đơn lên MISA — trả về kết quả để dùng chung cho push lẻ + push hàng loạt.
   const pushSingleOrder = async (orderId: string): Promise<{ ok: boolean; msg: string; saleNo?: string }> => {
@@ -1212,34 +1211,16 @@ export default function OrdersPage() {
           width={1100}
           footer={null}
           centered
-          title={
-            <div className="flex items-center gap-3">
-              <Button
-                size="small"
-                type="primary"
-                icon={<CloudUploadOutlined />}
-                disabled={!misaSaved || orderDirty}
-                loading={misaLoading}
-                onClick={() => setMisaConfirmOpen(true)}
-                title={
-                  orderDirty ? 'Có thay đổi chưa lưu — hãy bấm "Lưu thay đổi" trước'
-                    : misaSaved ? 'Đẩy đơn hàng này lên MISA CRM'
-                    : 'Lưu đơn hàng trước rồi mới lưu lên MISA'
-                }
-              >
-                Lưu với MISA
-              </Button>
-              <span className="font-medium text-gray-700">{editingOrder.file_name}</span>
-            </div>
-          }
+          title={<span className="font-medium text-gray-700">{editingOrder.file_name}</span>}
           styles={{ body: { height: 'calc(100vh - 200px)', overflowY: 'auto', padding: '16px 24px' } }}
         >
           <OrderDetailForm
             orderId={editingOrder.id}
-            onDirtyChange={setOrderDirty}
+            misaSaved={misaSaved}
+            misaLoading={misaLoading}
+            onPushMisa={() => setMisaConfirmOpen(true)}
             onLocalSaved={(updatedLines) => {
               setMisaSaved(true)
-              setOrderDirty(false)
               if (updatedLines && editingOrder) {
                 const pendingCount = updatedLines.filter((l: any) => l.mapping_status === 'pending').length
                 queryClient.setQueryData(['session-detail', activeSessionId], (old: any) => {

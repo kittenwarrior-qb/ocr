@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useMemo, useRef, type ReactNode } from 'react'
 import { Form, Input, DatePicker, InputNumber, Select, Button, message, Modal, Table as AntTable, Spin, Tooltip, Tag, AutoComplete } from 'antd'
-import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined, GiftOutlined } from '@ant-design/icons'
+import { SearchOutlined, PlusOutlined, ExclamationCircleOutlined, DeleteOutlined, CheckOutlined, TagsOutlined, GiftOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { getOrder, updateOrder, splitOrder } from '@/api/orders'
 import client from '@/api/client'
 
@@ -349,6 +349,10 @@ interface Props {
   onLocalSaved?: (updatedLines: OrderLine[]) => void
   // Báo cho parent biết popup có thay đổi chưa lưu hay không (để khóa nút "Lưu với MISA").
   onDirtyChange?: (dirty: boolean) => void
+  // Đẩy đơn lên MISA — nút nằm chung cụm hành động dưới form.
+  misaSaved?: boolean
+  misaLoading?: boolean
+  onPushMisa?: () => void
 }
 
 // Ảnh chụp trạng thái có thể chỉnh trong popup để so sánh "có thay đổi chưa lưu".
@@ -419,7 +423,7 @@ function buildExtraData(customer: CustomerData): Record<string, string> {
   }
 }
 
-export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirtyChange }: Props) {
+export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirtyChange, misaSaved, misaLoading, onPushMisa }: Props) {
   const [form] = Form.useForm()
   const baselineRef = useRef<string>('')   // ảnh chụp trạng thái đã lưu để so sánh "dirty"
   const [lines, setLines] = useState<OrderLine[]>([])
@@ -434,6 +438,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
   const [contactMatchType, setContactMatchType] = useState('')
   const [salesperson, setSalesperson] = useState(getSavedNV)
   const [loading, setLoading] = useState(true)
+  const [dirty, setDirty] = useState(false)   // có thay đổi chưa lưu trong popup
   const [nextNo, setNextNo] = useState('')
   const [pricebooks, setPricebooks] = useState<Array<{code:string;name:string;items:Array<{product_code:string;unit_price:number}>}>>([])
   const [vouchers, setVouchers] = useState<Array<{code:string;name:string;type:string;customers:string[];items:any[];is_active:boolean;multiplier:boolean}>>([])
@@ -530,16 +535,18 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
       setLines(mappedLines)
       // Chốt baseline = trạng thái vừa tải (đã lưu) để theo dõi thay đổi chưa lưu.
       baselineRef.current = snapshotState(mappedLines, custData, loadedContact)
+      setDirty(false)
       onDirtyChange?.(false)
       setLoading(false)
     }).catch(() => { setLoading(false) })
   }, [orderId, form])
 
-  // Phát hiện thay đổi chưa lưu để parent khóa nút "Lưu với MISA".
+  // Phát hiện thay đổi chưa lưu để khóa nút "Tách đơn" / "Lưu với MISA".
   useEffect(() => {
     if (loading) return
-    const dirty = snapshotState(lines, selectedCustomerData, selectedContactName) !== baselineRef.current
-    onDirtyChange?.(dirty)
+    const d = snapshotState(lines, selectedCustomerData, selectedContactName) !== baselineRef.current
+    setDirty(d)
+    onDirtyChange?.(d)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, selectedCustomerData, selectedContactName, loading])
 
@@ -557,6 +564,7 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
   // Sau khi ghi DB thành công: chốt baseline mới + báo parent "đã lưu, không còn dirty".
   const markPersisted = (savedLines: OrderLine[]) => {
     baselineRef.current = snapshotState(savedLines, selectedCustomerData, selectedContactName)
+    setDirty(false)
     onDirtyChange?.(false)
     onLocalSaved?.(savedLines)
   }
@@ -1302,12 +1310,30 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved, onDirt
         </div>
       </Form>
 
-      {/* Save button */}
-      <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200">
-        {hasMixedTaxRates && (
-          <Button danger onClick={handleSplit}>Tách đơn (thuế 8%/10%)</Button>
-        )}
+      {/* Cụm hành động: Lưu thay đổi · Tách đơn (giữa) · Lưu với MISA */}
+      <div className="flex justify-end items-center gap-2 mt-4 pt-3 border-t border-gray-200">
         <Button type="primary" onClick={handleSave}>Lưu thay đổi</Button>
+        {hasMixedTaxRates && (
+          <Button danger disabled={dirty} onClick={handleSplit}
+            title={dirty ? 'Lưu thay đổi trước khi tách đơn' : 'Tách đơn theo thuế suất 8%/10%'}>
+            Tách đơn (thuế 8%/10%)
+          </Button>
+        )}
+        {onPushMisa && (
+          <Button
+            icon={<CloudUploadOutlined />}
+            loading={misaLoading}
+            disabled={!misaSaved || dirty}
+            onClick={onPushMisa}
+            title={
+              dirty ? 'Có thay đổi chưa lưu — hãy bấm "Lưu thay đổi" trước'
+                : misaSaved ? 'Đẩy đơn hàng này lên MISA CRM'
+                : 'Lưu đơn hàng trước rồi mới lưu lên MISA'
+            }
+          >
+            Lưu với MISA
+          </Button>
+        )}
       </div>
 
       {/* Product modal */}
