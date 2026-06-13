@@ -16,6 +16,7 @@ import {
   UploadOutlined,
   UserSwitchOutlined,
   HistoryOutlined,
+  FileDoneOutlined,
 } from '@ant-design/icons'
 import viVN from 'antd/locale/vi_VN'
 import { useEffect, useState } from 'react'
@@ -33,6 +34,7 @@ import ContactMappingPage from './pages/ContactMapping'
 import SettingsPage from './pages/Settings'
 import POHistoryPage from './pages/POHistory'
 import EmailOrdersPage from './pages/EmailOrders'
+import InvoicesPage from './pages/Invoices'
 import client from './api/client'
 import { FIXED_MISA_ACCOUNTS } from './config/misaAccounts'
 
@@ -52,6 +54,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   const items = [
     { key: '/orders', label: 'Tải File', icon: <UploadOutlined /> },
     { key: '/email-orders', label: 'Đơn qua Email', icon: <MailOutlined /> },
+    { key: '/invoices', label: 'Export hóa đơn', icon: <FileDoneOutlined /> },
     { key: '/products', label: 'Hàng hóa', icon: <ShoppingOutlined /> },
     { key: '/sale-orders', label: 'Đơn hàng', icon: <OrderedListOutlined /> },
     { key: '/customers', label: 'Khách hàng', icon: <TeamOutlined /> },
@@ -185,6 +188,7 @@ function AppLayout() {
         <Routes>
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/email-orders" element={<EmailOrdersPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/sale-orders" element={<SaleOrdersPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/customers" element={<CustomersPage />} />

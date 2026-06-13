@@ -451,6 +451,158 @@ def push_order_to_misa(order_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Push: local order → MISA Kế toán (Đơn mua hàng / ĐMH) ────────────────────
+
+def _find_order_or_bill(db: Session, doc_id):
+    """Tìm theo id trong cả ProcessedOrder lẫn ProcessedBill (page Export hóa đơn
+    xử lý cả hai — hiện tại chủ yếu là hóa đơn GTGT = ProcessedBill)."""
+    from app.models.document import ProcessedOrder, ProcessedBill
+    obj = db.query(ProcessedOrder).filter(ProcessedOrder.id == doc_id).first()
+    if obj:
+        return obj
+    return db.query(ProcessedBill).filter(ProcessedBill.id == doc_id).first()
+
+
+@router.get("/invoice-docs/{session_id}")
+def list_invoice_docs(session_id: str, db: Session = Depends(get_db)):
+    """
+    Danh sách chứng từ của 1 session cho màn "Export hóa đơn": gộp cả
+    ProcessedOrder (đơn mua hàng) và ProcessedBill (hóa đơn GTGT). Trả về shape
+    thống nhất để frontend render list + preview ĐMH.
+    """
+    from uuid import UUID
+    from app.models.document import ProcessedOrder, ProcessedBill, RawDocument
+
+    try:
+        sid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    raw_docs = db.query(RawDocument).filter(RawDocument.session_id == sid).all()
+    raw_ids = [d.id for d in raw_docs]
+    raw_by_id = {d.id: d for d in raw_docs}
+    if not raw_ids:
+        return {"processing_count": 0, "done_count": 0, "items": []}
+
+    def _doc_out(obj, doc_type: str) -> dict:
+        raw = raw_by_id.get(obj.raw_document_id)
+        meta = obj.extra_data or {} if hasattr(obj, "extra_data") else {}
+        return {
+            "id": str(obj.id),
+            "doc_type": doc_type,  # "order" | "bill"
+            "file_name": raw.file_name if raw else None,
+            "ref_no": getattr(obj, "po_number", None)
+                       or getattr(obj, "order_number", None)
+                       or getattr(obj, "invoice_number", None),
+            "partner_name": (obj.partner.legal_name if getattr(obj, "partner", None) else None)
+                            or meta.get("customer_name"),
+            "total_amount": float(obj.total_amount) if obj.total_amount else None,
+            "status": obj.status,
+            "line_count": len(obj.lines),
+        }
+
+    items: list[dict] = []
+    for o in db.query(ProcessedOrder).filter(ProcessedOrder.raw_document_id.in_(raw_ids)).all():
+        items.append(_doc_out(o, "order"))
+    for b in db.query(ProcessedBill).filter(ProcessedBill.raw_document_id.in_(raw_ids)).all():
+        items.append(_doc_out(b, "bill"))
+
+    processing_count = sum(1 for d in raw_docs if d.ocr_status in ("pending", "processing"))
+    done_count = sum(1 for d in raw_docs if d.ocr_status == "done")
+    return {"processing_count": processing_count, "done_count": done_count, "items": items}
+
+
+@router.get("/purchase-order/{order_id}/payload")
+def get_purchase_order_payload(order_id: str, db: Session = Depends(get_db)):
+    """
+    Dựng payload "Đơn mua hàng" (ĐMH) từ một đơn/hóa đơn đã review và trả về
+    (không gửi đi đâu, không ghi gì). Dùng cho preview + nút "Tải JSON".
+    """
+    from uuid import UUID
+    from app.services.po_payload_builder import build_purchase_order_payload
+
+    try:
+        oid = UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order_id")
+
+    obj = _find_order_or_bill(db, oid)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return build_purchase_order_payload(obj, db)
+
+
+@router.post("/push/purchase-order/{order_id}")
+def push_purchase_order_to_misa(order_id: str, db: Session = Depends(get_db)):
+    """
+    Lấy đơn đã review từ DB, build payload "Đơn mua hàng" (ĐMH) và gửi lên MISA
+    Kế toán. Khi chưa cấu hình API Kế toán → dry-run: ghi JSON ra
+    data/po_payloads/<DMH>.json (xem misa_accounting_client).
+    """
+    from uuid import UUID
+    from app.models.document import ProcessedOrder
+    from app.models.partner import Partner
+    from app.services.misa_accounting_client import misa_accounting_client
+    from app.services.po_payload_builder import build_purchase_order_payload
+
+    try:
+        oid = UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order_id")
+
+    order = db.query(ProcessedOrder).filter(ProcessedOrder.id == oid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # ── Kiểm tra PO number trùng (dùng chung POHistory với luồng SaleOrders) ──
+    if order.po_number:
+        from app.models.po_history import POHistory
+        existing_po = db.query(POHistory).filter(POHistory.po_number == order.po_number.strip()).first()
+        if existing_po:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Số PO '{order.po_number}' đã được đẩy lên MISA trước đó"
+                    + (f" (Đơn {existing_po.sale_order_no})" if existing_po.sale_order_no else "")
+                    + (f" cho {existing_po.customer_name or existing_po.customer_code}" if existing_po.customer_code else "")
+                    + ". Xóa bản ghi trong PO History nếu muốn đẩy lại."
+                ),
+            )
+
+    payload = build_purchase_order_payload(order, db)
+    next_no = payload["no"]
+
+    try:
+        result = misa_accounting_client.create_purchase_order(payload)
+        if not result.get("success"):
+            raise HTTPException(status_code=502, detail=result.get("message") or "MISA Kế toán từ chối đơn")
+
+        # ── Ghi PO history sau khi thành công ───────────────────────────────
+        if order.po_number:
+            from app.models.po_history import POHistory
+            partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+            meta: dict = order.extra_data or {}
+            db.add(POHistory(
+                po_number=order.po_number.strip(),
+                order_id=order.id,
+                customer_code=meta.get("customer_code") or (partner.code if partner else None),
+                customer_name=meta.get("customer_name") or (partner.legal_name if partner else None),
+                sale_order_no=next_no,
+            ))
+            db.commit()
+
+        return {**result, "purchase_order_no": next_no}
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Sync: MISA → local DB ─────────────────────────────────────────────────────
 
 @router.post("/sync/customers")

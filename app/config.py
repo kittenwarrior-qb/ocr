@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     APP_ID: str = ""
     MISA_CLIENT_SECRET: str = ""
 
+    # MISA Kế toán (AMIS Accounting) Open API — dùng cho "Đơn mua hàng" (ĐMH).
+    # Để trống = chế độ dry-run: build payload + ghi JSON ra data/po_payloads/,
+    # KHÔNG gọi HTTP. Điền đủ 3 giá trị này để bật gọi API thật.
+    MISA_ACCOUNTING_BASE_URL: str = ""
+    MISA_ACCOUNTING_APP_ID: str = ""
+    MISA_ACCOUNTING_SECRET: str = ""
+
     # External Email Gateway (crawls mailboxes, exposes /emails + /attachments)
     EMAIL_GATEWAY_URL: str = "https://email-gateway.longpt.io.vn/api"
 

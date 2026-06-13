@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kiểm tra logic lấy data — Đơn báo giá Satori</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#262b35; --muted:#8b93a3;
+    --text:#e6e9ef; --accent:#5b8cff; --ok:#1f6f43; --okbg:#11271c;
+    --warn:#7a5b00; --warnbg:#241d05; --pick:#163d2a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial}
+  .wrap{max-width:1240px;margin:0 auto;padding:24px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:16px;margin-bottom:18px}
+  .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;
+    border:1px solid var(--line)}
+  .pill.ok{background:var(--okbg);color:#5fd99a;border-color:#235c3d}
+  .pill.warn{background:var(--warnbg);color:#ffcf5b;border-color:#6b5410}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;
+    vertical-align:top;white-space:pre-wrap}
+  th{background:#1d2129;color:var(--muted);font-weight:600;position:sticky;top:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.picked td{background:var(--pick)}
+  tr.picked td.flag{color:#5fd99a;font-weight:700}
+  tr.skip td{color:#5d6473}
+  .scroll{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px}
+  .kv{display:grid;grid-template-columns:200px 1fr;gap:6px 14px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .kv .bad{color:#ff7a7a;font-weight:600}
+  .note{background:var(--warnbg);border:1px solid #6b5410;border-radius:8px;
+    padding:12px 14px;color:#ffe2a0;margin-top:12px}
+  .note b{color:#ffcf5b}
+  code{background:#11141a;border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-size:12px}
+  .legend{display:flex;gap:16px;margin:10px 0 0;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--line);display:inline-block}
+  .sw.pick{background:var(--pick)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Kiểm tra logic lấy data — Đơn đặt hàng (báo giá) Satori</h1>
+  <p class="sub">File: <code>ĐƠN ĐẶT HÀNG - KÊNH GT - ĐẠI LÝ BÌNH MINH - 05.06.26.xlsx</code> ·
+     Parser: <code>app/services/excel_order_parser.py</code></p>
+
+  <!-- ===== Parser output ===== -->
+  <div class="card">
+    <h2>Data parser trích xuất <span class="pill ok" id="cnt"></span></h2>
+    <div class="kv" id="meta"></div>
+
+    <div class="note" id="bugNote"></div>
+
+    <div style="margin-top:14px" class="scroll">
+      <table id="itemsTbl">
+        <thead><tr>
+          <th>#</th><th>Tên hàng</th><th class="num">SL đặt</th><th>ĐVT</th>
+          <th class="num">Đơn giá</th><th class="num">Thành tiền</th><th class="num">Thuế %</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== Raw grid ===== -->
+  <div class="card">
+    <h2>Toàn bộ bảng Excel (đối chiếu)</h2>
+    <div class="legend">
+      <span><i class="sw pick"></i> Dòng khách CHỌN — cột <code>Số lượng hàng đặt</code> (F) &gt; 0</span>
+      <span>Các dòng còn lại = chỉ báo giá, khách không đặt → parser bỏ qua</span>
+    </div>
+    <div class="legend" style="margin-top:4px">
+      Quy tắc lọc: chỉ lấy dòng có <b style="color:#5fd99a">&nbsp;cột F (qty_ordered) &gt; 0</b>.
+      Cột G (khuyến mãi) / H (tổng) không dùng để quyết định chọn.
+    </div>
+    <div style="margin-top:12px" class="scroll">
+      <table id="gridTbl"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {"cols": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"], "grid": [["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "CÔNG TY CỔ PHẦN THƯƠNG MẠI SATORI", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "Địa chỉ: \tSố 1076 Tạ Quang Bửu, Phường Bình Đông, Thành phố Hồ Chí Minh, Việt Nam", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "MST: 0302056457", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "Số điện thoại: 0287 300 5797", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "TÊN TÀI KHOẢN NGÂN HÀNG : CÔNG TY TNHH DỊCH VỤ THƯƠNG MẠI SATORI", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "SỐ TÀI KHOẢN: 8608998686 - Ngân Hàng TMCP Đầu tư và Phát triển Việt Nam (BIDV) - Chi nhánh Sở giao dịch 3n", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "ĐƠN ĐẶT HÀNG", "", "", "", "", "", "", "", "", "", ""], ["", "Bên mua :", "", "CÔNG TY TNHH KINH DOANH PHÁT TRIỂN BÌNH MINH", "", "", "", "", "MST :", "0313040924", "", "", "", "", ""], ["", "Người liên hệ :", "", "Chị Nương", "", "", "", "", "Điện thoại :", "0942021001", "", "", "", "", ""], ["", "Địa chỉ giao dịch :", "", "256/1/24 Dương Quảng Hàm, Phường An Nhơn, Thành phố Hồ Chí Minh, Việt Nam.", "", "", "", "", "Khu vực :", "TPHCM", "", "", "", "", ""], ["", "Địa chỉ giao hàng :", "", "208A Đinh Bộ Lĩnh, Phường Bình Thạnh, Thành phố Hồ Chí Minh", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "STT", "Tên hàng hóa ", "Quy cách", "Đơn vị\n tính", "Số\n lượng hàng đặt", "Số\n lượng hàng khuyến mãi", "Tổng cộng sản lượng", "Đơn \ngiá bán\n(chưa GTGT)", "Thành tiền (chưa GTGT)", "Mức thuế suất", "Tiền thuế", "Tổng tiền (gồm GTGT)", "Trong lượng \n1 thùng/bình (kg)", "Tổng \ntải trọng \n( Kg)"], ["", "1", "2", "3", "4", "5", "6", "7", "8", "9=(5*8)", "10", "11=(9*10)", "12=(9+11)", "13", "14=(7*13)"], ["350 ml CK", "1", "Nước tinh khiết Satori chai 350ml", "24 chai/thùng", "Thùng", "", "0", "0", "74800", "0", "0.08", "0", "0", "9.1", "0"], ["500 ml CK", "2", "Nước tinh khiết Satori chai 500ml", "24 chai/thùng", "Thùng", "", "0", "0", "83300", "0", "0.08", "0", "0", "12.8", "0"], ["1500 ml CK", "3", "Nước tinh khiết Satori chai 1500ml", "12 chai/thùng", "Thùng", "", "0", "0", "83300", "0", "0.08", "0", "0", "19.2", "0"], ["1500 ml CK", "4", "Nước tinh khiết Satori chai 450ml premium", "20 chai/thùng", "Thùng", "", "", "0", "117269", "0", "0.08", "0", "0", "9.9", "0"], ["", "5", "Nước đóng chai Hikari 500ml", "24 chai/thùng", "Thùng", "", "", "0", "70550", "0", "0.08", "0", "0", "12.8", "0"], ["Bình 20L CK", "6", "Nước tinh khiết Satori bình 20L có tay cầm, không vòi", "Bình ", "Bình", "", "0", "0", "41771", "0", "0.08", "0", "0", "20.4", "0"], ["", "7", "Nước tinh khiết Satori bình 19L có vòi", "Bình ", "Bình", "30", "10", "40", "41771", "1253130", "0.08", "100250.40000000001", "1353380.4", "19.6", "784"], ["", "8", "Nước tinh khiết Satori bình 19L không vòi", "Bình ", "Bình", "60", "20", "80", "41771", "2506260", "0.08", "200500.80000000002", "2706760.8", "19.6", "1568"], ["Bình 20L CK", "9", "Nước ép me Satori Juice 24 lon/thùng", "24 lon/thùng", "Thùng", "", "", "0", "283333", "0", "0.1", "0", "0", "6.6", "0"], ["", "10", "Nước ép mãng cầu Satori Juice 24 lon/thùng", "24 lon/thùng", "Thùng", "", "", "0", "283333", "0", "0.1", "0", "0", "6.6", "0"], ["", "11", "Nước ép ổi hồng Satori Juice 24 lon/thùng", "24 lon/thùng", "Thùng", "", "", "0", "283333", "0", "0.1", "0", "0", "6.6", "0"], ["", "12", "Nước tinh khiết Satori 5L không vòi", "04 bình/ thùng", "Thùng", "", "", "0", "87125", "0", "0.08", "0", "0", "20.804", "0"], ["", "13", "Nước tinh khiết Satori 5L có vòi", "04 bình/ thùng", "Thùng", "", "0", "0", "93500", "0", "0.08", "0", "0", "20.85", "0"], ["", "14", "Nước tinh khiết Satori 5L không vòi_bình", "01 bình", "Bình", "", "", "0", "21781.25", "0", "0.08", "0", "0", "5.105", "0"], ["", "15", "Nước tinh khiết Satori 5L có vòi_bình", "01 bình", "Bình", "", "", "0", "23375", "0", "0.08", "0", "0", "5.112", "0"], ["", "16", "Nước đóng chai Hikari 250ml_thùng", "24 chai/ thùng", "Thùng", "", "", "0", "53125", "0", "0.08", "0", "0", "6.65", "0"], ["", "17", "Nước đóng chai Hikari 250ml (24 chai/lốc)", "24 chai/ lốc", "Lốc", "", "", "0", "53125", "0", "0.08", "0", "0", "6.4", "0"], ["", "18", "Nước đóng chai Hikari 250ml (12 chai/lốc)", "12 chai/ lốc", "Lốc", "", "", "0", "26562.5", "0", "0.08", "0", "0", "3.2", "0"], ["", "19", "Nước đóng chai Hikari 250ml (6 chai/lốc)", "6 chai/ lốc", "Lốc", "", "", "0", "13281.25", "0", "0.08", "0", "0", "1.6", "0"], ["", "Tổng tiền đơn hàng:", "", "", "", "90", "30", "120", "", "", "", "", "4060141.1999999997", "", "2352"], ["", "(1) Công nợ - phải thu (+), phải trả (-): ", "", "", "", "", "", "", "", "", "", "", "0", "", ""], ["", "(2) Công ty thanh toán tiền thưởng ….................. (+VAT):", "", "", "", "", "", "", "", "", "", "", "0", "", ""], ["", "(3) Công ty thanh toán tiền thưởng ….................. (+VAT):", "", "", "", "", "", "", "", "", "", "", "0", "", ""], ["", "(4) Công ty thanh toán tiền thưởng ….................. (+VAT):", "", "", "", "", "", "", "", "", "", "", "0", "", ""], ["", "(5) Công ty hoàn cọc vỏ bình tháng …./..........", "", "", "", "", "", "", "", "", "", "", "0", "", ""], ["", "(6) Tiền Đối tác đặt cọc vỏ bình Satori: 50.000đ/vỏ x 96 vỏ", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "(7) Số tiền Đối tác cần thanh toán (+VAT)", "", "", "", "", "", "", "", "", "", "", "4060141.1999999997", "", ""], ["", "Người lập", "", "", "", "", "", "", "", "", "", "Xác nhận của Đại lý", "", "", ""], ["", "(Ký, họ tên)", "", "", "", "", "", "", "", "", "", "(Ký, họ tên)", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]], "parsed": {"document_type": "purchase_order", "customer_name": "CÔNG TY TNHH KINH DOANH PHÁT TRIỂN BÌNH MINH", "customer_tax_code": "0302056457", "order_number": null, "order_date": null, "recipient_name": "Chị Nương", "delivery_address": "256/1/24 Dương Quảng Hàm, Phường An Nhơn, Thành phố Hồ Chí Minh, Việt Nam.", "items": [{"product_name": "Nước tinh khiết Satori bình 19L có vòi", "product_code": "", "quantity": 30.0, "uom": "Bình", "unit_price": 41771.0, "line_total": 1253130.0, "tax_rate": 8.0}, {"product_name": "Nước tinh khiết Satori bình 19L không vòi", "product_code": "", "quantity": 60.0, "uom": "Bình", "unit_price": 41771.0, "line_total": 2506260.0, "tax_rate": 8.0}], "total_amount": 4060141.1999999997, "tax_amount": null}};
+
+const fmt = n => (n==null||n==='') ? '' :
+  (typeof n==='number' ? n.toLocaleString('vi-VN') : n);
+
+// ---- Parser output ----
+const p = DATA.parsed;
+document.getElementById('cnt').textContent = p.items.length + ' sản phẩm được chọn';
+
+const SELLER_MST = '0302056457'; // MST Satori (bên bán) — KHÔNG phải khách hàng
+const custMstBad = p.customer_tax_code === SELLER_MST;
+
+const meta = document.getElementById('meta');
+const rows = [
+  ['Khách hàng', p.customer_name],
+  ['MST khách hàng', `<span class="${custMstBad?'bad':''}">${p.customer_tax_code||''}</span>`],
+  ['Người liên hệ', p.recipient_name],
+  ['Địa chỉ giao', p.delivery_address],
+  ['Tổng tiền (file in sẵn)', fmt(p.total_amount)],
+];
+meta.innerHTML = rows.map(([k,v])=>`<div>${k}</div><div>${v??''}</div>`).join('');
+
+// Bug note about MST
+const bug = document.getElementById('bugNote');
+if(custMstBad){
+  bug.innerHTML = `<b>⚠ Lỗi MST khách hàng:</b> parser trả về <code>${SELLER_MST}</code> —
+    đây là MST của <b>Satori (bên bán, ô B6)</b>, không phải khách.
+    MST khách hàng đúng là <code>0313040924</code> (ô J12, cạnh nhãn "MST :").<br>
+    Nguyên nhân: vòng lặp metadata quét <code>rows[:20]</code> bằng regex
+    <code>MST\\s*:\\s*(\\d{10,13})</code> và bắt trúng dòng người bán (B6) <i>trước</i>
+    khi tới dòng 12. Nên ưu tiên đọc MST từ ô bên phải nhãn "MST :" (J12) thay vì regex flat toàn dòng.`;
+} else {
+  bug.style.display='none';
+}
+
+// items table
+const itb = document.querySelector('#itemsTbl tbody');
+itb.innerHTML = p.items.map((it,i)=>`<tr>
+  <td>${i+1}</td><td>${it.product_name}</td>
+  <td class="num">${fmt(it.quantity)}</td><td>${it.uom||''}</td>
+  <td class="num">${fmt(it.unit_price)}</td><td class="num">${fmt(it.line_total)}</td>
+  <td class="num">${it.tax_rate??''}</td></tr>`).join('');
+
+// ---- Raw grid ----
+const cols = DATA.cols, grid = DATA.grid;
+const F_IDX = cols.indexOf('F'); // "Số lượng hàng đặt"
+const ghead = document.querySelector('#gridTbl thead');
+ghead.innerHTML = '<tr><th>Row</th>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+
+// header label row index (row 17 -> array index 16)
+const gbody = document.querySelector('#gridTbl tbody');
+gbody.innerHTML = grid.map((r,ri)=>{
+  const rowNum = ri+1;
+  const fRaw = r[F_IDX];
+  const fNum = parseFloat(String(fRaw).replace(/,/g,''));
+  // a product row = col B (index1) is an integer STT
+  const sttNum = parseInt(r[1],10);
+  const isProductRow = !isNaN(sttNum) && String(r[1]).trim()===String(sttNum);
+  const picked = isProductRow && !isNaN(fNum) && fNum>0;
+  const cls = picked ? 'picked' : (isProductRow ? 'skip' : '');
+  const cells = r.map((v,ci)=>{
+    const cls2 = ci===F_IDX ? 'flag' : '';
+    return `<td class="${cls2}">${v??''}</td>`;
+  }).join('');
+  return `<tr class="${cls}"><td style="color:#5d6473">${rowNum}</td>${cells}</tr>`;
+}).join('');
+</script>
+</body>
+</html>

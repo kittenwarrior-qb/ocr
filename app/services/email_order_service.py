@@ -264,11 +264,22 @@ def backfill_from_gateway(db: Session, size: int = 50) -> dict:
             resp = http.get(f"{base}/emails", params={"page": page, "size": size})
             resp.raise_for_status()
             data = resp.json()
-            items = data.get("items", [])
             total = data.get("total", total)
             pages = data.get("pages", pages)
 
-            for item in items:
+            # The Gateway now groups each page's emails by recipient mailbox:
+            #   items = [{ "email": "<recipient>", "data": [<email>, ...] }, ...]
+            # Flatten back to a flat list of emails. Fall back to treating an
+            # item as an email directly, in case the Gateway is mid-rollout and
+            # still returns the old flat shape.
+            emails = []
+            for item in data.get("items", []):
+                if isinstance(item, dict) and "data" in item:
+                    emails.extend(item["data"])
+                else:
+                    emails.append(item)
+
+            for item in emails:
                 # Always fetch full detail so attachments are included.
                 detail_resp = http.get(f"{base}/emails/{item['id']}")
                 detail_resp.raise_for_status()
@@ -295,7 +306,7 @@ def backfill_from_gateway(db: Session, size: int = 50) -> dict:
                 upsert_from_crawler(db, mapped)
                 synced += 1
 
-            if page >= pages or not items:
+            if page >= pages or not emails:
                 break
             page += 1
 

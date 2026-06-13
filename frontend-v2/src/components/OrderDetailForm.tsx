@@ -784,14 +784,14 @@ export default function OrderDetailForm({ orderId, onSaved, onLocalSaved }: Prop
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-1 py-2 w-6"></th>
                 <th className="px-2 py-2 text-left w-8">STT</th>
-                <th className="px-2 py-2 text-left w-36">Mã hàng hóa</th>
-                <th className="px-2 py-2 text-left min-w-[140px]">Diễn giải</th>
+                <th className="px-2 py-2 text-left w-36">Mã hàng</th>
+                <th className="px-2 py-2 text-left min-w-[140px]">Tên hàng</th>
                 <th className="px-2 py-2 text-left w-12">ĐVT</th>
                 <th className="px-2 py-2 text-right w-12">SL</th>
                 <th className="px-2 py-2 text-right w-22">Đơn giá</th>
                 <th className="px-2 py-2 text-right w-22">Thành tiền</th>
-                <th className="px-2 py-2 text-center w-16">Thuế</th>
-                <th className="px-2 py-2 text-right w-22">Tiền thuế</th>
+                <th className="px-2 py-2 text-center w-16">% Thuế GTGT</th>
+                <th className="px-2 py-2 text-right w-22">Tiền thuế GTGT</th>
                 <th className="px-2 py-2 text-right w-22">Tổng tiền</th>
                 <th className="px-2 py-2 text-center w-24"></th>
               </tr>

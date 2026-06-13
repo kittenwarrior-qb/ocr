@@ -22,6 +22,85 @@ export async function completeOrder(id: string): Promise<{ status: string }> {
   return data
 }
 
+export interface PushPurchaseOrderResult {
+  success: boolean
+  dry_run?: boolean
+  purchase_order_no: string
+  message?: string
+}
+
+/** Đẩy đơn đã review lên MISA Kế toán dưới dạng "Đơn mua hàng" (ĐMH). */
+export async function pushPurchaseOrder(orderId: string): Promise<PushPurchaseOrderResult> {
+  const { data } = await client.post(`/misa/push/purchase-order/${orderId}`)
+  return data
+}
+
+export interface PurchaseOrderLine {
+  line_no: number
+  item_code: string
+  item_name: string
+  unit: string
+  quantity: number
+  unit_price: number
+  amount: number
+  discount_amount: number
+  vat_rate: string
+  vat_amount: number
+  total: number
+}
+
+export interface PurchaseOrderPayload {
+  ref_id: string
+  no: string
+  date: string | null
+  delivery_date: string | null
+  object_code: string
+  object_name: string
+  tax_code: string
+  object_address: string
+  contact_name: string
+  phone: string
+  journal_memo: string
+  status: string
+  employee_code: string
+  ref_no: string
+  currency: string
+  total_amount: number
+  discount_amount: number
+  vat_amount: number
+  total_payment: number
+  lines: PurchaseOrderLine[]
+}
+
+/** Dựng payload ĐMH của một đơn (không gửi đi) — dùng để preview + tải JSON. */
+export async function getPurchaseOrderPayload(orderId: string): Promise<PurchaseOrderPayload> {
+  const { data } = await client.get(`/misa/purchase-order/${orderId}/payload`)
+  return data
+}
+
+export interface InvoiceDoc {
+  id: string
+  doc_type: 'order' | 'bill'
+  file_name: string | null
+  ref_no: string | null
+  partner_name: string | null
+  total_amount: number | null
+  status: string
+  line_count: number
+}
+
+export interface InvoiceDocsResponse {
+  processing_count: number
+  done_count: number
+  items: InvoiceDoc[]
+}
+
+/** List chứng từ (đơn mua hàng + hóa đơn GTGT) của 1 session cho màn Export. */
+export async function getInvoiceDocs(sessionId: string): Promise<InvoiceDocsResponse> {
+  const { data } = await client.get(`/misa/invoice-docs/${sessionId}`)
+  return data
+}
+
 export async function getRawDocument(id: string): Promise<RawDocument> {
   const { data } = await client.get(`/documents/raw/${id}`)
   return data

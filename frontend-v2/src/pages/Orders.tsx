@@ -25,6 +25,7 @@ import {
   FormOutlined,
   GiftOutlined,
   ContactsOutlined,
+  ShoppingOutlined,
 } from '@ant-design/icons'
 import {
   getSessions,
@@ -233,6 +234,7 @@ export default function OrdersPage() {
   const [misaSaved, setMisaSaved] = useState(false)
   const [misaConfirmOpen, setMisaConfirmOpen] = useState(false)
   const [misaLoading, setMisaLoading] = useState(false)
+  const [poLoading, setPoLoading] = useState(false)
   const [previewOrder, setPreviewOrder] = useState<SessionOrder | null>(null)
   const [previewPanelOrderId, setPreviewPanelOrderId] = useState<string | null>(null)
   const [creatingManualOrder, setCreatingManualOrder] = useState(false)
@@ -298,6 +300,30 @@ export default function OrdersPage() {
       message.error(e?.response?.data?.detail || 'Không thể kết nối MISA')
     } finally {
       setMisaLoading(false)
+    }
+  }
+
+  const handleSavePurchaseOrder = async () => {
+    if (!editingOrder) return
+    setPoLoading(true)
+    try {
+      const { data } = await client.post(`/misa/push/purchase-order/${editingOrder.id}`)
+      if (data?.success) {
+        if (data.dry_run) {
+          message.success(`Đã tạo payload ĐMH ${data.purchase_order_no} (chưa kết nối API Kế toán) — đã lưu JSON`)
+        } else {
+          message.success(`Đã lưu Đơn mua hàng lên MISA: ${data.purchase_order_no}`)
+        }
+        setDetailModalOpen(false)
+        setEditingOrder(null)
+        queryClient.invalidateQueries({ queryKey: ['session-detail', activeSessionId] })
+      } else {
+        message.error(data?.message || 'MISA Kế toán từ chối đơn mua hàng')
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Không thể tạo Đơn mua hàng')
+    } finally {
+      setPoLoading(false)
     }
   }
 
@@ -1133,6 +1159,16 @@ export default function OrdersPage() {
                 title={misaSaved ? 'Đẩy đơn hàng này lên MISA CRM' : 'Lưu đơn hàng trước rồi mới lưu lên MISA'}
               >
                 Lưu với MISA
+              </Button>
+              <Button
+                size="small"
+                icon={<ShoppingOutlined />}
+                disabled={!misaSaved}
+                loading={poLoading}
+                onClick={handleSavePurchaseOrder}
+                title={misaSaved ? 'Tạo Đơn mua hàng (ĐMH) trên MISA Kế toán' : 'Lưu đơn hàng trước rồi mới tạo Đơn mua hàng'}
+              >
+                Lưu Đơn mua hàng
               </Button>
               <span className="font-medium text-gray-700">{editingOrder.file_name}</span>
             </div>
