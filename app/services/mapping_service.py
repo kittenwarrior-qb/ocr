@@ -128,7 +128,21 @@ def find_or_create_partner(
             if p:
                 return p
 
-    # 2. Fuzzy name match — lower threshold to 70 to handle abbreviations
+    # 2. Alias đã học — tra lịch sử mapping trước khi fuzzy
+    from app.services import company_alias_service
+    alias_hit = company_alias_service.lookup(db, legal_name)
+    if alias_hit:
+        p = db.query(Partner).filter(
+            Partner.code == alias_hit.customer_code,
+            Partner.partner_type == partner_type,
+        ).first()
+        if p:
+            if tax_code and not db.query(MSTMapping).filter(MSTMapping.tax_code == tax_code).first():
+                db.add(MSTMapping(tax_code=tax_code, partner_id=p.id))
+                db.flush()
+            return p
+
+    # 3. Fuzzy name match — lower threshold to 70 to handle abbreviations
     all_partners = db.query(Partner).filter(Partner.partner_type == partner_type).all()
     candidates = [{"id": str(p.id), "name": p.legal_name or "", "obj": p} for p in all_partners]
     match = fuzzy_match(legal_name, candidates, key="name", threshold=70)
@@ -192,6 +206,18 @@ def find_existing_partner(
 
     if not legal_name:
         return None, ""
+
+    # Alias đã học — tra lịch sử trước khi fuzzy match
+    from app.services import company_alias_service
+    alias_hit = company_alias_service.lookup(db, legal_name)
+    if alias_hit:
+        partner = db.query(Partner).filter(
+            Partner.code == alias_hit.customer_code,
+            Partner.partner_type == partner_type,
+            Partner.is_active == True,
+        ).first()
+        if partner:
+            return partner, "alias"
 
     query_tokens = _distinctive_partner_tokens(legal_name)
     if not query_tokens:
