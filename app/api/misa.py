@@ -73,6 +73,38 @@ def refresh_token():
     }
 
 
+# ── Categories (giá trị hợp lệ gom từ dữ liệu MISA — cho dropdown) ────────────
+
+@router.get("/categories")
+def misa_categories():
+    """Trả các giá trị danh mục hợp lệ (gom từ dữ liệu MISA đã cache) để FE làm Select.
+    Các field này MISA validate theo danh mục nên không cho nhập tự do."""
+    customers = misa_cache.get_or_fetch('customers', misa_client.list_customers)
+    contacts = misa_cache.get_or_fetch('contacts', misa_client.list_contacts)
+
+    def distinct(items, *keys):
+        s = set()
+        for it in items:
+            for k in keys:
+                v = it.get(k)
+                if isinstance(v, str) and v.strip():
+                    s.add(v.strip())
+        return sorted(s)
+
+    return {
+        "provinces": distinct(customers, 'billing_province', 'shipping_province'),
+        "districts": distinct(customers, 'billing_district', 'shipping_district'),
+        "wards": distinct(customers, 'billing_ward', 'shipping_ward'),
+        "countries": distinct(customers, 'billing_country', 'shipping_country'),
+        "account_types": distinct(customers, 'account_type'),
+        "business_types": distinct(customers, 'business_type'),
+        "sectors": distinct(customers, 'sector_name'),
+        "industries": distinct(customers, 'industry'),
+        "titles": distinct(contacts, 'title'),
+        "salutations": distinct(contacts, 'salutation'),
+    }
+
+
 # ── Contacts ─────────────────────────────────────────────────────────────────
 
 @router.get("/contacts")

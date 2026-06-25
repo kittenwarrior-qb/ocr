@@ -24,17 +24,6 @@ function isSignificantUomChange(from: string, to: string): boolean {
 
 // ── Người thực hiện (executor → MISA owner_name) ────────────────────────────
 const LS_KEY = 'misa_salesperson'
-const DEFAULT_SALESPERSON = 'Hà Mộng Thúy (KM0139)'
-const SALESPERSON_OPTIONS = [
-  'Đỗ Thị Mỹ Dung (ar-km@satoricompany.vn)',
-  'Hà Mộng Thúy (KM0139)',
-  'Lê Thị Hồng Hân (KM1602)',
-  'Nguyễn Thị Ngọc Thắng (KM0115)',
-  'Nguyễn Thị Tuyến (tuyen.nguyen@satoricompany.vn)',
-  'TRẦN MINH QUỐC (quoc.tran@satoricompany.vn)',
-  'Trần Ngọc Nhi (KM1847)',
-  'Trương Thanh Vũ (ktth@satoricompany.vn)',
-].map(v => ({ value: v, label: v }))
 
 function getSavedSalesperson(): string {
   try { return localStorage.getItem(LS_KEY) || DEFAULT_SALESPERSON } catch { return DEFAULT_SALESPERSON }
@@ -45,22 +34,6 @@ function saveSalesperson(v: string) {
 
 // ── Nhân viên bán hàng (custom_field4 → MISA) ────────────────────────────────
 const LS_NV_KEY = 'misa_nv_ban_hang'
-const DEFAULT_NV = 'KM1989-Nguyễn Văn Ân'
-const NV_OPTIONS = [
-  'Trần Hữu Thành',
-  'Võ Chí Thông',
-  'KM1989-Nguyễn Văn Ân',
-  'KD0209-Lê Văn Vinh',
-  'KD0045-Nguyễn Đình Việt',
-  'KD0003-Nguyễn Thị Mai Hân',
-  'KM1349-Mai Tiến Hợp',
-  'KD0002-Nguyễn Huỳnh Sơn',
-  'KD0217-Nguyễn Thị Như Thảo',
-  'KM4048-Lê Ngân Vương',
-  'KM1753-Cao Viết Thắng',
-  'KD0092-Đỗ Thành Công',
-  'KM0189-Doãn Thị Ngư',
-].map(v => ({ value: v, label: v }))
 
 function getSavedNV(): string {
   try { return localStorage.getItem(LS_NV_KEY) || DEFAULT_NV } catch { return DEFAULT_NV }
@@ -68,6 +41,7 @@ function getSavedNV(): string {
 function saveNV(v: string) {
   try { localStorage.setItem(LS_NV_KEY, v) } catch {}
 }
+import { SALESPERSON_OPTIONS, DEFAULT_SALESPERSON, NV_OPTIONS, DEFAULT_NV } from '@/config/salespersons'
 import type { OrderLine } from '@/types/order'
 import CustomerContactPopup, { type CustomerContactResult, type Contact, matchContactToCustomer } from '@/components/CustomerContactPopup'
 import { matchProduct, searchProducts, type Product } from '@/utils/productMatcher'
